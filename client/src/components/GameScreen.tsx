@@ -2,8 +2,7 @@ import { Socket } from 'socket.io-client';
 import { GamePhase, PlayerInfo, RoundResolution, ClientToServerEvents, ServerToClientEvents } from '../../../shared/types';
 import PlayerStatusBar from './PlayerStatusBar';
 import MoveSelector from './MoveSelector';
-import PhaseReveal from './PhaseReveal';
-import PhaseResult from './PhaseResult';
+import PhaseResolution from './PhaseResolution';
 
 interface Props {
   phase: GamePhase;
@@ -50,15 +49,8 @@ export default function GameScreen({
           </div>
         )}
 
-        {phase === 'reveal' && resolution && (
-          <PhaseReveal
-            resolution={resolution}
-            players={players}
-          />
-        )}
-
-        {phase === 'result' && resolution && (
-          <PhaseResult
+        {(phase === 'reveal' || phase === 'result') && resolution && (
+          <PhaseResolution
             resolution={resolution}
             players={players}
           />

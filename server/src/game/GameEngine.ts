@@ -7,8 +7,7 @@ import { getMoveById } from '../data/moves';
 import { RoundResolution, GameState, PlayerInfo } from '../../shared/types';
 
 const THINKING_TIME = 30_000;  // 30 seconds
-const REVEAL_TIME = 2_000;     // 2 seconds
-const RESULT_TIME = 3_000;     // 3 seconds
+const RESULT_TIME = 5_000;     // 5 seconds combined reveal+result
 
 /**
  * GameEngine orchestrates round-by-round gameplay.
@@ -161,26 +160,12 @@ export class GameEngine {
     this.startRevealPhase(room);
   }
 
-  /** Reveal phase: resolve and display all moves */
+  /** Reveal & Result combined into one phase */
   startRevealPhase(room: GameRoom): void {
     room.phase = 'playing';
-
     const resolution = this.resolveFullRound(room);
-
-    const state: GameState = {
-      phase: 'reveal',
-      round: room.round,
-      players: room.getPlayerInfos(),
-      roomCode: room.roomCode,
-      eliminationOrder: room.eliminationOrder,
-    };
-
-    this.io.to(room.roomCode).emit('phase_change', { phase: 'reveal', state, resolution });
-
-    // Advance to result phase after display time
-    room.timer = setTimeout(() => {
-      this.startResultPhase(room, resolution);
-    }, REVEAL_TIME);
+    // Apply everything and go straight to result
+    this.startResultPhase(room, resolution);
   }
 
   /** Result phase: apply deaths and energy changes */
