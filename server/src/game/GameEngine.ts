@@ -154,8 +154,9 @@ export class GameEngine {
     // Run bot moves
     for (const bot of bots) {
       if (!room.pendingMoves.has(bot.id)) {
+        const memory = room.botMemories.get(bot.id) || createBotMemory();
         const { moveId, targets } = chooseBotMove(
-          bot.botLevel || 'easy', bot, room.getAllPlayers()
+          bot.botLevel || 'easy', bot, room.getAllPlayers(), room.round, memory
         );
         // Validate & submit (skip cost check for bots)
         const moveDef = getMoveById(moveId);
