@@ -4,7 +4,7 @@ import { resolveEnergy } from './EnergyResolver';
 import { resolveAttacks } from './MoveResolver';
 import { computeRankings, computeLevelUps, applyLevelUps } from './LevelResolver';
 import { getMoveById } from '../data/moves';
-import { chooseBotMove } from './BotEngine';
+import { chooseBotMove, recordOpponentMove } from './BotEngine';
 import { RoundResolution, GameState, PlayerInfo } from '../../shared/types';
 
 const THINKING_TIME = 30_000;  // 30 seconds
@@ -216,6 +216,21 @@ export class GameEngine {
         player.hp = 0;
         player.alive = false;
         room.eliminationOrder.push(pid);
+      }
+    }
+
+    // Record opponent moves for bots (learning)
+    for (const p of room.getAllPlayers()) {
+      if (p.isBot) {
+        const mem = room.botMemories.get(p.id);
+        if (mem) {
+          for (const other of room.getAllPlayers()) {
+            if (!other.isBot && other.alive) {
+              const sub = room.pendingMoves.get(other.id);
+              if (sub) recordOpponentMove(mem, other.id, sub.moveId);
+            }
+          }
+        }
       }
     }
 
