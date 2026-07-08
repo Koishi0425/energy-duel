@@ -65,7 +65,7 @@ export function createSocketServer(httpServer: HTTPServer) {
       socket.join(room.roomCode);
       socketRooms.set(socket.id, { roomCode: room.roomCode, playerId: player.id });
 
-      ack({ success: true, playerId: player.id });
+      ack({ success: true, playerId: player.id, roomType: room.roomType });
 
       io.to(room.roomCode).emit('player_list', {
         players: room.getPlayerInfos(),

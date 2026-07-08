@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { GamePhase, GameState, PlayerInfo, RoundResolution, Ranking, LevelUp } from '../../shared/types';
+import { GamePhase, GameState, PlayerInfo, RoundResolution, Ranking, LevelUp, RoomType } from '../../shared/types';
 import { socket, connectSocket } from './socket';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
@@ -13,6 +13,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState('');
   const [playerId, setPlayerId] = useState('');
   const [hostId, setHostId] = useState('');
+  const [roomType, setRoomType] = useState<RoomType>('duo');
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [round, setRound] = useState(0);
@@ -132,9 +133,10 @@ export default function App() {
         <Lobby
           socket={socket}
           onError={setError}
-          onRoomCreated={(code, pid) => {
+          onRoomCreated={(code, pid, rtype) => {
             setRoomCode(code);
             setPlayerId(pid);
+            setRoomType(rtype);
             setView('waiting');
           }}
         />
@@ -146,6 +148,7 @@ export default function App() {
           players={players}
           isHost={isHost}
           playerId={playerId}
+          roomType={roomType}
           socket={socket}
           onLeave={handleLeave}
         />

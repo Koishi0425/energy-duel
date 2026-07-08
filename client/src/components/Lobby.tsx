@@ -5,7 +5,7 @@ import { ClientToServerEvents, ServerToClientEvents, RoomType } from '../../../s
 interface Props {
   socket: Socket<ServerToClientEvents, ClientToServerEvents>;
   onError: (msg: string) => void;
-  onRoomCreated: (roomCode: string, playerId: string) => void;
+  onRoomCreated: (roomCode: string, playerId: string, roomType: RoomType) => void;
 }
 
 export default function Lobby({ socket, onError, onRoomCreated }: Props) {
@@ -29,7 +29,7 @@ export default function Lobby({ socket, onError, onRoomCreated }: Props) {
     localStorage.setItem('energy-duel-nickname', nickname.trim());
     socket.emit('create_room', { nickname: nickname.trim(), roomType }, (res) => {
       setLoading(false);
-      onRoomCreated(res.roomCode, res.playerId);
+      onRoomCreated(res.roomCode, res.playerId, roomType);
     });
   };
 
@@ -56,7 +56,7 @@ export default function Lobby({ socket, onError, onRoomCreated }: Props) {
       if (!res.success) {
         onError(res.error || '加入失败');
       } else {
-        onRoomCreated(joinCode.trim().toUpperCase(), res.playerId!);
+        onRoomCreated(joinCode.trim().toUpperCase(), res.playerId!, res.roomType || 'duo');
       }
     });
   };

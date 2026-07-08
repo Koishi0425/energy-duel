@@ -1,5 +1,5 @@
 import { Socket } from 'socket.io-client';
-import { PlayerInfo } from '../../../shared/types';
+import { PlayerInfo, RoomType } from '../../../shared/types';
 import { ClientToServerEvents, ServerToClientEvents } from '../../../shared/types';
 
 interface Props {
@@ -7,11 +7,13 @@ interface Props {
   players: PlayerInfo[];
   isHost: boolean;
   playerId: string;
+  roomType: RoomType;
   socket: Socket<ServerToClientEvents, ClientToServerEvents>;
   onLeave: () => void;
 }
 
-export default function WaitingRoom({ roomCode, players, isHost, playerId, socket, onLeave }: Props) {
+export default function WaitingRoom({ roomCode, players, isHost, playerId, roomType, socket, onLeave }: Props) {
+  const maxPlayers = roomType === 'duo' ? 2 : 8;
   const handleStart = () => {
     socket.emit('start_game');
   };
@@ -21,11 +23,13 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, socke
       <div className="room-header">
         <h2>房间号</h2>
         <div className="room-code-big">{roomCode}</div>
-        <p className="room-hint">把这个号码发给朋友</p>
+        <p className="room-hint">
+          {roomType === 'duo' ? '双人对战' : '多人混战'} · 发给朋友加入
+        </p>
       </div>
 
       <div className="player-list">
-        <h3>玩家 ({players.length}/8)</h3>
+        <h3>玩家 ({players.length}/{maxPlayers})</h3>
         {players.map((p) => (
           <div key={p.id} className={`player-row ${p.id === playerId ? 'is-me' : ''}`}>
             <span className="player-name">
