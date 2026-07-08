@@ -52,7 +52,6 @@ export class GameRoom {
       id, nickname,
       level: this.initialLevel, hp: 1, energy: 0,
       alive: true, buffs: [], isBot: true, botLevel,
-      strategyName: mem.strategy.name,
     };
     this.players.set(id, player);
     this.botMemories.set(id, mem);
