@@ -4,6 +4,7 @@ import { resolveEnergy } from './EnergyResolver';
 import { resolveAttacks } from './MoveResolver';
 import { computeRankings, computeLevelUps, applyLevelUps } from './LevelResolver';
 import { getMoveById } from '../data/moves';
+import { chooseBotMove } from './BotEngine';
 import { RoundResolution, GameState, PlayerInfo } from '../../shared/types';
 
 const THINKING_TIME = 30_000;  // 30 seconds
@@ -136,28 +137,52 @@ export class GameEngine {
 
     room.pendingMoves.set(playerId, { moveId, targets });
 
-    // Check if all alive players submitted
-    const aliveCount = room.getAlivePlayers().length;
-    if (room.pendingMoves.size >= aliveCount) {
-      room.clearTimer();
-      this.startRevealPhase(room);
-    }
-
+    this.checkAllSubmitted(room);
     return true;
   }
 
-  /** Timeout: auto-submit 运 for missing players */
+  /** Check if all humans submitted, then run bots, then reveal */
+  checkAllSubmitted(room: GameRoom): void {
+    const alive = room.getAlivePlayers();
+    const humans = alive.filter(p => !p.isBot);
+    const bots = alive.filter(p => p.isBot);
+
+    // All humans must submit first
+    const allHumansDone = humans.every(p => room.pendingMoves.has(p.id));
+    if (!allHumansDone) return;
+
+    // Run bot moves
+    for (const bot of bots) {
+      if (!room.pendingMoves.has(bot.id)) {
+        const { moveId, targets } = chooseBotMove(
+          bot.botLevel || 'easy', bot, room.getAllPlayers()
+        );
+        // Validate & submit (skip cost check for bots)
+        const moveDef = getMoveById(moveId);
+        if (moveDef && bot.energy >= moveDef.cost) {
+          room.pendingMoves.set(bot.id, { moveId, targets });
+        } else {
+          room.pendingMoves.set(bot.id, { moveId: 'yun', targets: [] });
+        }
+      }
+    }
+
+    room.clearTimer();
+    this.startRevealPhase(room);
+  }
+
+  /** Timeout: auto-submit 运 for missing humans, then run bots */
   onThinkingTimeout(room: GameRoom): void {
     if (room.phase !== 'playing') return;
 
     const alive = room.getAlivePlayers();
     for (const p of alive) {
-      if (!room.pendingMoves.has(p.id)) {
+      if (!room.pendingMoves.has(p.id) && !p.isBot) {
         room.pendingMoves.set(p.id, { moveId: 'yun', targets: [] });
       }
     }
 
-    this.startRevealPhase(room);
+    this.checkAllSubmitted(room);
   }
 
   /** Reveal & Result combined into one phase */

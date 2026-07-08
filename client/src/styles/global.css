@@ -201,11 +201,36 @@ html, body {
 .player-row.is-me { border: 1px solid var(--accent); }
 .player-name { font-weight: 600; }
 .player-level { color: var(--text-dim); font-size: 14px; }
+.bot-tag {
+  font-size: 10px;
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.bot-controls { width: 100%; }
+.bot-menu {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+.btn-xs {
+  padding: 2px 6px; font-size: 12px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 4px; cursor: pointer;
+}
+.btn-xs:hover { color: var(--danger); border-color: var(--danger); }
+
 .waiting-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: center;
+  width: 100%;
 }
 .waiting-text { color: var(--text-dim); font-size: 14px; }
 

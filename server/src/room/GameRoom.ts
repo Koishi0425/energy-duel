@@ -36,7 +36,19 @@ export class GameRoom {
     const player: PlayerState = {
       id, nickname,
       level: this.initialLevel, hp: 1, energy: 0,
-      alive: true, buffs: [],
+      alive: true, buffs: [], isBot: false,
+    };
+    this.players.set(id, player);
+    if (!this.hostId) this.hostId = id;
+    return player;
+  }
+
+  addBot(nickname: string, botLevel: import('../../shared/types').BotLevel): PlayerState {
+    const id = 'bot_' + generateId();
+    const player: PlayerState = {
+      id, nickname,
+      level: this.initialLevel, hp: 1, energy: 0,
+      alive: true, buffs: [], isBot: true, botLevel,
     };
     this.players.set(id, player);
     if (!this.hostId) this.hostId = id;
@@ -65,6 +77,7 @@ export class GameRoom {
     return this.getAllPlayers().map(p => ({
       id: p.id, nickname: p.nickname, level: p.level,
       alive: p.alive, energy: p.energy, hp: p.hp, buffs: p.buffs,
+      isBot: p.isBot, botLevel: p.botLevel,
     }));
   }
 

@@ -94,6 +94,52 @@ export function createSocketServer(httpServer: HTTPServer) {
       console.log(`[game] Room ${room.roomCode} started with ${room.players.size} players`);
     });
 
+    // ---- Add Bot (host only) ----
+    socket.on('add_bot', (data) => {
+      const info = socketRooms.get(socket.id);
+      if (!info) return;
+      const room = roomManager.getRoom(info.roomCode);
+      if (!room) return;
+      if (room.hostId !== info.playerId) {
+        socket.emit('error', { message: '只有房主可以添加人机' });
+        return;
+      }
+      if (room.phase !== 'waiting') {
+        socket.emit('error', { message: '游戏开始后不能添加人机' });
+        return;
+      }
+      if (room.players.size >= room.maxPlayers) {
+        socket.emit('error', { message: '房间已满' });
+        return;
+      }
+      const botNum = room.getAllPlayers().filter(p => p.isBot).length + 1;
+      const bot = room.addBot(`人机${botNum}`, data.level);
+      socket.join(room.roomCode);
+      console.log(`[room] Bot ${bot.nickname} (${data.level}) added to ${room.roomCode}`);
+
+      io.to(room.roomCode).emit('player_list', {
+        players: room.getPlayerInfos(),
+        hostId: room.hostId,
+      });
+    });
+
+    // ---- Remove Bot (host only) ----
+    socket.on('remove_bot', (data) => {
+      const info = socketRooms.get(socket.id);
+      if (!info) return;
+      const room = roomManager.getRoom(info.roomCode);
+      if (!room) return;
+      if (room.hostId !== info.playerId) return;
+      if (room.phase !== 'waiting') return;
+      const bot = room.players.get(data.botId);
+      if (!bot || !bot.isBot) return;
+      room.players.delete(data.botId);
+      io.to(room.roomCode).emit('player_list', {
+        players: room.getPlayerInfos(),
+        hostId: room.hostId,
+      });
+    });
+
     // ---- Submit Move ----
     socket.on('submit_move', (data) => {
       const info = socketRooms.get(socket.id);

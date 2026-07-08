@@ -27,6 +27,7 @@ export default function PlayerStatusBar({ players, playerId }: Props) {
           className={`player-status ${p.id === playerId ? 'is-me' : ''} ${!p.alive ? 'is-dead' : ''}`}
         >
           <div className="ps-name">
+            {p.isBot && '🤖 '}
             {p.nickname}
             {p.id === playerId && ' (你)'}
           </div>

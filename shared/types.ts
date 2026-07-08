@@ -29,6 +29,9 @@ export interface Buff {
   remainingRounds: number;
 }
 
+// ---- Bot ----
+export type BotLevel = 'easy' | 'normal' | 'hard';
+
 // ---- Player State ----
 export interface PlayerState {
   id: string;
@@ -38,6 +41,8 @@ export interface PlayerState {
   energy: number;      // float
   alive: boolean;
   buffs: Buff[];
+  isBot: boolean;
+  botLevel?: BotLevel;
 }
 
 // ---- Player Info (sent to clients) ----
@@ -49,6 +54,8 @@ export interface PlayerInfo {
   energy: number;
   hp: number;
   buffs: Buff[];
+  isBot: boolean;
+  botLevel?: BotLevel;
 }
 
 // ---- Move Submission ----
@@ -107,6 +114,8 @@ export interface ClientToServerEvents {
   join_room: (data: { nickname: string; roomCode: string }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
   leave_room: () => void;
   start_game: () => void;
+  add_bot: (data: { level: BotLevel }) => void;
+  remove_bot: (data: { botId: string }) => void;
   submit_move: (data: { moveId: string; targets: string[] }) => void;
   play_again: () => void;
 }
