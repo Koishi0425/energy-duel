@@ -36,7 +36,7 @@ export function createSocketServer(httpServer: HTTPServer) {
         hostId: room.hostId,
       });
 
-      console.log(`[room] ${data.nickname} created ${room.roomType} room ${room.roomCode}`);
+      console.log(`[room] ${data.nickname} created ${room.roomType} room ${room.roomCode} (initial Lv.${room.initialLevel})`);
     });
 
     // ---- Join Room ----

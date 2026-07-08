@@ -1,7 +1,18 @@
+import { ALL_MOVES } from '../moves';
+
 interface Props {
   show: boolean;
   onClose: () => void;
 }
+
+// Simplified: level, name, cost, ATK, DEF only
+const movesSummary = ALL_MOVES.map(m => ({
+  level: m.level,
+  name: m.name,
+  cost: m.cost === 1/3 ? '⅓' : m.cost === 0.5 ? '½' : String(m.cost),
+  atk: m.atk || '—',
+  def: m.def || '—',
+}));
 
 export default function RulesModal({ show, onClose }: Props) {
   if (!show) return null;
@@ -41,6 +52,32 @@ export default function RulesModal({ show, onClose }: Props) {
           <li>龙盾（Lv.4）、跺（Lv.7）、毒盾（Lv.12）</li>
           <li>任何人达到等级 → <strong>全员解锁</strong></li>
         </ul>
+
+        <h3>招式总览</h3>
+        <div className="moves-table-wrap">
+          <table className="moves-table">
+            <thead>
+              <tr>
+                <th>Lv</th>
+                <th>招式</th>
+                <th>气</th>
+                <th>攻</th>
+                <th>防</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movesSummary.map((m, i) => (
+                <tr key={i}>
+                  <td>{m.level}</td>
+                  <td>{m.name}</td>
+                  <td>{m.cost}</td>
+                  <td>{m.atk}</td>
+                  <td>{m.def}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <button className="btn btn-primary" onClick={onClose}>知道了</button>
       </div>
