@@ -139,7 +139,7 @@ export function resolveAttacks(
       if (landing && deaths.includes(targetId)) aliveMap.set(targetId, false);
       if (deaths.includes(pa.attackerId)) {
         aliveMap.set(pa.attackerId, false);
-        break;
+        // Don't break — dead attacker's attack still resolves against remaining targets
       }
     }
   }

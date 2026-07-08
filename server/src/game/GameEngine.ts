@@ -216,6 +216,12 @@ export class GameEngine {
     }
 
     const aliveAfter = room.getAlivePlayers();
+    const aliveBefore = aliveAfter.length + resolution.deaths.length;
+    const hadDeaths = resolution.deaths.length > 0;
+
+    // 过半死亡规则: 一回合内 ≥ 半数玩家死亡 → 幸存者直接升级，游戏结束
+    // 例外: 全员死亡 → 无人升级
+    const massDeath = resolution.deaths.length >= aliveBefore / 2;
 
     const state: GameState = {
       phase: 'result',
@@ -227,10 +233,18 @@ export class GameEngine {
 
     this.io.to(room.roomCode).emit('phase_change', { phase: 'result', state, resolution });
 
-    const hadDeaths = resolution.deaths.length > 0;
-
     room.timer = setTimeout(() => {
-      if (aliveAfter.length <= 1) {
+      if (aliveAfter.length === 0 || (massDeath && aliveAfter.length > 0)) {
+        // Game over: all dead OR mass death with survivors
+        // Mass death: survivors auto-level before ending
+        if (massDeath && aliveAfter.length > 0) {
+          for (const p of aliveAfter) {
+            p.level += 1;
+          }
+          room.massDeathTriggered = true;
+        }
+        this.endGame(room);
+      } else if (aliveAfter.length <= 1) {
         this.endGame(room);
       } else {
         // Only reset energy when someone died this round (§3.5)
@@ -251,8 +265,13 @@ export class GameEngine {
     room.clearTimer();
 
     const rankings = computeRankings(room.getAllPlayers(), room.eliminationOrder);
-    const levelUps = computeLevelUps(rankings, room.getAllPlayers());
+
+    // 过半死亡 → survivors already leveled up in startResultPhase, skip normal quota
+    const levelUps = room.massDeathTriggered
+      ? []
+      : computeLevelUps(rankings, room.getAllPlayers());
     applyLevelUps(levelUps, room.players);
+    room.massDeathTriggered = false;  // reset for next game
 
     const state: GameState = {
       phase: 'finished',
