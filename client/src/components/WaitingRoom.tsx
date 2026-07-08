@@ -49,7 +49,7 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
               {p.isBot && '🤖 '}
               {p.nickname}
               {p.id === playerId && ' (你)'}
-              {p.botLevel && <span className="bot-tag">{p.botLevel}</span>}
+              {p.strategyName && <span className="bot-tag">{p.strategyName}</span>}
             </span>
             <span className="player-level">Lv.{p.level}</span>
             {isHost && p.isBot && (

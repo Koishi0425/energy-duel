@@ -5,7 +5,7 @@ import { getMovesByLevel, getMoveById } from '../data/moves';
 export interface BotMemory {
   consecutiveDefenses: number;
   opponentHistory: Map<string, string[]>;
-  personality: 'aggressive' | 'balanced' | 'conservative';
+  strategy: StrategyProfile;
 }
 
 // ---- Utils ----
@@ -15,11 +15,10 @@ function noise(scale: number) { return (Math.random() - 0.5) * 2 * scale; }
 function sum(arr: number[]) { return arr.reduce((a, b) => a + b, 0); }
 
 export function createBotMemory(): BotMemory {
-  const personalities: BotMemory['personality'][] = ['aggressive', 'balanced', 'conservative'];
   return {
     consecutiveDefenses: 0,
     opponentHistory: new Map(),
-    personality: randPick(personalities),
+    strategy: randPick(STRATEGIES),
   };
 }
 
@@ -60,8 +59,10 @@ function easyBot(
   let atkW = 50, defW = 25, spW = 15, chW = 10;
   if (oppAtkRate > 0.5) { defW += 20; atkW -= 15; }
   if (tendencies.defense > 0.4) { chW += 15; atkW -= 10; }
-  if (memory.personality === 'aggressive') { atkW += 15; defW -= 10; }
-  if (memory.personality === 'conservative') { defW += 15; atkW -= 10; }
+  atkW = Math.round(atkW * memory.strategy.attackBias);
+  defW = Math.round(defW * memory.strategy.defenseBias);
+  chW = Math.round(chW * memory.strategy.chargeBias);
+  spW = Math.round(spW * memory.strategy.specialBias);
   if (forceNoDef) { defW = 0; atkW += 20; }
 
   const totalW = atkW + defW + spW + chW;
@@ -86,8 +87,50 @@ function easyBot(
 // NORMAL — recursive counter-prediction (game theory)
 // ================================================================
 
-const RECURSE_DEPTH = 3;     // how many layers of "I think that you think that I think..."
-const CANDIDATE_COUNT = 6;   // top N moves to consider at each layer
+const RECURSE_DEPTH = 5;
+const CANDIDATE_COUNT = 6;
+
+// ================================================================
+// Strategy profiles — each bot randomly picks one at creation
+// ================================================================
+interface StrategyProfile {
+  name: string;
+  attackBias: number;      // multiplier on ATK scores (1.0 = neutral)
+  defenseBias: number;     // multiplier on DEF scores
+  chargeBias: number;      // multiplier on 运 scores
+  specialBias: number;     // multiplier on 欧/跺 scores
+  riskTolerance: number;   // 0–1: when behind, how much to gamble vs play safe
+  energyThreshold: number; // min energy before unleashing heavy attacks
+  aggressionOnLead: number;// when ahead in energy, how hard to press (0–2)
+}
+
+const STRATEGIES: StrategyProfile[] = [
+  {
+    name: '猛攻型',
+    attackBias: 1.5, defenseBias: 0.5, chargeBias: 0.8, specialBias: 0.7,
+    riskTolerance: 0.8, energyThreshold: 2, aggressionOnLead: 1.8,
+  },
+  {
+    name: '稳健型',
+    attackBias: 0.7, defenseBias: 1.8, chargeBias: 1.5, specialBias: 0.9,
+    riskTolerance: 0.2, energyThreshold: 5, aggressionOnLead: 0.5,
+  },
+  {
+    name: '诡诈型',
+    attackBias: 0.8, defenseBias: 0.6, chargeBias: 0.7, specialBias: 2.2,
+    riskTolerance: 0.6, energyThreshold: 3, aggressionOnLead: 0.8,
+  },
+  {
+    name: '均衡型',
+    attackBias: 1.0, defenseBias: 1.0, chargeBias: 1.0, specialBias: 1.0,
+    riskTolerance: 0.5, energyThreshold: 3, aggressionOnLead: 1.0,
+  },
+  {
+    name: '赌徒型',
+    attackBias: 1.3, defenseBias: 0.2, chargeBias: 1.2, specialBias: 0.5,
+    riskTolerance: 0.95, energyThreshold: 1, aggressionOnLead: 2.0,
+  },
+];
 
 function normalBot(
   bot: PlayerState, available: MoveDef[], others: PlayerState[],
@@ -147,56 +190,52 @@ function minimaxEval(
   oppCandidates: MoveDef[],
   me: PlayerState,
   opp: PlayerState,
-  myFullOptions: MoveDef[],
+  _myFullOptions: MoveDef[],
   depth: number,
   memory: BotMemory
 ): number {
-  if (depth <= 0) return baseScore(myMove, me, opp);
-
-  // Opponent picks their best move assuming I played myMove
-  // For each opponent move, evaluate the resulting state
+  // Opponent picks their best response to myMove
   const oppScores = oppCandidates.map(oppMove => {
     const outcome = evalExchange(myMove, oppMove, me, opp);
 
-    // Build resulting state after exchange
+    // Terminal: someone died
+    if (outcome.myDeath) return -2000;
+    if (outcome.oppDeath) return 2000;
+
     const newMeEnergy = me.energy - myMove.cost + outcome.myEnergyDelta;
     const newOppEnergy = opp.energy - oppMove.cost + outcome.oppEnergyDelta;
 
-    // Recursive: what would *I* play from this new state?
-    // My best response from the new state (limited depth)
+    // Leaf: use strategic position evaluation
+    if (depth <= 0) {
+      return leafEval(newMeEnergy, newOppEnergy, me.level, opp.level, memory.strategy);
+    }
+
+    // Recursive: from this new state, what's the best I can do next round?
     const myNewOptions = getMovesByLevel(me.level).filter(m => newMeEnergy >= m.cost);
     const oppNewOptions = getMovesByLevel(opp.level).filter(m => newOppEnergy >= m.cost);
 
     let futureScore = 0;
-    if (depth > 1 && myNewOptions.length > 0 && oppNewOptions.length > 0) {
+    if (myNewOptions.length > 0 && oppNewOptions.length > 0) {
       const topMyNext = rankCandidates(myNewOptions,
         { ...me, energy: newMeEnergy },
         { ...opp, energy: newOppEnergy },
         memory
       ).slice(0, 3);
 
-      // Opponent evaluates from their perspective (negated)
-      const bestForOpp = Math.max(...topMyNext.map(m =>
+      // My best outcome from the resulting position
+      futureScore = Math.max(...topMyNext.map(m =>
         minimaxEval(m, oppNewOptions.slice(0, CANDIDATE_COUNT),
           { ...me, energy: newMeEnergy },
           { ...opp, energy: newOppEnergy },
           myNewOptions, depth - 1, memory)
       ));
-      futureScore = bestForOpp;
     }
 
-    // If I die → very bad. If opponent dies → very good.
-    if (outcome.myDeath) return -1000;
-    if (outcome.oppDeath) return 1000;
-
-    return futureScore + (newMeEnergy - newOppEnergy) * 15;
+    return futureScore;
   });
 
-  // Opponent will pick the move that's WORST for me (best for them)
- // Sort: lowest first (worst for me)
+  // Opponent picks the move WORST for me (zero-sum)
   oppScores.sort((a, b) => a - b);
-
-  // Weighted average of opponent's likely responses (assume they pick near-optimal)
   const topK = oppScores.slice(0, 3);
   return sum(topK) / topK.length;
 }
@@ -270,8 +309,69 @@ function evalExchange(
   return { myDeath, oppDeath, myEnergyDelta, oppEnergyDelta };
 }
 
-/** Base heuristic score for a move */
-function baseScore(move: MoveDef, me: PlayerState, _opp: PlayerState): number {
+/**
+ * Strategic position evaluation (leaf nodes).
+ * "谁在这个能量局面下更可能最终获胜？"
+ * 不只看单回合死不死，而是评估长期博弈位置。
+ */
+function leafEval(myEnergy: number, oppEnergy: number, myLevel: number, oppLevel: number, strategy: StrategyProfile): number {
+  let score = 0;
+
+  // === Energy differential (base) ===
+  score += (myEnergy - oppEnergy) * 10;
+
+  // === Kill threat: can either side threaten a kill? ===
+  const myMoves = getMovesByLevel(myLevel);
+  const oppMoves = getMovesByLevel(oppLevel);
+
+  const myMaxATK = Math.max(...myMoves.filter(m => myEnergy >= m.cost && m.atk > 0).map(m => m.atk), 0);
+  const oppMaxATK = Math.max(...oppMoves.filter(m => oppEnergy >= m.cost && m.atk > 0).map(m => m.atk), 0);
+  const myMaxDEF = Math.max(...myMoves.filter(m => myEnergy >= m.cost && m.def > 0).map(m => m.def), 0);
+  const oppMaxDEF = Math.max(...oppMoves.filter(m => oppEnergy >= m.cost && m.def > 0).map(m => m.def), 0);
+
+  // I can OHKO and opponent can't block → massive advantage
+  if (myMaxATK > oppMaxDEF && myMaxATK >= 30) score += 60;
+  if (oppMaxATK > myMaxDEF && oppMaxATK >= 30) score -= 60;
+
+  // I can挂机(50ATK) and opponent can't超防 → winning position
+  if (myMaxATK >= 50 && oppMaxDEF < 50) score += 40;
+  if (oppMaxATK >= 50 && myMaxDEF < 50) score -= 40;
+
+  // === Initiative: who controls the tempo ===
+  // Being able to attack while opponent can't afford anything is huge
+  const iCanAttack = myMaxATK > 0;
+  const oppCanAttack = oppMaxATK > 0;
+  const iCanCharge = myEnergy < 8;  // always true in practice
+  const oppCanCharge = oppEnergy < 8;
+
+  if (iCanAttack && !oppCanAttack && oppEnergy < 0.5) score += 35;  // I have weapon, opponent broke
+  if (oppCanAttack && !iCanAttack && myEnergy < 0.5) score -= 35;
+
+  // === Energy snowball: gap compounds ===
+  // Being up 2+ energy means opponent is in danger zone
+  const gap = myEnergy - oppEnergy;
+  if (gap >= 3) score += 50;   // dominant — can挂机 while opponent scrambles
+  if (gap >= 2) score += 25;   // strong lead
+  if (gap <= -3) score -= 50;  // desperate — must take risks
+  if (gap <= -2) score -= 25;
+
+  // === Desperation: when badly behind, risky plays are better ===
+  if (oppMaxATK >= 50 && myMaxDEF < 50 && gap < 0) {
+    score -= 30;
+  }
+
+  // === Risk tolerance: how much does being behind actually hurt? ===
+  // Low tolerance → being behind feels terrible → play safe, defend
+  // High tolerance → being behind is just a temporary setback → gamble
+  if (gap < 0) {
+    score = score * (1 - strategy.riskTolerance * 0.6);
+  }
+
+  return score;
+}
+
+/** Base heuristic score for a move (used for candidate ranking only, not leaf eval) */
+function baseScore(move: MoveDef, _me: PlayerState, _opp: PlayerState): number {
   let s = 0;
   if (move.atk > 0) s += move.atk * 1.5;
   if (move.def > 0) s += move.def * 0.8;
@@ -299,12 +399,18 @@ function rankCandidates(
 
   const scored = moves.map(m => {
     let s = baseScore(m, player, opponent);
-    // Favor defense if opponent attacks often
+    // Apply strategy profile
+    if (m.atk > 0) s *= memory.strategy.attackBias;
+    if (m.def > 0 || m.type === 'special_defense') s *= memory.strategy.defenseBias;
+    if (m.type === 'charge') s *= memory.strategy.chargeBias;
+    if (m.type === 'special') s *= memory.strategy.specialBias;
+    // Context: favor defense if opponent attacks often
     if (m.def > 0 && oppAtkFreq > 0.4) s += m.def * 0.5;
-    // Personality
-    if (memory.personality === 'aggressive' && m.atk > 0) s += 10;
-    if (memory.personality === 'conservative' && m.def > 0) s += 10;
-    s += noise(8); // small randomness so tied scores vary
+    // Energy management: don't rush big attacks below threshold
+    if (m.atk >= 50 && player.energy < memory.strategy.energyThreshold) s -= 25;
+    // Press harder when ahead
+    if (m.atk > 0 && player.energy > opponent.energy) s *= memory.strategy.aggressionOnLead;
+    s += noise(8);
     return { move: m, score: s };
   });
 

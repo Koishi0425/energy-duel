@@ -47,13 +47,15 @@ export class GameRoom {
 
   addBot(nickname: string, botLevel: import('../../shared/types').BotLevel): PlayerState {
     const id = 'bot_' + generateId();
+    const mem = createBotMemory();
     const player: PlayerState = {
       id, nickname,
       level: this.initialLevel, hp: 1, energy: 0,
       alive: true, buffs: [], isBot: true, botLevel,
+      strategyName: mem.strategy.name,
     };
     this.players.set(id, player);
-    this.botMemories.set(id, createBotMemory());
+    this.botMemories.set(id, mem);
     if (!this.hostId) this.hostId = id;
     return player;
   }
@@ -80,7 +82,7 @@ export class GameRoom {
     return this.getAllPlayers().map(p => ({
       id: p.id, nickname: p.nickname, level: p.level,
       alive: p.alive, energy: p.energy, hp: p.hp, buffs: p.buffs,
-      isBot: p.isBot, botLevel: p.botLevel,
+      isBot: p.isBot, botLevel: p.botLevel, strategyName: p.strategyName,
     }));
   }
 

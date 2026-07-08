@@ -37,12 +37,13 @@ export interface PlayerState {
   id: string;
   nickname: string;
   level: number;
-  hp: number;          // 1 or 0
-  energy: number;      // float
+  hp: number;
+  energy: number;
   alive: boolean;
   buffs: Buff[];
   isBot: boolean;
   botLevel?: BotLevel;
+  strategyName?: string;
 }
 
 // ---- Player Info (sent to clients) ----
@@ -56,6 +57,7 @@ export interface PlayerInfo {
   buffs: Buff[];
   isBot: boolean;
   botLevel?: BotLevel;
+  strategyName?: string;
 }
 
 // ---- Move Submission ----
