@@ -312,16 +312,16 @@ function normalBot(
   // Filter BEFORE scoring — no point evaluating useless moves
   let reasonable = [...affordable];
 
-  // 超防: ONLY useful when opponent has ≥2 energy (approaching挂机 range)
-  // or can afford an attack ≥30 ATK
-  const oppHasBigThreat = oppAllAvailable.some(m => m.atk >= 30) || opp.energy >= 2;
-  if (!oppHasBigThreat) {
+  // 超防: ONLY when opponent ≥3 energy (挂机 threat is real)
+  // Otherwise 普通防(30) is enough, 超防 wastes 1 energy
+  if (opp.energy < 3) {
     reasonable = reasonable.filter(m => m.id !== 'chaofang');
   }
 
-  // 龙盾(0 DEF): ONLY useful vs龙爪/降龙十八掌
-  const oppHasLongxi = opp.level >= 4;
-  if (!oppHasLongxi) {
+  // 龙盾(0 DEF): ONLY vs降龙十八掌(55ATK, beats防30)
+  // Against龙爪(20ATK), 防(30DEF) is better. 龙盾 is a降龙十八掌 specialist.
+  const oppHasXianglong = opp.level >= 4 && opp.energy >= 3;
+  if (!oppHasXianglong) {
     reasonable = reasonable.filter(m => m.id !== 'longdun');
   }
 
