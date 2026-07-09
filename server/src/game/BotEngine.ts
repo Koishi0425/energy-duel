@@ -260,45 +260,113 @@ function normalBot(
   const affordable = available.filter(m => bot.energy >= m.cost);
   if (affordable.length === 0) return { moveId: 'yun', targets: [] };
 
+  const opp = others[0];
+  const oppAllAvailable = getMovesByLevel(opp.level).filter(m => opp.energy >= m.cost);
+
+  // ============================================================
+  // === STRATEGIC PRE-CHECKS (before scoring) ===
+  // ============================================================
+
+  // Both at 0, no 欧 → only 运
+  const hasOu = available.some(m => m.specialEffect === 'ou_steal');
+  if (bot.energy < 0.01 && opp.energy < 0.01 && !hasOu && round > 1) {
+    return { moveId: 'yun', targets: [] };
+  }
+
+  // === CHECKMATE: 绝杀检测 ===
+  // 挂机(50ATK) or 降龙十八掌(55ATK) when opponent can't超防(50DEF, costs 1气)
+  const hasGuaji = affordable.some(m => m.id === 'guaji');
+  const hasXianglong = affordable.some(m => m.id === 'xianglong');
+  const oppCanChaofang = opp.energy >= 1 && oppAllAvailable.some(m => m.id === 'chaofang');
+  const oppCanYuanding = opp.energy >= 1 && oppAllAvailable.some(m => m.id === 'yuanding');
+  const oppCanBlock50 = oppCanChaofang || oppCanYuanding;
+
+  if (hasGuaji && bot.energy >= 3 && !oppCanBlock50) {
+    // 绝杀：对面防不住挂机
+    return makeTargets(getMoveById('guaji')!, bot, others);
+  }
+  if (hasXianglong && bot.energy >= 3) {
+    // 降龙十八掌 55攻，连超防也破 → 只要对面不是观音坐莲就杀
+    const oppHasGuanyin = oppAllAvailable.some(m => m.specialEffect === 'guanyin_buff') && opp.energy >= 2;
+    if (!oppHasGuanyin) {
+      return makeTargets(getMoveById('xianglong')!, bot, others);
+    }
+  }
+
+  // 钢叉(50ATK, 1气) 绝杀 — same power as挂机, lower cost
+  const hasGangcha = affordable.some(m => m.id === 'gangcha');
+  if (hasGangcha && bot.energy >= 1 && !oppCanBlock50) {
+    return makeTargets(getMoveById('gangcha')!, bot, others);
+  }
+
   // Round 1 probe
   if (round === 1) {
     const r1 = affordable.filter(m => ['yun', 'ou', 'duo'].includes(m.id));
     return makeTargets(r1.length > 0 ? randPick(r1) : getMoveById('yun')!, bot, others);
   }
 
-  const opp = others[0];
+  // ============================================================
+  // === STRATEGIC FILTER: remove contextually useless moves ===
+  // ============================================================
 
-  // === Special case: both at 0 energy, no 欧 → only 运 ===
-  const hasOu = available.some(m => m.specialEffect === 'ou_steal');
-  if (bot.energy < 0.01 && opp.energy < 0.01 && !hasOu) {
+  // Filter BEFORE scoring — no point evaluating useless moves
+  let reasonable = [...affordable];
+
+  // 超防: ONLY useful when opponent has ≥2 energy (approaching挂机 range)
+  // or can afford an attack ≥30 ATK
+  const oppHasBigThreat = oppAllAvailable.some(m => m.atk >= 30) || opp.energy >= 2;
+  if (!oppHasBigThreat) {
+    reasonable = reasonable.filter(m => m.id !== 'chaofang');
+  }
+
+  // 龙盾(0 DEF): ONLY useful vs龙爪/降龙十八掌
+  const oppHasLongxi = opp.level >= 4;
+  if (!oppHasLongxi) {
+    reasonable = reasonable.filter(m => m.id !== 'longdun');
+  }
+
+  // 毒盾: ONLY useful vs毒
+  const oppHasDu = opp.level >= 12;
+  if (!oppHasDu) {
+    reasonable = reasonable.filter(m => m.id !== 'dudun');
+  }
+
+  // 跺: ONLY useful if opponent has欧 unlocked
+  const oppHasOuAccess = opp.level >= 7;
+  if (!oppHasOuAccess) {
+    reasonable = reasonable.filter(m => m.id !== 'duo');
+  }
+
+  // 防御: pointless if opponent can't attack at all
+  const oppCanAttack = oppAllAvailable.some(m => m.atk > 0);
+  if (!oppCanAttack) {
+    reasonable = reasonable.filter(m => !(m.def > 0 || m.type === 'special_defense'));
+  }
+
+  // If filtered to nothing → 运
+  if (reasonable.length === 0) {
     return { moveId: 'yun', targets: [] };
   }
 
-  // === Score all affordable moves via minimax ===
-  const oppAvailable = getMovesByLevel(opp.level).filter(m => opp.energy >= m.cost);
-  const oppCandidates = oppAvailable.length > 0
-    ? rankCandidates(oppAvailable, opp, bot, memory).slice(0, CANDIDATE_COUNT)
+  // ============================================================
+  // === Score + Random (only among reasonable moves) ===
+  // ============================================================
+
+  const oppCandidates = oppAllAvailable.length > 0
+    ? rankCandidates(oppAllAvailable, opp, bot, memory).slice(0, CANDIDATE_COUNT)
     : [getMoveById('yun')!];
 
-  const scored = affordable.map(m => ({
+  const scored = reasonable.map(m => ({
     move: m,
     score: minimaxEval(m, oppCandidates, bot, opp, RECURSE_DEPTH, memory),
   }));
   scored.sort((a, b) => b.score - a.score);
 
-  // === Take top N via level-scaling ===
+  // Top N
   const N = Math.min(topNForLevel(bot.level), scored.length);
   let pool = scored.slice(0, N).map(s => s.move);
 
-  // === Contextual filtering: remove genuinely useless moves ===
-
-  // 1. Opponent can't attack → defense is pointless
-  const oppCanAttack = oppAvailable.some(m => m.atk > 0);
-  if (!oppCanAttack) {
-    pool = pool.filter(m => !(m.def > 0 || m.type === 'special_defense'));
-  }
-
-  // 2. Single-target attacks: only keep the highest-ATK one
+  // Single-target attacks: only keep highest-ATK
   const singles = pool.filter(m => m.targetType === 'single' && m.atk > 0);
   if (singles.length > 1) {
     singles.sort((a, b) => b.atk - a.atk);
@@ -306,15 +374,8 @@ function normalBot(
     pool = pool.filter(m => m.targetType !== 'single' || m.atk <= 0 || m.atk === bestATK);
   }
 
-  // 3. If nothing left after filter → 运
-  if (pool.length === 0) {
-    return { moveId: 'yun', targets: [] };
-  }
-
-  // 1 reasonable → use it. 2+ → equal random.
-  if (pool.length === 1) {
-    return makeTargets(pool[0], bot, others);
-  }
+  if (pool.length === 0) return { moveId: 'yun', targets: [] };
+  if (pool.length === 1) return makeTargets(pool[0], bot, others);
   return makeTargets(randPick(pool), bot, others);
 }
 
