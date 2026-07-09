@@ -710,8 +710,70 @@ export function chooseHardBotMove(
   }
 
   // ============================================================
-  // Rule: Everyone defending → charge (save energy)
+  // Rule: Everyone defending → try to break the weakest defense
   // ============================================================
+  // At this point: no one is attacking us, no chargers, no vulnerable targets.
+  // Everyone is using some form of defense. Check if we can punch through.
+
+  const defenders = others.filter(o => {
+    const sub = pendingMoves.get(o.id);
+    if (!sub) return false;
+    const m = getMoveById(sub.moveId);
+    if (!m) return false;
+    // Skip 观音坐莲 users (invincible for 2 rounds)
+    if (m.specialEffect === 'guanyin_buff') return false;
+    return (m.def > 0 || m.type === 'special_defense');
+  });
+
+  if (defenders.length > 0) {
+    const attacks = affordable.filter(m => m.atk > 0).sort((a, b) => a.atk - b.atk);
+
+    // For each defender, find the cheapest attack that can break their defense
+    const breakable: { target: PlayerState; move: MoveDef }[] = [];
+
+    for (const def of defenders) {
+      const sub = pendingMoves.get(def.id)!;
+      const defMove = getMoveById(sub.moveId)!;
+
+      for (const atk of attacks) {
+        // 龙盾: only blocks 龙爪/降龙, everything else passes (DEF=0)
+        if (defMove.specialEffect === 'longdun_block') {
+          if (atk.id !== 'longzhua' && atk.id !== 'xianglong') {
+            breakable.push({ target: def, move: atk });
+            break; // any non-龙 attack works
+          }
+          continue; // 龙系 attack blocked by 龙盾 rule
+        }
+        // 毒盾: only blocks 毒, everything else tests against DEF=10
+        if (defMove.specialEffect === 'dudun_block') {
+          if (atk.id === 'du') continue; // 毒 blocked by rule
+          if (atk.atk > defMove.def) {
+            breakable.push({ target: def, move: atk });
+            break;
+          }
+          continue;
+        }
+        // Normal defense: ATK > DEF → break through
+        if (atk.atk > defMove.def) {
+          breakable.push({ target: def, move: atk });
+          break;
+        }
+      }
+    }
+
+    if (breakable.length > 0) {
+      // Prefer: can kill (ATK > DEF) → cheapest attack on most dangerous target
+      // Sort by target danger (high level first), then by attack cost (cheapest first)
+      breakable.sort((a, b) =>
+        b.target.level - a.target.level ||
+        a.move.cost - b.move.cost
+      );
+      const pick = breakable[0];
+      return { moveId: pick.move.id, targets: [pick.target.id] };
+    }
+  }
+
+  // No defense breakable → charge
   return { moveId: 'yun', targets: [] };
 }
 
