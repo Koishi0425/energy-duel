@@ -5,7 +5,7 @@ import { resolveAttacks } from './MoveResolver';
 import { computeRankings, computeLevelUps, applyLevelUps } from './LevelResolver';
 import { getMoveById } from '../data/moves';
 import { chooseBotMove, createBotMemory, recordOpponentMove } from './BotEngine';
-import { RoundResolution, GameState, PlayerInfo } from '../../shared/types';
+import { RoundResolution, GameState, PlayerInfo } from '../../../shared/types';
 
 const THINKING_TIME = 30_000;  // 30 seconds
 const RESULT_TIME = 5_000;     // 5 seconds combined reveal+result
@@ -81,6 +81,7 @@ export class GameEngine {
       round: room.round,
       players: room.getPlayerInfos(),
       roomCode: room.roomCode,
+      roomType: room.roomType,
       eliminationOrder: room.eliminationOrder,
       deadline: room.thinkingDeadline,
     };
@@ -260,6 +261,7 @@ export class GameEngine {
       round: room.round,
       players: room.getPlayerInfos(),
       roomCode: room.roomCode,
+      roomType: room.roomType,
       eliminationOrder: room.eliminationOrder,
     };
 
@@ -312,6 +314,7 @@ export class GameEngine {
       round: room.round,
       players: room.getPlayerInfos(),
       roomCode: room.roomCode,
+      roomType: room.roomType,
       eliminationOrder: room.eliminationOrder,
     };
 

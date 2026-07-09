@@ -1,4 +1,4 @@
-import { PlayerState, RoundResolution } from '../../shared/types';
+import { PlayerState, RoundResolution } from '../../../shared/types';
 import { getMoveById } from '../data/moves';
 
 interface AttackRecord {

@@ -1,4 +1,4 @@
-import { MoveDef } from '../../shared/types';
+import { MoveDef } from '../../../shared/types';
 
 export const MOVES: MoveDef[] = [
   // ===== Level 1 =====

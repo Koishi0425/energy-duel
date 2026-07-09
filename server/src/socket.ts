@@ -2,7 +2,7 @@ import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { RoomManager } from './room/RoomManager';
 import { GameEngine } from './game/GameEngine';
-import { ClientToServerEvents, ServerToClientEvents } from '../shared/types';
+import { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 
 export function createSocketServer(httpServer: HTTPServer) {
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {

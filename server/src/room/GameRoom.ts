@@ -1,4 +1,4 @@
-import { PlayerState, PlayerInfo, Buff, RoomType } from '../../shared/types';
+import { PlayerState, PlayerInfo, Buff, RoomType } from '../../../shared/types';
 import { BotMemory, createBotMemory } from '../game/BotEngine';
 
 function generateId(): string {
@@ -20,7 +20,7 @@ export class GameRoom {
   initialPlayerCount: number = 0;
   thinkingDeadline: number = 0;
   massDeathTriggered: boolean = false;
-  massDeathLevelUps: import('../../shared/types').LevelUp[] = [];
+  massDeathLevelUps: import('../../../shared/types').LevelUp[] = [];
   botMemories: Map<string, BotMemory> = new Map();
   timer: ReturnType<typeof setTimeout> | null = null;
   disconnectedPlayers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -46,7 +46,7 @@ export class GameRoom {
     return player;
   }
 
-  addBot(nickname: string, botLevel: import('../../shared/types').BotLevel): PlayerState {
+  addBot(nickname: string, botLevel: import('../../../shared/types').BotLevel): PlayerState {
     const id = 'bot_' + generateId();
     const mem = createBotMemory();
     const player: PlayerState = {

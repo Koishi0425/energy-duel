@@ -2,7 +2,7 @@
  * Bot vs Bot simulator — multi-player, any level.
  * Usage: npx tsx src/game/Simulator.ts
  */
-import { PlayerState } from '../../shared/types';
+import { PlayerState } from '../../../shared/types';
 import { getMoveById } from '../data/moves';
 import { chooseBotMove, createBotMemory, recordOpponentMove } from './BotEngine';
 import { resolveEnergy } from './EnergyResolver';

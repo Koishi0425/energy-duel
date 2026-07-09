@@ -1,4 +1,4 @@
-import { PlayerState, BotLevel, MoveDef } from '../../shared/types';
+import { PlayerState, BotLevel, MoveDef } from '../../../shared/types';
 import { getMovesByLevel, getMoveById } from '../data/moves';
 
 // ---- Types ----

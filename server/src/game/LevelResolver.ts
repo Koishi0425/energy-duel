@@ -1,4 +1,4 @@
-import { PlayerState, Ranking, LevelUp } from '../../shared/types';
+import { PlayerState, Ranking, LevelUp } from '../../../shared/types';
 
 /**
  * Compute final rankings and level-ups.

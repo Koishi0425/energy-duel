@@ -1,4 +1,4 @@
-import { PlayerState } from '../../shared/types';
+import { PlayerState } from '../../../shared/types';
 import { getMoveById } from '../data/moves';
 
 interface EnergyResult {

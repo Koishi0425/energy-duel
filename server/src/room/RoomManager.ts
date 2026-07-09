@@ -1,5 +1,5 @@
 import { GameRoom } from './GameRoom';
-import { RoomType } from '../../shared/types';
+import { RoomType } from '../../../shared/types';
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 for clarity
 
