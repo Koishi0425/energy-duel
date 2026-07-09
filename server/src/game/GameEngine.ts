@@ -39,6 +39,7 @@ export class GameEngine {
   startGame(room: GameRoom): void {
     room.phase = 'playing';
     room.round = 1;
+    room.initialPlayerCount = room.players.size;
     room.eliminationOrder = [];
     room.pendingMoves.clear();
 
@@ -242,12 +243,8 @@ export class GameEngine {
     }
 
     const aliveAfter = room.getAlivePlayers();
-    const aliveBefore = aliveAfter.length + resolution.deaths.length;
     const hadDeaths = resolution.deaths.length > 0;
-
-    // 过半死亡规则: 一回合内 ≥ 半数玩家死亡 → 幸存者直接升级，游戏结束
-    // 例外: 全员死亡 → 无人升级
-    const massDeath = resolution.deaths.length >= aliveBefore / 2;
+    const upgradeSlots = Math.floor(room.initialPlayerCount / 2);
 
     const state: GameState = {
       phase: 'result',
@@ -260,11 +257,10 @@ export class GameEngine {
     this.io.to(room.roomCode).emit('phase_change', { phase: 'result', state, resolution });
 
     room.timer = setTimeout(() => {
-      if (aliveAfter.length === 0 || (massDeath && aliveAfter.length > 0)) {
-        // Game over: all dead OR mass death with survivors
-        // Mass death: survivors auto-level before ending
-        room.massDeathLevelUps = [];
-        if (massDeath && aliveAfter.length > 0) {
+      if (aliveAfter.length <= upgradeSlots) {
+        // 剩余人数 ≤ 升级名额 → 游戏结束，幸存者直接升级
+        if (aliveAfter.length > 0) {
+          room.massDeathLevelUps = [];
           for (const p of aliveAfter) {
             room.massDeathLevelUps.push({
               playerId: p.id, nickname: p.nickname,
@@ -275,10 +271,7 @@ export class GameEngine {
           room.massDeathTriggered = true;
         }
         this.endGame(room);
-      } else if (aliveAfter.length <= 1) {
-        this.endGame(room);
       } else {
-        // Only reset energy when someone died this round (§3.5)
         if (hadDeaths) {
           for (const p of aliveAfter) {
             p.energy = 0;
@@ -300,7 +293,7 @@ export class GameEngine {
     // 过半死亡 → survivors already leveled up, use recorded levelUps
     const levelUps = room.massDeathTriggered
       ? room.massDeathLevelUps
-      : computeLevelUps(rankings, room.getAllPlayers());
+      : computeLevelUps(rankings, room.getAllPlayers(), room.initialPlayerCount);
     applyLevelUps(levelUps, room.players);
     room.massDeathTriggered = false;
     room.massDeathLevelUps = [];

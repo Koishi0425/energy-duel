@@ -8,7 +8,7 @@ import { chooseBotMove, createBotMemory, recordOpponentMove } from './BotEngine'
 import { resolveEnergy } from './EnergyResolver';
 import { resolveAttacks } from './MoveResolver';
 
-const MAX_ROUNDS = 20;
+const MAX_ROUNDS = 35;
 
 function makeBot(name: string, level: number): PlayerState {
   return {
@@ -139,11 +139,11 @@ function randInt(max: number): number { return Math.floor(Math.random() * max); 
 
 // ===== Run =====
 console.log('═'.repeat(55));
-console.log('🤖 普通人机 双人对战 ×3 — Lv.4');
+console.log('🤖 五人混战 ×3 — Lv.4');
 console.log('═'.repeat(55));
-for (let i = 1; i <= 3; i++) runGame(i, 4, 2);
+for (let i = 1; i <= 3; i++) runGame(i, 4, 5);
 
 console.log('\n\n' + '═'.repeat(55));
-console.log('🤖 普通人机 三人混战 ×3 — Lv.4');
+console.log('🤖 六人混战 ×3 — Lv.4');
 console.log('═'.repeat(55));
-for (let i = 1; i <= 3; i++) runGame(i, 4, 3);
+for (let i = 1; i <= 3; i++) runGame(i, 4, 6);

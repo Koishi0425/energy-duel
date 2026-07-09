@@ -72,9 +72,10 @@ export function computeRankings(
  */
 export function computeLevelUps(
   rankings: Ranking[],
-  players: PlayerState[]
+  players: PlayerState[],
+  initialPlayerCount?: number
 ): LevelUp[] {
-  const n = players.length;
+  const n = initialPlayerCount ?? players.length;
   const upgradeSlots = Math.floor(n / 2);
   if (upgradeSlots === 0) return [];
 

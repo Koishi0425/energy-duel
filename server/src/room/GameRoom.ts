@@ -17,6 +17,7 @@ export class GameRoom {
   eliminationOrder: string[] = [];
   pendingMoves: Map<string, { moveId: string; targets: string[] }> = new Map();
   initialLevel: number = 1;
+  initialPlayerCount: number = 0;
   thinkingDeadline: number = 0;
   massDeathTriggered: boolean = false;
   massDeathLevelUps: import('../../shared/types').LevelUp[] = [];
