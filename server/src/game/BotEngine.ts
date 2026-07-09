@@ -678,15 +678,16 @@ export function chooseHardBotMove(
   }
 
   // ============================================================
-  // Rule: Someone charging + we have 欧 → steal
+  // Rule: Low energy + someone charging → 欧 to steal
+  // (only use 欧 when desperate — otherwise attack the exposed target)
   // ============================================================
-  if (chargers.length > 0) {
+  if (bot.energy < 1 && chargers.length > 0) {
     const ou = affordable.find(m => m.specialEffect === 'ou_steal');
     if (ou) return { moveId: ou.id, targets: [chargers[0].id] };
   }
 
   // ============================================================
-  // Rule: Someone vulnerable (not defending) → attack
+  // Rule: Someone exposed (not defending, using 欧/vulnerable) → attack
   // ============================================================
   if (vulnerable.length > 0) {
     // Choose best attack: highest ATK that we can afford

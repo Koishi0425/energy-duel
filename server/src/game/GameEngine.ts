@@ -420,9 +420,10 @@ export class GameEngine {
       // Check if player has active invincible buff
       const invincible = p.buffs.find(b => b.type === 'invincible');
       if (invincible && resolution.deaths.includes(p.id)) {
-        // Cancel death
+        // Cancel death & consume the invincible buff
         resolution.deaths = resolution.deaths.filter(d => d !== p.id);
         delete resolution.deathDetails[p.id];
+        p.buffs = p.buffs.filter(b => b.type !== 'invincible');
       }
     }
   }
