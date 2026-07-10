@@ -33,3 +33,31 @@ export function clearAuth(): void {
 export function getToken(): string | null {
   return localStorage.getItem(KEY_TOKEN);
 }
+
+// ---- Room state persistence (reconnection after refresh) ----
+
+const KEY_ROOM = 'energy-duel-room';
+
+export interface SavedRoom {
+  roomCode: string;
+  playerId: string;
+  roomType: string;
+}
+
+export function saveRoomState(state: SavedRoom): void {
+  localStorage.setItem(KEY_ROOM, JSON.stringify(state));
+}
+
+export function getSavedRoom(): SavedRoom | null {
+  try {
+    const raw = localStorage.getItem(KEY_ROOM);
+    if (!raw) return null;
+    return JSON.parse(raw) as SavedRoom;
+  } catch {
+    return null;
+  }
+}
+
+export function clearRoomState(): void {
+  localStorage.removeItem(KEY_ROOM);
+}

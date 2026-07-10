@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { GamePhase, GameState, PlayerInfo, RoundResolution, Ranking, LevelUp, RoomType } from '../../shared/types';
 import { socket, connectSocket } from './socket';
-import { getAuth, clearAuth } from './auth';
+import { getAuth, clearAuth, saveRoomState, getSavedRoom, clearRoomState } from './auth';
 import AuthPanel from './components/AuthPanel';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
@@ -54,6 +54,23 @@ export default function App() {
     socket.on('connect', () => {
       console.log('[socket] connected:', socket.id);
       setConnected(true);
+
+      // Try to rejoin room after refresh
+      const saved = getSavedRoom();
+      if (saved && !roomCode) {
+        socket.emit('rejoin_room', { roomCode: saved.roomCode, playerId: saved.playerId }, (res) => {
+          if (res.success) {
+            console.log('[rejoin] restored to room', saved.roomCode);
+            setRoomCode(saved.roomCode);
+            setPlayerId(res.playerId!);
+            setRoomType(res.roomType || 'duo');
+            setView('waiting');
+          } else {
+            console.log('[rejoin] failed:', res.error);
+            clearRoomState();
+          }
+        });
+      }
     });
 
     socket.on('disconnect', () => {
@@ -78,6 +95,7 @@ export default function App() {
       console.log('[socket] room_created:', data);
       setRoomCode(data.roomCode);
       setPlayerId(data.playerId);
+      saveRoomState({ roomCode: data.roomCode, playerId: data.playerId, roomType: roomType || 'duo' });
       setView('waiting');
     });
 
@@ -121,6 +139,7 @@ export default function App() {
     });
 
     socket.on('room_closed', () => {
+      clearRoomState();
       setView('lobby');
       setError('房间已关闭');
     });
@@ -168,6 +187,7 @@ export default function App() {
 
   const handleLeave = () => {
     socket.emit('leave_room');
+    clearRoomState();
     setView('lobby');
     setRoomCode('');
     setPlayerId('');
@@ -199,6 +219,7 @@ export default function App() {
             setRoomCode(code);
             setPlayerId(pid);
             setRoomType(rtype);
+            saveRoomState({ roomCode: code, playerId: pid, roomType: rtype });
             setView('waiting');
           }}
           isLoggedIn={!!authAccountId}

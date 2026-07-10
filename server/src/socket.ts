@@ -2,6 +2,7 @@ import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { RoomManager } from './room/RoomManager';
 import { GameEngine } from './game/GameEngine';
+import { GameRoom } from './room/GameRoom';
 import { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 import { AuthManager } from './auth/AuthManager';
 
@@ -99,6 +100,51 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       console.log(`[room] ${data.nickname} joined room ${room.roomCode}`);
     });
 
+    // ---- Rejoin Room (after refresh/disconnect) ----
+    socket.on('rejoin_room', (data, ack) => {
+      const { roomCode, playerId } = data;
+      const room = roomManager.getRoom(roomCode);
+      if (!room) {
+        ack({ success: false, error: '房间不存在' });
+        return;
+      }
+
+      // Check if player is in grace period
+      const timer = room.disconnectedPlayers.get(playerId);
+      if (!timer) {
+        ack({ success: false, error: '已退出房间，请重新加入' });
+        return;
+      }
+
+      // Cancel kick timer — player is back
+      clearTimeout(timer);
+      room.disconnectedPlayers.delete(playerId);
+
+      // Reconnect new socket to existing player
+      socket.join(roomCode);
+      const p = room.players.get(playerId);
+      socketRooms.set(socket.id, {
+        roomCode, playerId,
+        accountId: (socket as any).accountId,
+        nickname: p?.nickname || '',
+      });
+
+      ack({ success: true, playerId, roomType: room.roomType });
+
+      io.to(roomCode).emit('player_list', {
+        players: room.getPlayerInfos(),
+        hostId: room.hostId,
+      });
+
+      // Send current game state if game in progress
+      if (room.phase === 'playing') {
+        const state = gameEngine.buildState(room);
+        socket.emit('phase_change', { phase: state.phase, state });
+      }
+
+      console.log(`[room] ${p?.nickname || playerId} rejoined room ${roomCode}`);
+    });
+
     // ---- Start Game (host only) ----
     socket.on('start_game', () => {
       const info = socketRooms.get(socket.id);
@@ -182,9 +228,9 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       }
     });
 
-    // ---- Leave Room ----
+    // ---- Leave Room (intentional) ----
     socket.on('leave_room', () => {
-      handleLeave(socket);
+      handleLeave(socket, true);
     });
 
     // ---- Play Again ----
@@ -207,36 +253,65 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       console.log(`[room] Room ${room.roomCode} reset for new game`);
     });
 
-    // ---- Disconnect ----
+    // ---- Disconnect (accidental — grace period) ----
     socket.on('disconnect', () => {
       console.log(`[socket] disconnected: ${socket.id}`);
-      handleLeave(socket);
-      // Note: during game, we could add a grace period
-      // For MVP, just remove immediately
+      handleLeave(socket, false);
     });
 
-    function handleLeave(s: typeof socket) {
+    // ================================================================
+    // Helpers
+    // ================================================================
+
+    function handleLeave(s: typeof socket, intentional: boolean) {
       const info = socketRooms.get(s.id);
       if (!info) return;
       const room = roomManager.getRoom(info.roomCode);
       if (!room) return;
 
-      const isHost = room.hostId === info.playerId;
-      const isEmpty = room.removePlayer(info.playerId);
       s.leave(info.roomCode);
       socketRooms.delete(s.id);
 
-      if (isEmpty) {
-        roomManager.scheduleCleanup(info.roomCode);
+      // Accidental disconnect during game → 30s grace period
+      if (!intentional && room.phase === 'playing') {
+        const existing = room.disconnectedPlayers.get(info.playerId);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(() => {
+          room.disconnectedPlayers.delete(info.playerId);
+          removePlayerFromRoom(room, info.playerId);
+        }, 30_000);
+        room.disconnectedPlayers.set(info.playerId, timer);
+
+        io.to(info.roomCode).emit('player_list', {
+          players: room.getPlayerInfos(),
+          hostId: room.hostId,
+        });
+        console.log(`[room] ${info.nickname} disconnected — 30s grace period`);
         return;
       }
 
-      io.to(info.roomCode).emit('player_list', {
+      // Intentional leave or not playing → immediate removal
+      removePlayerFromRoom(room, info.playerId);
+    }
+
+    function removePlayerFromRoom(room: GameRoom, playerId: string) {
+      const isEmpty = room.removePlayer(playerId);
+      // Also clean up any grace period timer
+      const t = room.disconnectedPlayers.get(playerId);
+      if (t) { clearTimeout(t); room.disconnectedPlayers.delete(playerId); }
+
+      if (isEmpty) {
+        roomManager.scheduleCleanup(room.roomCode);
+        return;
+      }
+
+      io.to(room.roomCode).emit('player_list', {
         players: room.getPlayerInfos(),
         hostId: room.hostId,
       });
 
-      // If game is in progress and only 1 player left, end game
+      // If game in progress and only 1 player left, end game
       if (room.phase === 'playing' && room.getAlivePlayers().length <= 1) {
         gameEngine.endGame(room);
       }
