@@ -118,6 +118,7 @@ export interface ClientToServerEvents {
   join_room: (data: { nickname: string; roomCode: string; team?: number }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
   leave_room: () => void;
   rejoin_room: (data: { roomCode: string; playerId: string }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
+  switch_team: () => void;
   start_game: () => void;
   add_bot: (data: { level: BotLevel }) => void;
   remove_bot: (data: { botId: string }) => void;

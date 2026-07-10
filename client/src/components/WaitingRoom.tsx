@@ -53,6 +53,9 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                   {p.nickname}{p.id === playerId && ' (你)'}
                 </span>
                 <span className="player-level">Lv.{p.level}</span>
+                {p.id === playerId && (
+                  <button className="btn-xs" onClick={() => socket.emit('switch_team')}>⇄ 换队</button>
+                )}
               </div>
             ))}
           </div>
@@ -64,6 +67,9 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                   {p.nickname}{p.id === playerId && ' (你)'}
                 </span>
                 <span className="player-level">Lv.{p.level}</span>
+                {p.id === playerId && (
+                  <button className="btn-xs" onClick={() => socket.emit('switch_team')}>⇄ 换队</button>
+                )}
               </div>
             ))}
           </div>

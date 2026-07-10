@@ -189,6 +189,24 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       console.log(`[game] Room ${room.roomCode} started with ${room.players.size} players`);
     });
 
+    // ---- Switch Team (team mode only, before game starts) ----
+    socket.on('switch_team', () => {
+      const info = socketRooms.get(socket.id);
+      if (!info) return;
+      const room = roomManager.getRoom(info.roomCode);
+      if (!room || room.roomType !== 'team') return;
+      if (room.phase !== 'waiting') return;
+      const player = room.players.get(info.playerId);
+      if (!player || player.isBot) return;
+
+      player.team = player.team === 0 ? 1 : 0;
+
+      io.to(room.roomCode).emit('player_list', {
+        players: room.getPlayerInfos(),
+        hostId: room.hostId,
+      });
+    });
+
     // ---- Add Bot (host only) ----
     socket.on('add_bot', (data) => {
       const info = socketRooms.get(socket.id);
