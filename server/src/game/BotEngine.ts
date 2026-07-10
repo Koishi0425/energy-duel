@@ -634,10 +634,24 @@ export function chooseHardBotMove(
   }
 
   // ============================================================
-  // Rule: Being attacked → best defense
+  // Rule: Being attacked → counter-attack if we can win, else defend
   // ============================================================
   if (incomingAttacks.length > 0) {
     const maxATK = Math.max(...incomingAttacks.map(a => a.move.atk));
+    const strongest = incomingAttacks.sort((a, b) => b.move.atk - a.move.atk)[0];
+
+    // Check if we can counter-attack instead of defending
+    const myAttacks = affordable.filter(m => m.atk > 0).sort((a, b) => b.atk - a.atk);
+    if (myAttacks.length > 0) {
+      const myBest = myAttacks[0];
+      // 对攻规则: |ATK差|≥9 → 低的一方死; <9 → 平局
+      // 我方 ATK ≥ 对方 ATK → 我方不会死（最差平局）
+      if (myBest.atk >= maxATK) {
+        return { moveId: myBest.id, targets: [strongest.attacker.id] };
+      }
+    }
+
+    // Can't safely counter-attack → defend
     const hasXianglong = incomingAttacks.some(a => a.move.id === 'xianglong');
     const hasLongzhua = incomingAttacks.some(a => a.move.id === 'longzhua');
     const hasDu = incomingAttacks.some(a => a.move.id === 'du');
