@@ -43,7 +43,8 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
     // ---- Room Creation ----
     socket.on('create_room', (data, ack) => {
       const room = roomManager.createRoom(data.roomType || 'duo', data.initialLevel || 1);
-      const player = room.addPlayer(data.nickname);
+      const playerTeam = data.roomType === 'team' ? 0 : undefined;
+      const player = room.addPlayer(data.nickname, playerTeam);
 
       socket.join(room.roomCode);
       socketRooms.set(socket.id, {
@@ -76,6 +77,12 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         ack({ success: false, error: `房间已满（最多 ${room.maxPlayers} 人）` });
         return;
       }
+      // Team mode: must pick a team
+      const joinTeam = room.roomType === 'team' ? data.team : undefined;
+      if (room.roomType === 'team' && joinTeam === undefined) {
+        ack({ success: false, error: '请选择队伍' });
+        return;
+      }
       // Check duplicate nickname
       const exists = room.getAllPlayers().some(p => p.nickname === data.nickname);
       if (exists) {
@@ -83,7 +90,7 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         return;
       }
 
-      const player = room.addPlayer(data.nickname);
+      const player = room.addPlayer(data.nickname, joinTeam);
 
       // Restore previous level for logged-in players rejoining same room
       const acctId: string | undefined = (socket as any).accountId;
@@ -166,7 +173,14 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         socket.emit('error', { message: '只有房主可以开始游戏' });
         return;
       }
-      if (room.getAlivePlayers().length < 2) {
+      if (room.roomType === 'team') {
+        const team0 = room.getAlivePlayers().filter(p => p.team === 0).length;
+        const team1 = room.getAlivePlayers().filter(p => p.team === 1).length;
+        if (team0 < 1 || team1 < 1) {
+          socket.emit('error', { message: '每队至少需要 1 名玩家' });
+          return;
+        }
+      } else if (room.getAlivePlayers().length < 2) {
         socket.emit('error', { message: '至少需要 2 名玩家' });
         return;
       }
@@ -181,6 +195,10 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       if (!info) return;
       const room = roomManager.getRoom(info.roomCode);
       if (!room) return;
+      if (room.roomType === 'team') {
+        socket.emit('error', { message: '组队模式暂不支持人机' });
+        return;
+      }
       if (room.hostId !== info.playerId) {
         socket.emit('error', { message: '只有房主可以添加人机' });
         return;

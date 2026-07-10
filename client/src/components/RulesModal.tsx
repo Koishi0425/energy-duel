@@ -27,24 +27,21 @@ export default function RulesModal({ show, onClose }: Props) {
 
         <h3>死亡判定</h3>
         <ul>
-          <li>一方攻击且 ATK &gt; 对方 DEF → 对方死亡</li>
-          <li>对攻差 ≥ 9 → 低攻方死；差 &lt; 9 → 平手都活</li>
-          <li>被别人攻击的同时打别人，你的攻击<strong>仍然结算</strong></li>
+          <li>攻 &gt; 防 → 防守方死亡</li>
+          <li>对攻差 ≥ 9 → 低攻方死；差 &lt; 9 → 平手</li>
         </ul>
 
         <h3>气</h3>
         <ul>
           <li>用「运」攒 1 气，出招扣对应气数</li>
-          <li>气数公开可见，无上限</li>
-          <li>有人出局后，幸存者气数归零</li>
+          <li>气数公开可见，有人出局后，幸存者气数归零</li>
         </ul>
 
         <h3>升级</h3>
         <ul>
           <li>赢一局升 1 级，解锁新招式</li>
-          <li>每局限 ⌊人数÷2⌋ 人升级，从高排名分配</li>
-          <li>场上最高最低级差 &gt; 5 → 最低者自动追上</li>
-          <li><strong>过半死亡</strong>：一回合内 ≥ 半数人死 → 幸存者直接升级结束</li>
+          <li>每局 ⌊人数÷2⌋ 以下的人升级，从高排名分配</li>
+          <li>场上最高最低级差 &gt; 5 → 弱者等级补足</li>
         </ul>
 
         <h3>全局招式</h3>
@@ -79,7 +76,7 @@ export default function RulesModal({ show, onClose }: Props) {
           </table>
         </div>
 
-        <button className="btn btn-primary" onClick={onClose}>知道了</button>
+        <button className="btn btn-primary" onClick={onClose}>阅</button>
       </div>
     </div>
   );

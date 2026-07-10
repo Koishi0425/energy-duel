@@ -15,9 +15,10 @@ interface Props {
 
 export default function WaitingRoom({ roomCode, players, isHost, playerId, roomType, socket, onLeave }: Props) {
   const maxPlayers = roomType === 'duo' ? 2 : 8;
+  const isTeamMode = roomType === 'team';
   const [showBotMenu, setShowBotMenu] = useState(false);
   const hasHardBot = players.some(p => p.isBot && p.botLevel === 'hard');
-  const canAddBot = isHost && players.length < maxPlayers;
+  const canAddBot = isHost && players.length < maxPlayers && !isTeamMode;
 
   const handleStart = () => {
     socket.emit('start_game');
@@ -42,21 +43,49 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
         </p>
       </div>
 
-      <div className="player-list">
-        <h3>玩家 ({players.length}/{maxPlayers})</h3>
-        {players.map((p) => (
-          <div key={p.id} className={`player-row ${p.id === playerId ? 'is-me' : ''}`}>
-            <span className="player-name">
-              {p.isBot && (p.botLevel === 'hard' ? '💀' : p.botLevel === 'easy' ? '🤖' : '🧠')} {p.nickname}
-              {p.id === playerId && ' (你)'}
-            </span>
-            <span className="player-level">Lv.{p.level}</span>
-            {isHost && p.isBot && (
-              <button className="btn-xs" onClick={() => removeBot(p.id)}>✕</button>
-            )}
+      {isTeamMode ? (
+        <>
+          <div className="player-list team-red">
+            <h3>🔴 红队 ({players.filter(p => p.team === 0).length})</h3>
+            {players.filter(p => p.team === 0).map((p) => (
+              <div key={p.id} className={`player-row ${p.id === playerId ? 'is-me' : ''}`}>
+                <span className="player-name">
+                  {p.nickname}{p.id === playerId && ' (你)'}
+                </span>
+                <span className="player-level">Lv.{p.level}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+          <div className="player-list team-blue">
+            <h3>🔵 蓝队 ({players.filter(p => p.team === 1).length})</h3>
+            {players.filter(p => p.team === 1).map((p) => (
+              <div key={p.id} className={`player-row ${p.id === playerId ? 'is-me' : ''}`}>
+                <span className="player-name">
+                  {p.nickname}{p.id === playerId && ' (你)'}
+                </span>
+                <span className="player-level">Lv.{p.level}</span>
+              </div>
+            ))}
+          </div>
+          <p className="room-hint">玩家 ({players.length}/{maxPlayers}) · 组队对战</p>
+        </>
+      ) : (
+        <div className="player-list">
+          <h3>玩家 ({players.length}/{maxPlayers})</h3>
+          {players.map((p) => (
+            <div key={p.id} className={`player-row ${p.id === playerId ? 'is-me' : ''}`}>
+              <span className="player-name">
+                {p.isBot && (p.botLevel === 'hard' ? '💀' : p.botLevel === 'easy' ? '🤖' : '🧠')} {p.nickname}
+                {p.id === playerId && ' (你)'}
+              </span>
+              <span className="player-level">Lv.{p.level}</span>
+              {isHost && p.isBot && (
+                <button className="btn-xs" onClick={() => removeBot(p.id)}>✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="waiting-actions">
         {canAddBot && (

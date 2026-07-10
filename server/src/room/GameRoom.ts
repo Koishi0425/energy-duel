@@ -35,12 +35,12 @@ export class GameRoom {
     return this.roomType === 'duo' ? 2 : 8;
   }
 
-  addPlayer(nickname: string): PlayerState {
+  addPlayer(nickname: string, team?: number): PlayerState {
     const id = generateId();
     const player: PlayerState = {
       id, nickname,
       level: this.initialLevel, hp: 1, energy: 0,
-      alive: true, buffs: [], isBot: false,
+      alive: true, buffs: [], isBot: false, team,
     };
     this.players.set(id, player);
     if (!this.hostId) this.hostId = id;
@@ -83,7 +83,7 @@ export class GameRoom {
     return this.getAllPlayers().map(p => ({
       id: p.id, nickname: p.nickname, level: p.level,
       alive: p.alive, energy: p.energy, hp: p.hp, buffs: p.buffs,
-      isBot: p.isBot, botLevel: p.botLevel, strategyName: p.strategyName,
+      isBot: p.isBot, team: p.team, botLevel: p.botLevel, strategyName: p.strategyName,
     }));
   }
 

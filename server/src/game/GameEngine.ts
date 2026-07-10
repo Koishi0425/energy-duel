@@ -153,12 +153,14 @@ export class GameEngine {
       targets = room.getAlivePlayers().filter(p => p.id !== playerId).map(p => p.id);
     }
 
-    // Validate targets are alive, not self, and not duplicates
+    // Validate targets are alive, not self, not teammates (team mode), and not duplicates
     if (moveDef.atk > 0 || moveDef.specialEffect === 'ou_steal') {
       for (const tid of targets) {
         const target = room.players.get(tid);
         if (!target || !target.alive) return false;
         if (tid === playerId) return false; // cannot target self
+        // Team mode: single/dual attacks and 欧 cannot target teammates
+        if (room.roomType === 'team' && moveDef.targetType !== 'all' && target.team === player.team) return false;
       }
       // Check for duplicate targets
       if (new Set(targets).size !== targets.length) return false;
@@ -286,7 +288,31 @@ export class GameEngine {
     this.io.to(room.roomCode).emit('phase_change', { phase: 'result', state, resolution });
 
     room.timer = setTimeout(() => {
-      if (aliveAfter.length <= upgradeSlots) {
+      if (room.roomType === 'team') {
+        // Team mode: game ends when one team is wiped out
+        const teamsAlive = new Set(aliveAfter.map(p => p.team));
+        if (teamsAlive.size <= 1) {
+          // One team eliminated → survivors level up
+          if (aliveAfter.length > 0) {
+            room.massDeathLevelUps = [];
+            for (const p of aliveAfter) {
+              room.massDeathLevelUps.push({
+                playerId: p.id, nickname: p.nickname,
+                oldLevel: p.level, newLevel: p.level + 1,
+              });
+              p.level += 1;
+            }
+            room.massDeathTriggered = true;
+          }
+          this.endGame(room);
+        } else {
+          if (hadDeaths) {
+            for (const p of aliveAfter) { p.energy = 0; }
+          }
+          room.round++;
+          this.startThinkingPhase(room);
+        }
+      } else if (aliveAfter.length <= upgradeSlots) {
         // 剩余人数 ≤ 升级名额 → 游戏结束，幸存者直接升级
         if (aliveAfter.length > 0) {
           room.massDeathLevelUps = [];
@@ -375,8 +401,20 @@ export class GameEngine {
     // Step 3: Attack resolution
     const { attacks, deaths, deathDetails } = resolveAttacks(players, moves, duoKills);
 
-    // Add 跺 kills to deaths
     const playerMap = new Map(players.map(p => [p.id, p]));
+
+    // Team-kill flavor text
+    const TEAM_KILL_FLAVOR = ['我们中出了一个叛徒！', '关键牺牲', '干得漂亮！！', '下一战：真人快打'];
+    for (const a of attacks) {
+      if (!a.landing) continue;
+      const atkPlayer = playerMap.get(a.attacker);
+      const tgtPlayer = playerMap.get(a.target);
+      if (atkPlayer?.team !== undefined && atkPlayer.team === tgtPlayer?.team) {
+        a.description += ' — ' + TEAM_KILL_FLAVOR[Math.floor(Math.random() * TEAM_KILL_FLAVOR.length)];
+      }
+    }
+
+    // Add 跺 kills to deaths
     for (const pid of duoKills) {
       if (!deaths.includes(pid)) {
         deaths.push(pid);

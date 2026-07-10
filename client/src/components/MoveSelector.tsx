@@ -41,7 +41,10 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
 
   const canAfford = (move: ClientMoveDef) => energy >= move.cost;
 
-  const isDuo = alivePlayers.length === 1;
+  const myTeam = players.find(p => p.id === playerId)?.team;
+  const isTeamMode = myTeam !== undefined;
+  const opponents = alivePlayers.filter(p => p.team !== myTeam);
+  const isDuo = !isTeamMode && alivePlayers.length === 1;
 
   const handleSelectMove = (move: ClientMoveDef) => {
     if (submitted) return;
@@ -54,6 +57,10 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
       // Duo mode: auto-select the only opponent
       setSelectedMove(move);
       setTargets([alivePlayers[0].id]);
+    } else if (isTeamMode && move.targetType !== 'none') {
+      // Team mode: non-AOE moves can only target opponents (all already handled above)
+      setSelectedMove(move);
+      setTargets([]);
     } else if (move.targetType === 'none') {
       setSelectedMove(move);
       setTargets([]);
@@ -208,9 +215,10 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
         <div className="target-selector">
           <h4>
             {selectedMove.targetType === 'single' ? '选择目标（1人）' : '选择目标（1-2人）'}
+            {isTeamMode && ' — 仅敌方'}
           </h4>
           <div className="target-row">
-            {alivePlayers.map(p => (
+            {(isTeamMode ? opponents : alivePlayers).map(p => (
               <button
                 key={p.id}
                 className={`target-btn ${targets.includes(p.id) ? 'selected' : ''}`}
@@ -220,6 +228,13 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AOE warning for team mode */}
+      {isTeamMode && selectedMove && selectedMove.targetType === 'all' && (
+        <div className="target-selector">
+          <p className="aoe-warning">⚠ 全体攻击将伤害包括队友在内的所有人</p>
         </div>
       )}
 

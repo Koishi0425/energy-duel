@@ -6,7 +6,7 @@
 export type GamePhase = 'waiting' | 'thinking' | 'reveal' | 'result' | 'finished';
 export type MoveType = 'charge' | 'defense' | 'attack' | 'special' | 'special_defense';
 export type TargetType = 'none' | 'single' | 'dual' | 'all';
-export type RoomType = 'duo' | 'multi';
+export type RoomType = 'duo' | 'multi' | 'team';
 
 // ---- Move Definition ----
 export interface MoveDef {
@@ -42,6 +42,7 @@ export interface PlayerState {
   alive: boolean;
   buffs: Buff[];
   isBot: boolean;
+  team?: number;       // 0=红队 1=蓝队，team 模式
   botLevel?: BotLevel;
   strategyName?: string;
 }
@@ -56,6 +57,7 @@ export interface PlayerInfo {
   hp: number;
   buffs: Buff[];
   isBot: boolean;
+  team?: number;
   botLevel?: BotLevel;
   strategyName?: string;
 }
@@ -113,7 +115,7 @@ export interface GameState {
 // ---- Socket Events ----
 export interface ClientToServerEvents {
   create_room: (data: { nickname: string; roomType: RoomType; initialLevel?: number }, ack: (res: { roomCode: string; playerId: string }) => void) => void;
-  join_room: (data: { nickname: string; roomCode: string }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
+  join_room: (data: { nickname: string; roomCode: string; team?: number }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
   leave_room: () => void;
   rejoin_room: (data: { roomCode: string; playerId: string }, ack: (res: { success: boolean; error?: string; playerId?: string; roomType?: RoomType }) => void) => void;
   start_game: () => void;

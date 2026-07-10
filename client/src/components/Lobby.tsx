@@ -21,6 +21,7 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [roomType, setRoomType] = useState<RoomType>('duo');
+  const [team, setTeam] = useState<number>(0);
   const [initialLevel, setInitialLevel] = useState(1);
   const [showRules, setShowRules] = useState(false);
 
@@ -73,6 +74,7 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
     socket.emit('join_room', {
       nickname: nickname.trim(),
       roomCode: joinCode.trim().toUpperCase(),
+      ...(roomType === 'team' ? { team } : {}),
     }, (res) => {
       setLoading(false);
       if (!res.success) {
@@ -131,7 +133,36 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
           >
             👥 多人混战
           </button>
+          <button
+            className={`toggle-btn ${roomType === 'team' ? 'active' : ''}`}
+            onClick={() => handleRoomType('team')}
+            disabled={loading}
+          >
+            🛡 组队对战
+          </button>
         </div>
+
+        {roomType === 'team' && (
+          <div className="team-select">
+            <label className="lobby-label">选择队伍</label>
+            <div className="room-type-toggle">
+              <button
+                className={`toggle-btn ${team === 0 ? 'active team-red' : ''}`}
+                onClick={() => setTeam(0)}
+                disabled={loading}
+              >
+                🔴 红队
+              </button>
+              <button
+                className={`toggle-btn ${team === 1 ? 'active team-blue' : ''}`}
+                onClick={() => setTeam(1)}
+                disabled={loading}
+              >
+                🔵 蓝队
+              </button>
+            </div>
+          </div>
+        )}
 
         <label className="lobby-label">
           初始等级：<strong>{initialLevel}</strong>
