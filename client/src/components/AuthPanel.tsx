@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { saveAuth } from '../auth';
-import { updateAuthToken } from '../socket';
 
 interface Props {
   onAuthSuccess: (accountId: string, username: string) => void;
@@ -40,7 +39,6 @@ export default function AuthPanel({ onAuthSuccess, onGuest }: Props) {
       const data = await res.json();
       if (data.success) {
         saveAuth(data.token!, data.accountId!, data.username!);
-        updateAuthToken(data.token);
         onAuthSuccess(data.accountId!, data.username!);
       } else {
         setError(data.error || '登录失败');
@@ -72,7 +70,6 @@ export default function AuthPanel({ onAuthSuccess, onGuest }: Props) {
       const data = await res.json();
       if (data.success) {
         saveAuth(data.token!, data.accountId!, data.username!);
-        updateAuthToken(data.token);
         onAuthSuccess(data.accountId!, data.username!);
       } else {
         setError(data.error || '注册失败');

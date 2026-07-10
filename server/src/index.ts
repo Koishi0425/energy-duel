@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import path from 'path';
 import fs from 'fs';
@@ -10,6 +11,9 @@ const httpServer = createServer(app);
 
 // Trust proxy for correct IP detection behind Render/nginx
 app.set('trust proxy', true);
+
+// CORS for REST API (GitHub Pages → this server)
+app.use(cors());
 
 // Parse JSON bodies for REST auth endpoints
 app.use(express.json());
