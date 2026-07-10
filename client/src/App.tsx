@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { GamePhase, GameState, PlayerInfo, RoundResolution, Ranking, LevelUp, RoomType } from '../../shared/types';
-import { socket, connectSocket } from './socket';
+import { socket, connectSocket, updateAuthToken } from './socket';
 import { getAuth, clearAuth } from './auth';
 import AuthPanel from './components/AuthPanel';
 import Lobby from './components/Lobby';
@@ -158,8 +158,7 @@ export default function App() {
     setAuthAccountId(null);
     setAuthUsername(null);
     setView('auth');
-    // Disconnect and reconnect without token
-    import('./socket').then(({ updateAuthToken }) => updateAuthToken(undefined));
+    updateAuthToken(undefined);
   };
 
   // ----
