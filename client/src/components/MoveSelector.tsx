@@ -119,7 +119,7 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
         <div className="timer-bar">
           <div
             className="timer-fill"
-            style={{ width: `${(timeLeft / 30) * 100}%` }}
+            style={{ width: `${(timeLeft / 15) * 100}%` }}
           />
         </div>
         <span className="timer-text">{timeLeft}s</span>
