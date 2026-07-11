@@ -6,6 +6,7 @@ interface Props {
 }
 
 export default function PhaseResolution({ resolution, players }: Props) {
+  console.log('[PhaseResolution] teamKillMessages:', resolution.teamKillMessages);
   const getName = (id: string) => players.find(p => p.id === id)?.nickname || '?';
   const isTeamMode = players.some(p => p.team !== undefined);
 
