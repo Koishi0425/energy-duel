@@ -7,27 +7,49 @@ interface Props {
 
 export default function PhaseResolution({ resolution, players }: Props) {
   const getName = (id: string) => players.find(p => p.id === id)?.nickname || '?';
+  const isTeamMode = players.some(p => p.team !== undefined);
+
+  const revealCard = (p: PlayerInfo, m: any) => (
+    <div key={p.id} className="reveal-card">
+      <span className="reveal-player">{p.nickname}</span>
+      <span className="reveal-move">{m.moveName}</span>
+      {m.targets.length > 0 && (
+        <span className="reveal-targets">
+          → {m.targets.map((t: string) => getName(t)).join(', ')}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className="phase-resolution">
       {/* === 亮招 === */}
       <div className="section-label">亮招</div>
-      <div className="reveal-grid">
-        {players.filter(p => resolution.moves[p.id]).map(p => {
-          const m = resolution.moves[p.id];
-          return (
-            <div key={p.id} className="reveal-card">
-              <span className="reveal-player">{p.nickname}</span>
-              <span className="reveal-move">{m.moveName}</span>
-              {m.targets.length > 0 && (
-                <span className="reveal-targets">
-                  → {m.targets.map(t => getName(t)).join(', ')}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {isTeamMode ? (
+        <div className="reveal-team-grid">
+          <div className="reveal-team-col">
+            <div className="team-label-sm">🔴 红队</div>
+            {players.filter(p => p.team === 0 && resolution.moves[p.id]).map(p => {
+              const m = resolution.moves[p.id];
+              return revealCard(p, m);
+            })}
+          </div>
+          <div className="reveal-team-col">
+            <div className="team-label-sm">🔵 蓝队</div>
+            {players.filter(p => p.team === 1 && resolution.moves[p.id]).map(p => {
+              const m = resolution.moves[p.id];
+              return revealCard(p, m);
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="reveal-grid">
+          {players.filter(p => resolution.moves[p.id]).map(p => {
+            const m = resolution.moves[p.id];
+            return revealCard(p, m);
+          })}
+        </div>
+      )}
 
       {/* 欧链 */}
       {resolution.ouChain.length > 0 && (

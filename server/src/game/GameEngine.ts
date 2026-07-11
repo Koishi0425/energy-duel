@@ -296,8 +296,9 @@ export class GameEngine {
         const teamsAlive = new Set(aliveAfter.map(p => p.team));
         if (teamsAlive.size <= 1) {
           // One team eliminated → winning team (including dead) all level up
-          const winTeam = aliveAfter.length > 0 ? aliveAfter[0].team : undefined;
-          if (winTeam !== undefined) {
+          // Both teams dead → no one levels up
+          if (aliveAfter.length > 0) {
+            const winTeam = aliveAfter[0].team!;
             room.massDeathLevelUps = [];
             const winners = room.getAllPlayers().filter(p => p.team === winTeam);
             for (const p of winners) {
@@ -307,8 +308,10 @@ export class GameEngine {
               });
               p.level += 1;
             }
-            room.massDeathTriggered = true;
+          } else {
+            room.massDeathLevelUps = [];
           }
+          room.massDeathTriggered = true;
           this.endGame(room);
         } else {
           if (hadDeaths) {

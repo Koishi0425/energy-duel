@@ -287,6 +287,34 @@ html, body {
   font-size: 11px;
 }
 
+/* Team-mode player grouping */
+.player-status-bar.team-mode {
+  display: flex; gap: 12px;
+}
+.team-group {
+  flex: 1; min-width: 0;
+}
+.team-label {
+  font-size: 12px; font-weight: 600; padding: 4px 8px;
+  border-radius: 4px; margin-bottom: 6px; text-align: center;
+}
+.team-red .team-label { background: rgba(255,80,80,0.2); color: #ff6b6b; }
+.team-blue .team-label { background: rgba(80,120,255,0.2); color: #6b9fff; }
+
+/* Team reveal grid */
+.reveal-team-grid {
+  display: flex; gap: 16px;
+}
+.reveal-team-col {
+  flex: 1; min-width: 0;
+}
+.team-label-sm {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 3px; margin-bottom: 4px; text-align: center;
+}
+.reveal-team-col .team-label-sm { margin-bottom: 6px; }
+.reveal-team-col .reveal-card { margin-bottom: 4px; }
+
 /* ===== Move Selector ===== */
 .move-selector { margin-bottom: 16px; }
 .move-timer {
