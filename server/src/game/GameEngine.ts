@@ -419,7 +419,6 @@ export class GameEngine {
       const atkPlayer = playerMap.get(a.attacker);
       const tgtPlayer = playerMap.get(a.target);
       const sameTeam = atkPlayer?.team !== undefined && atkPlayer.team === tgtPlayer?.team;
-      console.log(`[team-kill check] ${atkPlayer?.nickname}(team=${atkPlayer?.team}) → ${tgtPlayer?.nickname}(team=${tgtPlayer?.team}) landing=${a.landing} sameTeam=${sameTeam}`);
       if (sameTeam) {
         const msg = `${atkPlayer!.nickname} 击杀队友 ${tgtPlayer!.nickname} — ${TEAM_KILL_FLAVOR[Math.floor(Math.random() * TEAM_KILL_FLAVOR.length)]}`;
         teamKillMessages.push(msg);
