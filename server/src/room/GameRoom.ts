@@ -50,10 +50,18 @@ export class GameRoom {
   addBot(nickname: string, botLevel: import('../../../shared/types').BotLevel): PlayerState {
     const id = 'bot_' + generateId();
     const mem = createBotMemory();
+    // Team mode: auto-assign to the team with fewer players
+    let team: number | undefined;
+    if (this.roomType === 'team') {
+      const all = this.getAllPlayers();
+      const red = all.filter(p => p.team === 0).length;
+      const blue = all.filter(p => p.team === 1).length;
+      team = red <= blue ? 0 : 1;
+    }
     const player: PlayerState = {
       id, nickname,
       level: this.initialLevel, hp: 1, energy: 0,
-      alive: true, buffs: [], isBot: true, botLevel,
+      alive: true, buffs: [], isBot: true, botLevel, team,
     };
     this.players.set(id, player);
     this.botMemories.set(id, mem);
