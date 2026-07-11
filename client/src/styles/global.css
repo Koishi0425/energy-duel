@@ -315,6 +315,24 @@ html, body {
 .reveal-team-col .team-label-sm { margin-bottom: 6px; }
 .reveal-team-col .reveal-card { margin-bottom: 4px; }
 
+/* Team-kill highlight */
+.result-section.team-kill {
+  background: rgba(255,80,80,0.12); border: 1px solid rgba(255,80,80,0.4);
+  border-radius: 6px; padding: 10px 14px;
+}
+.result-section.team-kill h4 {
+  color: #ff6b6b; font-size: 14px; margin-bottom: 6px;
+}
+.team-kill-line {
+  font-size: 14px; font-weight: 600; color: #ff8c8c;
+  padding: 3px 0;
+  animation: pulse-kill 0.6s ease-in-out;
+}
+@keyframes pulse-kill {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
 /* ===== Move Selector ===== */
 .move-selector { margin-bottom: 16px; }
 .move-timer {

@@ -84,6 +84,7 @@ export interface RoundResolution {
   }[];
   deaths: string[];
   deathDetails: Record<string, string>; // playerId -> cause of death
+  teamKillMessages?: string[];  // 队杀彩蛋
 }
 
 // ---- Ranking ----

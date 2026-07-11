@@ -411,14 +411,16 @@ export class GameEngine {
 
     const playerMap = new Map(players.map(p => [p.id, p]));
 
-    // Team-kill flavor text
+    // Team-kill flavor text (independent messages for prominent display)
     const TEAM_KILL_FLAVOR = ['我们中出了一个叛徒！', '关键牺牲', '干得漂亮！！', '下一战：真人快打'];
+    const teamKillMessages: string[] = [];
     for (const a of attacks) {
       if (!a.landing) continue;
       const atkPlayer = playerMap.get(a.attacker);
       const tgtPlayer = playerMap.get(a.target);
       if (atkPlayer?.team !== undefined && atkPlayer.team === tgtPlayer?.team) {
-        a.description += ' — ' + TEAM_KILL_FLAVOR[Math.floor(Math.random() * TEAM_KILL_FLAVOR.length)];
+        const msg = `${atkPlayer.nickname} 击杀队友 ${tgtPlayer.nickname} — ${TEAM_KILL_FLAVOR[Math.floor(Math.random() * TEAM_KILL_FLAVOR.length)]}`;
+        teamKillMessages.push(msg);
       }
     }
 
@@ -449,6 +451,7 @@ export class GameEngine {
       attacks,
       deaths,
       deathDetails,
+      teamKillMessages: teamKillMessages.length > 0 ? teamKillMessages : undefined,
     };
   }
 

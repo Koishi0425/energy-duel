@@ -87,6 +87,16 @@ export default function PhaseResolution({ resolution, players }: Props) {
         </div>
       )}
 
+      {/* === 队杀彩蛋 === */}
+      {resolution.teamKillMessages && resolution.teamKillMessages.length > 0 && (
+        <div className="result-section team-kill">
+          <h4>🔥 队杀</h4>
+          {resolution.teamKillMessages.map((msg, i) => (
+            <div key={i} className="team-kill-line">{msg}</div>
+          ))}
+        </div>
+      )}
+
       {/* === 气数变化 === */}
       <div className="result-section">
         <h4>气数</h4>
