@@ -292,10 +292,12 @@ export class GameEngine {
         // Team mode: game ends when one team is wiped out
         const teamsAlive = new Set(aliveAfter.map(p => p.team));
         if (teamsAlive.size <= 1) {
-          // One team eliminated → survivors level up
-          if (aliveAfter.length > 0) {
+          // One team eliminated → winning team (including dead) all level up
+          const winTeam = aliveAfter.length > 0 ? aliveAfter[0].team : undefined;
+          if (winTeam !== undefined) {
             room.massDeathLevelUps = [];
-            for (const p of aliveAfter) {
+            const winners = room.getAllPlayers().filter(p => p.team === winTeam);
+            for (const p of winners) {
               room.massDeathLevelUps.push({
                 playerId: p.id, nickname: p.nickname,
                 oldLevel: p.level, newLevel: p.level + 1,
