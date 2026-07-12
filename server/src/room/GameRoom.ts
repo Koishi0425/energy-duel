@@ -88,6 +88,10 @@ export class GameRoom {
     return Array.from(this.players.values());
   }
 
+  hasHumanPlayers(): boolean {
+    return this.getAllPlayers().some(p => !p.isBot);
+  }
+
   getPlayerInfos(): PlayerInfo[] {
     return this.getAllPlayers().map(p => ({
       id: p.id, nickname: p.nickname, level: p.level,

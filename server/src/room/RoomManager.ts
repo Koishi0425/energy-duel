@@ -51,6 +51,7 @@ export class RoomManager {
     const summaries: RoomSummary[] = [];
     for (const room of this.rooms.values()) {
       if (room.players.size === 0) continue;
+      if (!room.hasHumanPlayers()) continue;  // skip bot-only rooms
       summaries.push({
         roomCode: room.roomCode,
         roomType: room.roomType,

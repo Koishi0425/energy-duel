@@ -234,10 +234,10 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       if (!room || room.roomType !== 'team') return;
       if (room.phase !== 'waiting') return;
 
-      // Host can switch anyone; players can only switch themselves
+      // Host can switch anyone (including bots); players can only switch themselves
       const targetId = (data?.playerId && info.playerId === room.hostId) ? data.playerId : info.playerId;
       const player = room.players.get(targetId);
-      if (!player || player.isBot) return;
+      if (!player) return;
 
       player.team = player.team === 0 ? 1 : 0;
 
@@ -445,7 +445,8 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       const t = room.disconnectedPlayers.get(playerId);
       if (t) { clearTimeout(t); room.disconnectedPlayers.delete(playerId); }
 
-      if (isEmpty) {
+      // Clean up if room is empty or only bots remain
+      if (isEmpty || !room.hasHumanPlayers()) {
         roomManager.scheduleCleanup(room.roomCode);
         broadcastRoomList();
         return;

@@ -56,6 +56,9 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                 {(p.id === playerId || isHost) && (
                   <button className="btn-xs" onClick={() => socket.emit('switch_team', { playerId: p.id })}>⇄ 换队</button>
                 )}
+                {isHost && p.isBot && (
+                  <button className="btn-xs" onClick={() => removeBot(p.id)}>✕</button>
+                )}
               </div>
             ))}
           </div>
@@ -69,6 +72,9 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                 <span className="player-level">Lv.{p.level}</span>
                 {(p.id === playerId || isHost) && (
                   <button className="btn-xs" onClick={() => socket.emit('switch_team', { playerId: p.id })}>⇄ 换队</button>
+                )}
+                {isHost && p.isBot && (
+                  <button className="btn-xs" onClick={() => removeBot(p.id)}>✕</button>
                 )}
               </div>
             ))}
