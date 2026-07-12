@@ -56,6 +56,7 @@ export class RoomManager {
         roomCode: room.roomCode,
         roomType: room.roomType,
         phase: room.phase,
+        gamePhase: room.gamePhase,
         playerCount: room.players.size,
         maxPlayers: room.maxPlayers,
         initialLevel: room.initialLevel,

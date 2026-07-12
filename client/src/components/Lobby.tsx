@@ -246,7 +246,7 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
                 roomList.map((r) => (
                   <div
                     key={r.roomCode}
-                    className={`room-browser-card ${r.phase !== 'waiting' ? 'is-playing' : ''}`}
+                    className={`room-browser-card ${(r.phase !== 'waiting' && r.gamePhase !== 'thinking') ? 'is-playing' : ''}`}
                   >
                     <div className="rb-left">
                       <span className="rb-code">{r.roomCode}</span>
@@ -257,10 +257,10 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
                     </div>
                     <div className="rb-right">
                       <span className="rb-players">{r.playerCount}/{r.maxPlayers}人</span>
-                      <span className={`rb-status ${r.phase === 'waiting' ? 'status-waiting' : 'status-playing'}`}>
-                        {r.phase === 'waiting' ? '等待中' : '已开始'}
+                      <span className={`rb-status ${(r.phase === 'waiting' || r.gamePhase === 'thinking') ? 'status-waiting' : 'status-playing'}`}>
+                        {r.phase === 'waiting' ? '等待中' : r.gamePhase === 'thinking' ? '选招中' : r.gamePhase === 'result' ? '战斗中' : '已结束'}
                       </span>
-                      {r.phase === 'waiting' ? (
+                      {(r.phase === 'waiting' || r.gamePhase === 'thinking') ? (
                         <button
                           className="btn btn-xs rb-join"
                           onClick={() => handleJoin(r.roomCode)}

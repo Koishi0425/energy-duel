@@ -80,12 +80,14 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         ack({ success: false, error: '房间不存在' });
         return;
       }
-      if (room.phase !== 'waiting') {
+      // Allow join during waiting or thinking phase (between rounds)
+      const canJoin = room.phase === 'waiting' || room.gamePhase === 'thinking';
+      if (!canJoin) {
         // Allow previous members to rejoin anytime
         const acctId = (socket as any).accountId;
         const wasMember = acctId && room.previousLevels.has(acctId);
         if (!wasMember) {
-          ack({ success: false, error: '游戏已开始，无法加入' });
+          ack({ success: false, error: room.gamePhase === 'result' ? '战斗中，请等待回合结束' : '游戏已结束' });
           return;
         }
       }
@@ -113,6 +115,15 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
 
       const player = room.addPlayer(data.nickname, joinTeam);
 
+      // If joining mid-game (during thinking), match the lowest alive player's level
+      if (room.gamePhase === 'thinking') {
+        const aliveLevels = room.getAlivePlayers().map(p => p.level);
+        if (aliveLevels.length > 0) {
+          const minAlive = Math.min(...aliveLevels);
+          player.level = Math.max(player.level, minAlive);
+        }
+      }
+
       // Restore previous level for logged-in players rejoining same room
       const acctId: string | undefined = (socket as any).accountId;
       if (acctId && room.previousLevels.has(acctId)) {
@@ -137,6 +148,13 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         players: room.getPlayerInfos(),
         hostId: room.hostId,
       });
+
+      // If game is in thinking phase, send current game state so the new player sees the game screen
+      if (room.gamePhase === 'thinking') {
+        const state = gameEngine.buildState(room);
+        socket.emit('phase_change', { phase: 'thinking', state });
+      }
+
       broadcastRoomList();
 
       console.log(`[room] ${data.nickname} joined room ${room.roomCode}`);

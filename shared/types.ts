@@ -46,6 +46,7 @@ export interface RoomSummary {
   roomCode: string;
   roomType: RoomType;
   phase: 'waiting' | 'playing' | 'finished';
+  gamePhase: GamePhase;
   playerCount: number;
   maxPlayers: number;
   initialLevel: number;

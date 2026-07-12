@@ -73,6 +73,7 @@ export class GameEngine {
   /** Start the thinking phase (players choose moves) */
   startThinkingPhase(room: GameRoom): void {
     room.phase = 'playing';
+    room.gamePhase = 'thinking';
     room.pendingMoves.clear();
     room.thinkingDeadline = Date.now() + THINKING_TIME;
 
@@ -227,6 +228,7 @@ export class GameEngine {
 
   /** Result phase: apply deaths and energy changes */
   startResultPhase(room: GameRoom, resolution: RoundResolution): void {
+    room.gamePhase = 'result';
     // Apply energy changes
     for (const [pid, delta] of Object.entries(resolution.energyChanges)) {
       const player = room.players.get(pid);
@@ -346,6 +348,7 @@ export class GameEngine {
   /** End the game: compute rankings and level-ups */
   endGame(room: GameRoom): void {
     room.phase = 'finished';
+    room.gamePhase = 'finished';
     room.clearTimer();
 
     const rankings = computeRankings(room.getAllPlayers(), room.eliminationOrder);
