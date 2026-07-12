@@ -29,6 +29,28 @@ export interface Buff {
   remainingRounds: number;
 }
 
+// ---- Chat ----
+export type ChatScope = 'all' | 'team';
+
+export interface ChatMessage {
+  id: string;
+  playerId: string;
+  nickname: string;
+  content: string;
+  scope: ChatScope;
+  timestamp: number;
+}
+
+// ---- Room Summary ----
+export interface RoomSummary {
+  roomCode: string;
+  roomType: RoomType;
+  phase: 'waiting' | 'playing' | 'finished';
+  playerCount: number;
+  maxPlayers: number;
+  initialLevel: number;
+}
+
 // ---- Bot ----
 export type BotLevel = 'easy' | 'normal' | 'hard';
 
@@ -125,6 +147,8 @@ export interface ClientToServerEvents {
   remove_bot: (data: { botId: string }) => void;
   submit_move: (data: { moveId: string; targets: string[] }) => void;
   play_again: () => void;
+  list_rooms: (ack: (rooms: RoomSummary[]) => void) => void;
+  chat_message: (data: { content: string; scope: ChatScope }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -136,4 +160,7 @@ export interface ServerToClientEvents {
   error: (data: { message: string }) => void;
   room_closed: () => void;
   auth_info: (data: { accountId: string | null }) => void;
+  room_list_update: (rooms: RoomSummary[]) => void;
+  chat_broadcast: (msg: ChatMessage) => void;
+  chat_history: (msgs: ChatMessage[]) => void;
 }

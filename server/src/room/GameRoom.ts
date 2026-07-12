@@ -1,4 +1,4 @@
-import { PlayerState, PlayerInfo, Buff, RoomType } from '../../../shared/types';
+import { PlayerState, PlayerInfo, Buff, RoomType, ChatMessage } from '../../../shared/types';
 import { BotMemory, createBotMemory } from '../game/BotEngine';
 
 function generateId(): string {
@@ -25,6 +25,7 @@ export class GameRoom {
   timer: ReturnType<typeof setTimeout> | null = null;
   disconnectedPlayers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   previousLevels: Map<string, number> = new Map();  // accountId → level for rejoiners
+  chatMessages: ChatMessage[] = [];  // chat history (max 200)
 
   constructor(roomCode: string, roomType: RoomType = 'duo') {
     this.roomCode = roomCode;
@@ -124,6 +125,14 @@ export class GameRoom {
       p.alive = true;
       p.energy = 0;
       p.buffs = [];
+    }
+  }
+
+  addChatMessage(msg: ChatMessage): void {
+    this.chatMessages.push(msg);
+    // Keep only last 200 messages
+    if (this.chatMessages.length > 200) {
+      this.chatMessages = this.chatMessages.slice(-200);
     }
   }
 }

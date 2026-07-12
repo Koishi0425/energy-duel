@@ -1,5 +1,5 @@
 import { GameRoom } from './GameRoom';
-import { RoomType } from '../../../shared/types';
+import { RoomType, RoomSummary } from '../../../shared/types';
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 for clarity
 
@@ -45,5 +45,21 @@ export class RoomManager {
         this.deleteRoom(code);
       }
     }, 5 * 60 * 1000);
+  }
+
+  getRoomSummaries(): RoomSummary[] {
+    const summaries: RoomSummary[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.players.size === 0) continue;
+      summaries.push({
+        roomCode: room.roomCode,
+        roomType: room.roomType,
+        phase: room.phase,
+        playerCount: room.players.size,
+        maxPlayers: room.maxPlayers,
+        initialLevel: room.initialLevel,
+      });
+    }
+    return summaries;
   }
 }

@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Socket } from 'socket.io-client';
 import { GamePhase, PlayerInfo, RoundResolution, ClientToServerEvents, ServerToClientEvents } from '../../../shared/types';
 import PlayerStatusBar from './PlayerStatusBar';
 import MoveSelector from './MoveSelector';
 import PhaseResolution from './PhaseResolution';
+import ChatPanel, { ChatFab } from './ChatPanel';
 
 interface Props {
   phase: GamePhase;
@@ -20,6 +22,10 @@ export default function GameScreen({
 }: Props) {
   const me = players.find(p => p.id === playerId);
   const isDead = me ? !me.alive : true;
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  const isTeamMode = players.some(p => p.team !== undefined);
 
   return (
     <div className="game-screen">
@@ -56,6 +62,20 @@ export default function GameScreen({
           />
         )}
       </div>
+
+      {/* Chat FAB */}
+      <ChatFab unread={chatUnread} onClick={() => setChatOpen(!chatOpen)} />
+
+      {/* Chat Panel */}
+      <ChatPanel
+        socket={socket}
+        playerId={playerId}
+        players={players}
+        isTeamMode={isTeamMode}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        onUnreadChange={setChatUnread}
+      />
     </div>
   );
 }

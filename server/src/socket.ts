@@ -33,12 +33,22 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
   // Track which socket is in which room and which player
   const socketRooms = new Map<string, { roomCode: string; playerId: string; accountId?: string; nickname: string }>();
 
+  // Broadcast room list to all connected clients (for lobby)
+  function broadcastRoomList(): void {
+    io.emit('room_list_update', roomManager.getRoomSummaries());
+  }
+
   io.on('connection', (socket) => {
     const accountId: string | undefined = (socket as any).accountId;
     console.log(`[socket] connected: ${socket.id}${accountId ? ` [auth:${accountId}]` : ' [guest]'}`);
 
     // Send auth status to client
     socket.emit('auth_info', { accountId: accountId || null });
+
+    // ---- List Rooms ----
+    socket.on('list_rooms', (ack) => {
+      ack(roomManager.getRoomSummaries());
+    });
 
     // ---- Room Creation ----
     socket.on('create_room', (data, ack) => {
@@ -58,6 +68,7 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         players: room.getPlayerInfos(),
         hostId: room.hostId,
       });
+      broadcastRoomList();
 
       console.log(`[room] ${data.nickname}${(socket as any).accountId ? ` [${(socket as any).accountId}]` : ''} created ${room.roomType} room ${room.roomCode} (initial Lv.${room.initialLevel})`);
     });
@@ -117,10 +128,16 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
 
       ack({ success: true, playerId: player.id, roomType: room.roomType });
 
+      // Send chat history to the new player
+      if (room.chatMessages.length > 0) {
+        socket.emit('chat_history', room.chatMessages);
+      }
+
       io.to(room.roomCode).emit('player_list', {
         players: room.getPlayerInfos(),
         hostId: room.hostId,
       });
+      broadcastRoomList();
 
       console.log(`[room] ${data.nickname} joined room ${room.roomCode}`);
     });
@@ -158,6 +175,11 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       });
 
       ack({ success: true, playerId, roomType: room.roomType });
+
+      // Send chat history to rejoining player
+      if (room.chatMessages.length > 0) {
+        socket.emit('chat_history', room.chatMessages);
+      }
 
       io.to(roomCode).emit('player_list', {
         players: room.getPlayerInfos(),
@@ -200,6 +222,7 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       }
 
       gameEngine.startGame(room);
+      broadcastRoomList();
       console.log(`[game] Room ${room.roomCode} started with ${room.players.size} players`);
     });
 
@@ -289,6 +312,45 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
       const ok = gameEngine.submitMove(room, info.playerId, data.moveId, data.targets);
       if (!ok) {
         socket.emit('error', { message: '出招无效（气不足/等级不够/已出招/目标无效）' });
+      }
+    });
+
+    // ---- Chat Message ----
+    socket.on('chat_message', (data) => {
+      const info = socketRooms.get(socket.id);
+      if (!info) return;
+      const room = roomManager.getRoom(info.roomCode);
+      if (!room) return;
+      const player = room.players.get(info.playerId);
+      if (!player) return;
+
+      // Non-team modes: force scope to 'all'
+      const scope = room.roomType === 'team' ? data.scope : 'all';
+
+      const msg = {
+        id: Math.random().toString(36).substring(2, 10),
+        playerId: info.playerId,
+        nickname: player.nickname,
+        content: data.content.slice(0, 200), // max 200 chars
+        scope,
+        timestamp: Date.now(),
+      };
+
+      room.addChatMessage(msg);
+
+      if (scope === 'team') {
+        // Only send to teammates
+        const team = player.team;
+        for (const [sockId, sockInfo] of socketRooms.entries()) {
+          if (sockInfo.roomCode !== room.roomCode) continue;
+          const p = room.players.get(sockInfo.playerId);
+          if (p && p.team === team) {
+            io.to(sockId).emit('chat_broadcast', msg);
+          }
+        }
+      } else {
+        // Broadcast to entire room
+        io.to(room.roomCode).emit('chat_broadcast', msg);
       }
     });
 
@@ -385,6 +447,7 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
 
       if (isEmpty) {
         roomManager.scheduleCleanup(room.roomCode);
+        broadcastRoomList();
         return;
       }
 
@@ -392,6 +455,7 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         players: room.getPlayerInfos(),
         hostId: room.hostId,
       });
+      broadcastRoomList();
 
       // If game in progress and only 1 player left, end game
       if (room.phase === 'playing' && room.getAlivePlayers().length <= 1) {

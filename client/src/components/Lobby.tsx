@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Socket } from 'socket.io-client';
-import { ClientToServerEvents, ServerToClientEvents, RoomType } from '../../../shared/types';
+import { ClientToServerEvents, ServerToClientEvents, RoomType, RoomSummary } from '../../../shared/types';
 import RulesModal from './RulesModal';
 
 interface Props {
@@ -24,6 +24,25 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
   const [team, setTeam] = useState<number>(0);
   const [initialLevel, setInitialLevel] = useState(1);
   const [showRules, setShowRules] = useState(false);
+  const [showRoomBrowser, setShowRoomBrowser] = useState(false);
+  const [roomList, setRoomList] = useState<RoomSummary[]>([]);
+
+  // Fetch room list
+  const fetchRooms = () => {
+    socket.emit('list_rooms', (rooms) => {
+      setRoomList(rooms);
+    });
+  };
+
+  useEffect(() => {
+    if (!socket.connected) return;
+    // Listen for updates
+    const onUpdate = (rooms: RoomSummary[]) => setRoomList(rooms);
+    socket.on('room_list_update', onUpdate);
+    // Initial fetch when browser opens
+    if (showRoomBrowser) fetchRooms();
+    return () => { socket.off('room_list_update', onUpdate); };
+  }, [socket, showRoomBrowser]);
 
   // Save initialLevel per room type
   const [duoLevel, setDuoLevel] = useState(() =>
@@ -65,21 +84,24 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
     });
   };
 
-  const handleJoin = () => {
+  const handleJoin = (code?: string) => {
+    const targetCode = (code || joinCode).trim().toUpperCase();
     if (!nickname.trim()) { onError('请输入昵称'); return; }
-    if (!joinCode.trim()) { onError('请输入房间号'); return; }
+    if (!targetCode) { onError('请输入房间号'); return; }
     if (!socket.connected) { onError('未连接到服务器，请刷新页面'); return; }
     setLoading(true);
     localStorage.setItem('energy-duel-nickname', nickname.trim());
+    const teamData = roomType === 'team' ? { team } : {};
     socket.emit('join_room', {
       nickname: nickname.trim(),
-      roomCode: joinCode.trim().toUpperCase(),
+      roomCode: targetCode,
+      ...teamData,
     }, (res) => {
       setLoading(false);
       if (!res.success) {
         onError(res.error || '加入失败');
       } else {
-        onRoomCreated(joinCode.trim().toUpperCase(), res.playerId!, res.roomType || 'duo');
+        onRoomCreated(targetCode, res.playerId!, res.roomType || 'duo');
       }
     });
   };
@@ -201,11 +223,61 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
         />
         <button
           className="btn btn-secondary"
-          onClick={handleJoin}
+          onClick={() => handleJoin()}
           disabled={loading}
         >
           {loading ? '加入中…' : '加入房间'}
         </button>
+
+        {/* Room Browser */}
+        <div className="room-browser">
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setShowRoomBrowser(!showRoomBrowser); if (!showRoomBrowser) fetchRooms(); }}
+            type="button"
+          >
+            {showRoomBrowser ? '▾ 隐藏' : '▸ 浏览'}开放房间 {roomList.length > 0 && `(${roomList.length})`}
+          </button>
+          {showRoomBrowser && (
+            <div className="room-browser-list">
+              {roomList.length === 0 ? (
+                <p className="room-browser-empty">暂无开放房间，创建一个吧！</p>
+              ) : (
+                roomList.map((r) => (
+                  <div
+                    key={r.roomCode}
+                    className={`room-browser-card ${r.phase !== 'waiting' ? 'is-playing' : ''}`}
+                  >
+                    <div className="rb-left">
+                      <span className="rb-code">{r.roomCode}</span>
+                      <span className="rb-type">
+                        {r.roomType === 'duo' ? '⚔ 双人' : r.roomType === 'team' ? '🛡 组队' : '👥 多人'}
+                      </span>
+                      <span className="rb-level">Lv.{r.initialLevel}</span>
+                    </div>
+                    <div className="rb-right">
+                      <span className="rb-players">{r.playerCount}/{r.maxPlayers}人</span>
+                      <span className={`rb-status ${r.phase === 'waiting' ? 'status-waiting' : 'status-playing'}`}>
+                        {r.phase === 'waiting' ? '等待中' : '已开始'}
+                      </span>
+                      {r.phase === 'waiting' ? (
+                        <button
+                          className="btn btn-xs rb-join"
+                          onClick={() => handleJoin(r.roomCode)}
+                          disabled={loading}
+                        >
+                          加入
+                        </button>
+                      ) : (
+                        <span className="rb-locked">🔒</span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
 
         <button
           className="btn btn-ghost"
