@@ -99,9 +99,16 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
             {showBotMenu ? (
               <div className="bot-menu">
                 {isTeamMode ? (
-                  <button className="btn btn-sm" onClick={() => addBot('normal')}>
-                    🧠 普通人机
-                  </button>
+                  <>
+                    <button className="btn btn-sm" onClick={() => addBot('normal')}>
+                      🧠 普通人机
+                    </button>
+                    {!hasHardBot && (
+                      <button className="btn btn-sm" onClick={() => addBot('hard')}>
+                        💀 困难人机
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button className="btn btn-sm" onClick={() => addBot('easy')}>
