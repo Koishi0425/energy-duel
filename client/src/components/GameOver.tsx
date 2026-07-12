@@ -36,7 +36,7 @@ export default function GameOver({ rankings, levelUps, players, isHost, playerId
         {rankings.map((r) => (
           <div
             key={r.playerId}
-            className={`go-rank-row ${r.playerId === playerId ? 'is-me' : ''}`}
+            className={`go-rank-row ${r.playerId === playerId ? 'is-me' : ''} ${r.rank === 1 ? 'rank-gold' : r.rank === 2 ? 'rank-silver' : r.rank === 3 ? 'rank-bronze' : ''}`}
           >
             <span className="go-rank-icon">{rankEmoji(r.rank)}</span>
             <span className="go-rank-name">

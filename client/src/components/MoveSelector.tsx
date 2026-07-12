@@ -125,23 +125,24 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
       <div className="move-timer">
         <div className="timer-bar">
           <div
-            className="timer-fill"
+            className={`timer-fill ${timeLeft <= 5 ? 'urgent' : ''}`}
             style={{ width: `${(timeLeft / 15) * 100}%` }}
           />
         </div>
-        <span className="timer-text">{timeLeft}s</span>
+        <span className={`timer-text ${timeLeft <= 5 ? 'urgent' : ''}`}>{timeLeft}s</span>
       </div>
 
       <div className="move-grid">
         <div className="move-category">
           <h4>⚡ 蓄气</h4>
           <div className="move-row">
-            {chargeMoves.map(m => (
+            {chargeMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
                 onClick={() => handleSelectMove(m)}
                 disabled={!canAfford(m)}
+                style={{ animationDelay: `${i * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
@@ -154,12 +155,13 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
         <div className="move-category">
           <h4>🗡 攻击</h4>
           <div className="move-row">
-            {attackMoves.map(m => (
+            {attackMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card atk ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card atk anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
                 onClick={() => handleSelectMove(m)}
                 disabled={!canAfford(m)}
+                style={{ animationDelay: `${(chargeMoves.length + i) * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
@@ -173,12 +175,13 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
         <div className="move-category">
           <h4>🛡 防御</h4>
           <div className="move-row">
-            {defenseMoves.map(m => (
+            {defenseMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card def ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card def anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
                 onClick={() => handleSelectMove(m)}
                 disabled={!canAfford(m)}
+                style={{ animationDelay: `${(chargeMoves.length + attackMoves.length + i) * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
@@ -193,12 +196,13 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
           <div className="move-category">
             <h4>✨ 特殊</h4>
             <div className="move-row">
-              {specialMoves.map(m => (
+              {specialMoves.map((m, i) => (
                 <button
                   key={m.id}
-                  className={`move-card sp ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                  className={`move-card sp anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
                   onClick={() => handleSelectMove(m)}
                   disabled={!canAfford(m)}
+                  style={{ animationDelay: `${(chargeMoves.length + attackMoves.length + defenseMoves.length + i) * 40}ms` }}
                 >
                   <span className="move-name">{m.name}</span>
                   <span className="move-cost">气 {formatCost(m.cost)}</span>
