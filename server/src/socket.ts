@@ -77,11 +77,16 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
         ack({ success: false, error: `房间已满（最多 ${room.maxPlayers} 人）` });
         return;
       }
-      // Team mode: must pick a team
-      const joinTeam = room.roomType === 'team' ? data.team : undefined;
-      if (room.roomType === 'team' && joinTeam === undefined) {
-        ack({ success: false, error: '请选择队伍' });
-        return;
+      // Team mode: auto-assign to smaller team if not specified
+      let joinTeam: number | undefined;
+      if (room.roomType === 'team') {
+        if (data.team !== undefined) {
+          joinTeam = data.team;
+        } else {
+          const red = room.getAllPlayers().filter(p => p.team === 0).length;
+          const blue = room.getAllPlayers().filter(p => p.team === 1).length;
+          joinTeam = red <= blue ? 0 : 1;
+        }
       }
       // Check duplicate nickname
       const exists = room.getAllPlayers().some(p => p.nickname === data.nickname);

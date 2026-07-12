@@ -74,7 +74,6 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
     socket.emit('join_room', {
       nickname: nickname.trim(),
       roomCode: joinCode.trim().toUpperCase(),
-      ...(roomType === 'team' ? { team } : {}),
     }, (res) => {
       setLoading(false);
       if (!res.success) {
