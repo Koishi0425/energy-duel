@@ -633,6 +633,62 @@ html, body {
 .move-card.sp .move-stat { color: var(--special); }
 .move-desc { font-size: 11px; color: var(--text-dim); line-height: 1.3; }
 
+/* Compact mode move cards */
+.move-card.compact {
+  padding: 8px 12px;
+  min-width: 55px;
+  border-left-width: 2px;
+  gap: 1px;
+}
+.move-card.compact .move-name {
+  font-size: 14px;
+}
+.move-card.compact .move-cost {
+  font-size: 11px;
+}
+.move-card.compact.expanded {
+  min-width: 120px;
+}
+.move-detail {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  width: 100%;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  animation: fadeIn 0.2s ease both;
+}
+.move-card.atk .move-detail { color: var(--atk); }
+.move-card.def .move-detail { color: var(--def); }
+.move-card.sp .move-detail { color: var(--special); }
+.move-card:not(.atk):not(.def):not(.sp) .move-detail { color: var(--gold); }
+
+/* UI Mode Toggle */
+.ui-mode-toggle {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.mode-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.mode-btn:hover { border-color: var(--accent); color: var(--text); }
+.mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(124,111,247,0.1);
+}
+
 /* ============================================================
    Target Selector
    ============================================================ */

@@ -10,6 +10,7 @@ interface Props {
   energy: number;
   socket: Socket<ServerToClientEvents, ClientToServerEvents>;
   deadline: number;
+  uiMode: 'normal' | 'compact';
 }
 
 function formatCost(c: number): string {
@@ -19,11 +20,12 @@ function formatCost(c: number): string {
   return String(c);
 }
 
-export default function MoveSelector({ players, playerId, level, energy, socket, deadline }: Props) {
+export default function MoveSelector({ players, playerId, level, energy, socket, deadline, uiMode }: Props) {
   const [selectedMove, setSelectedMove] = useState<ClientMoveDef | null>(null);
   const [targets, setTargets] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const allLevels = players.map(p => p.level);
   const availableMoves = getMovesForLevel(level, allLevels);
@@ -139,14 +141,18 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
             {chargeMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card anim-fade-in ${uiMode === 'compact' ? 'compact' : ''} ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''} ${expandedId === m.id ? 'expanded' : ''}`}
                 onClick={() => handleSelectMove(m)}
+                onDoubleClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 disabled={!canAfford(m)}
                 style={{ animationDelay: `${i * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
-                <span className="move-desc">{m.description}</span>
+                {uiMode === 'normal' && <span className="move-desc">{m.description}</span>}
+                {uiMode === 'compact' && expandedId === m.id && (
+                  <span className="move-detail">{m.description}</span>
+                )}
               </button>
             ))}
           </div>
@@ -158,15 +164,19 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
             {attackMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card atk anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card atk anim-fade-in ${uiMode === 'compact' ? 'compact' : ''} ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''} ${expandedId === m.id ? 'expanded' : ''}`}
                 onClick={() => handleSelectMove(m)}
+                onDoubleClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 disabled={!canAfford(m)}
                 style={{ animationDelay: `${(chargeMoves.length + i) * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
-                <span className="move-stat">攻 {m.atk}</span>
-                <span className="move-desc">{m.description}</span>
+                {uiMode === 'normal' && <span className="move-stat">攻 {m.atk}</span>}
+                {uiMode === 'normal' && <span className="move-desc">{m.description}</span>}
+                {uiMode === 'compact' && expandedId === m.id && (
+                  <span className="move-detail">攻 {m.atk} · {m.description}</span>
+                )}
               </button>
             ))}
           </div>
@@ -178,15 +188,19 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
             {defenseMoves.map((m, i) => (
               <button
                 key={m.id}
-                className={`move-card def anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                className={`move-card def anim-fade-in ${uiMode === 'compact' ? 'compact' : ''} ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''} ${expandedId === m.id ? 'expanded' : ''}`}
                 onClick={() => handleSelectMove(m)}
+                onDoubleClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 disabled={!canAfford(m)}
                 style={{ animationDelay: `${(chargeMoves.length + attackMoves.length + i) * 40}ms` }}
               >
                 <span className="move-name">{m.name}</span>
                 <span className="move-cost">气 {formatCost(m.cost)}</span>
-                <span className="move-stat">防 {m.def}</span>
-                <span className="move-desc">{m.description}</span>
+                {uiMode === 'normal' && <span className="move-stat">防 {m.def}</span>}
+                {uiMode === 'normal' && <span className="move-desc">{m.description}</span>}
+                {uiMode === 'compact' && expandedId === m.id && (
+                  <span className="move-detail">防 {m.def} · {m.description}</span>
+                )}
               </button>
             ))}
           </div>
@@ -199,14 +213,18 @@ export default function MoveSelector({ players, playerId, level, energy, socket,
               {specialMoves.map((m, i) => (
                 <button
                   key={m.id}
-                  className={`move-card sp anim-fade-in ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''}`}
+                  className={`move-card sp anim-fade-in ${uiMode === 'compact' ? 'compact' : ''} ${selectedMove?.id === m.id ? 'selected' : ''} ${!canAfford(m) ? 'disabled' : ''} ${expandedId === m.id ? 'expanded' : ''}`}
                   onClick={() => handleSelectMove(m)}
+                  onDoubleClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
                   disabled={!canAfford(m)}
                   style={{ animationDelay: `${(chargeMoves.length + attackMoves.length + defenseMoves.length + i) * 40}ms` }}
                 >
                   <span className="move-name">{m.name}</span>
                   <span className="move-cost">气 {formatCost(m.cost)}</span>
-                  <span className="move-desc">{m.description}</span>
+                  {uiMode === 'normal' && <span className="move-desc">{m.description}</span>}
+                  {uiMode === 'compact' && expandedId === m.id && (
+                    <span className="move-detail">{m.description}</span>
+                  )}
                 </button>
               ))}
             </div>

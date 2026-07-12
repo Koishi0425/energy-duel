@@ -42,6 +42,11 @@ export default function App() {
     () => getAuth()?.username || null
   );
 
+  // UI mode: 'normal' | 'compact'
+  const [uiMode, setUiMode] = useState<'normal' | 'compact'>(() => {
+    return (localStorage.getItem('energy-duel-ui-mode') as 'normal' | 'compact') || 'normal';
+  });
+
   const setupDone = useRef(false);
 
   // ---- Socket connection + event handlers ----
@@ -203,6 +208,12 @@ export default function App() {
 
   const isHost = playerId === hostId;
 
+  const toggleUiMode = () => {
+    const next = uiMode === 'normal' ? 'compact' : 'normal';
+    setUiMode(next);
+    localStorage.setItem('energy-duel-ui-mode', next);
+  };
+
   return (
     <div className="app">
       {!connected && <div className="error-toast">连接服务器中…</div>}
@@ -230,6 +241,8 @@ export default function App() {
           username={authUsername}
           onLogout={handleLogout}
           onGoToAuth={handleGoToAuth}
+          uiMode={uiMode}
+          onToggleUiMode={toggleUiMode}
         />
       )}
 
@@ -255,6 +268,7 @@ export default function App() {
           resolution={resolution}
           roomCode={roomCode}
           socket={socket}
+          uiMode={uiMode}
         />
       )}
 

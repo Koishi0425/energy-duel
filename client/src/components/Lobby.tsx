@@ -11,9 +11,11 @@ interface Props {
   username: string | null;
   onLogout: () => void;
   onGoToAuth: () => void;
+  uiMode: 'normal' | 'compact';
+  onToggleUiMode: () => void;
 }
 
-export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, username, onLogout, onGoToAuth }: Props) {
+export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, username, onLogout, onGoToAuth, uiMode, onToggleUiMode }: Props) {
   const [nickname, setNickname] = useState(() =>
     // Auto-fill from account username if logged in
     username || localStorage.getItem('energy-duel-nickname') || ''
@@ -112,6 +114,21 @@ export default function Lobby({ socket, onError, onRoomCreated, isLoggedIn, user
 
       <h1 className="lobby-title">蓄气对决</h1>
       <p className="lobby-subtitle">在线拍手对战</p>
+
+      <div className="ui-mode-toggle">
+        <button
+          className={`mode-btn ${uiMode === 'normal' ? 'active' : ''}`}
+          onClick={() => uiMode === 'compact' && onToggleUiMode()}
+        >
+          📋 规则模式
+        </button>
+        <button
+          className={`mode-btn ${uiMode === 'compact' ? 'active' : ''}`}
+          onClick={() => uiMode === 'normal' && onToggleUiMode()}
+        >
+          📱 简洁模式
+        </button>
+      </div>
 
       {isLoggedIn && username && (
         <div className="auth-status">

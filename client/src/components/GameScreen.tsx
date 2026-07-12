@@ -15,10 +15,11 @@ interface Props {
   resolution: RoundResolution | null;
   roomCode: string;
   socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+  uiMode: 'normal' | 'compact';
 }
 
 export default function GameScreen({
-  phase, round, players, playerId, deadline, resolution, roomCode, socket,
+  phase, round, players, playerId, deadline, resolution, roomCode, socket, uiMode,
 }: Props) {
   const me = players.find(p => p.id === playerId);
   const isDead = me ? !me.alive : true;
@@ -45,6 +46,7 @@ export default function GameScreen({
             energy={me?.energy || 0}
             socket={socket}
             deadline={deadline}
+            uiMode={uiMode}
           />
         )}
 
