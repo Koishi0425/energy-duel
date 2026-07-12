@@ -204,13 +204,16 @@ export function createSocketServer(httpServer: HTTPServer, authManager: AuthMana
     });
 
     // ---- Switch Team (team mode only, before game starts) ----
-    socket.on('switch_team', () => {
+    socket.on('switch_team', (data) => {
       const info = socketRooms.get(socket.id);
       if (!info) return;
       const room = roomManager.getRoom(info.roomCode);
       if (!room || room.roomType !== 'team') return;
       if (room.phase !== 'waiting') return;
-      const player = room.players.get(info.playerId);
+
+      // Host can switch anyone; players can only switch themselves
+      const targetId = (data?.playerId && info.playerId === room.hostId) ? data.playerId : info.playerId;
+      const player = room.players.get(targetId);
       if (!player || player.isBot) return;
 
       player.team = player.team === 0 ? 1 : 0;

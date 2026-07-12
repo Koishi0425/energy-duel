@@ -53,8 +53,8 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                   {p.nickname}{p.id === playerId && ' (你)'}
                 </span>
                 <span className="player-level">Lv.{p.level}</span>
-                {p.id === playerId && (
-                  <button className="btn-xs" onClick={() => socket.emit('switch_team')}>⇄ 换队</button>
+                {(p.id === playerId || isHost) && (
+                  <button className="btn-xs" onClick={() => socket.emit('switch_team', { playerId: p.id })}>⇄ 换队</button>
                 )}
               </div>
             ))}
@@ -67,8 +67,8 @@ export default function WaitingRoom({ roomCode, players, isHost, playerId, roomT
                   {p.nickname}{p.id === playerId && ' (你)'}
                 </span>
                 <span className="player-level">Lv.{p.level}</span>
-                {p.id === playerId && (
-                  <button className="btn-xs" onClick={() => socket.emit('switch_team')}>⇄ 换队</button>
+                {(p.id === playerId || isHost) && (
+                  <button className="btn-xs" onClick={() => socket.emit('switch_team', { playerId: p.id })}>⇄ 换队</button>
                 )}
               </div>
             ))}
