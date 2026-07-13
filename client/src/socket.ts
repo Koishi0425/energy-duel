@@ -2,10 +2,8 @@ import { io, Socket } from 'socket.io-client';
 import { ClientToServerEvents, ServerToClientEvents } from '../../shared/types';
 import { getToken } from './auth';
 
-// Dev: localhost. Production: Render.com server
-const SERVER_URL = import.meta.env.PROD
-  ? 'https://uprising-persuaded-fit.ngrok-free.dev'
-  : window.location.origin;
+// Client and server are served from the same origin
+const SERVER_URL = window.location.origin;
 
 let authToken = getToken() || undefined;
 
