@@ -34,7 +34,7 @@ npm run dev
 素材文件放在 `client/public/assets/`，配置只保存资源 ID 和站内 URL。例如：
 
 ```text
-client/public/assets/portrait-default.png
+client/public/assets/default-character.png
 client/public/assets/characters/ice_mage/base/idle.png
 client/public/assets/characters/ice_mage/base/wave.png
 ```

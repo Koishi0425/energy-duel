@@ -4,7 +4,7 @@
     { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10 }
   ],
   "assets": [
-    { "id": "portrait_default", "url": "/assets/portrait-default.svg" }
+    { "id": "portrait_default", "url": "/assets/default-character.png" }
   ],
   "characters": [
     {
