@@ -1,141 +1,76 @@
-# ⚔ 蓄气对决 (Energy Duel)
+# Energy Duel / 能量对决
 
-在线多人拍手对战游戏。攒气、出招、一击必杀。
+基于 React、PixiJS 8 和 Colyseus 0.17 的多人在线圆形战棋游戏。
 
-## 核心机制
+## 当前功能
 
-- **26 种招式** × **13 个等级**，从基础的「运」「防」「波」到终极「降龙十八掌」「毒」
-- **能量经济**：出招消耗气，运攒气，欧偷气，跺反制
-- **一击必杀**：HP=1，对攻差 ≥9 定生死，否则平局
-- **同时回合制**：每回合所有人暗中选招，同时揭晓
-- **升级系统**：每局 Top N 升级，解锁更强招式
+- 纯用户名账号与独立房间昵称
+- 房主创建房间、全员准备、最多 20 人加入
+- `2 × 玩家数` 的圆形地图和服务端权威格子位置
+- 可拖动旋转的本地战场视角，鼠标与触屏均可操作
+- 角色立绘、昵称、生命、通用资源和 Buff 展示底座
+- 桌面悬停详情、手机底部详情抽屉和响应式布局
+- 攻击、防御、特殊行动标签页，场上高亮选目标和确认弹窗
+- 行动提交后可在全员确认前撤销重选
+- JSON 驱动的气、凹、剁、波、防、挂机、超防规则
+- 对局中 30 秒断线重连；准备和结算阶段断线直接退出
 
-## 游戏模式
+> 无密码用户名不是安全凭据。任何知道用户名的人都可以进入同一账号。
 
-| 模式 | 人数 | 说明 |
-|------|------|------|
-| ⚔ 双人对战 | 2人 | 1v1 对决 |
-| 👥 多人混战 | 2-8人 | 自由混战，存活者为王 |
-| 🛡 组队对战 | 2-8人 | 红蓝两队对抗，一方全灭即结束，胜方全员升级 |
+## 开发
 
-## 账号系统
-
-- 注册/登录（pbkdf2 密码哈希），支持游客模式
-- 登录后可跨设备保留等级进度
-- 断线重连：刷新页面自动回到房间，保留聊天记录和等级
-
-## 房间系统
-
-- **房间列表**：大厅可浏览所有开放房间，显示状态（等待中/选招中/战斗中）和初始等级
-- **中途加入**：选招阶段（非战斗中）可随时加入，等级自动匹配当前存活者
-- **人机**：简单/普通/困难三档，组队模式支持普通和困难
-- **房主权限**：踢人、调整队伍、开始游戏
-- 空房间/纯人机房间自动清理
-
-## 聊天系统
-
-- 游戏中右下角 💬 按钮打开聊天面板
-- 组队模式支持**队内聊天**（仅队友可见）和**全场聊天**
-- 新玩家/重连自动加载历史消息（最多 200 条）
-
-## UI 特性
-
-- 🌙 暗色主题 + 武侠东方气韵，渐变背景 + 点阵纹理
-- 📱 **简洁模式**：移动端友好，招式卡片紧凑排列，双击展开详情
-- 📋 **规则模式**：完整招式信息（攻/防/描述）
-- 招式卡片按类型分色：蓄气金、攻击红、防御青、特殊紫
-- 计时器最后 5 秒变红闪烁
-- 组队模式红蓝分队展示 + 队杀彩蛋
-
-## 快速开始
-
-### 服务端
+需要 Node.js 20+ 和 npm 10+：
 
 ```bash
-cd server
 npm install
-npx tsx src/index.ts   # 开发模式，端口 3000
+npm run dev
 ```
 
-### 客户端（本地开发）
+开发客户端运行于 `http://localhost:5173`，Colyseus 服务端运行于
+`http://localhost:2567`。
+
+## 角色素材
+
+素材文件放在 `client/public/assets/`，配置只保存资源 ID 和站内 URL。例如：
+
+```text
+client/public/assets/portrait-default.png
+client/public/assets/characters/ice_mage/base/idle.png
+client/public/assets/characters/ice_mage/base/wave.png
+```
+
+在 `shared/config/game.json` 的 `assets`、角色 `forms` 和 `poses` 中登记资源。
+找不到动作差分时依次回退到形态默认、角色默认和内置占位立绘。
+
+## 生产运行与 ngrok
 
 ```bash
-cd client
-npm install
-npm run dev             # Vite dev server，端口 5173
+npm run serve
 ```
 
-打开 `http://localhost:5173` 即可游玩。
-
-### 外网联机
+另开终端执行：
 
 ```bash
-ngrok http 3000          # 把服务端暴露到公网
-cd client && npm run build   # 构建生产版客户端
+npm run tunnel
 ```
 
-修改 `client/src/socket.ts` 的 `SERVER_URL` 为 ngrok 地址后重新构建。
+客户端静态资源、HTTP API、匹配服务和 WebSocket 共用端口 2567，只需一个
+ngrok HTTP 隧道。
 
-## 技术栈
+## 验证
 
-| 层 | 技术 |
-|----|------|
-| 客户端 | React 18 + TypeScript + Vite |
-| 服务端 | Node.js + Express + Socket.IO |
-| AI | 自研 minimax 博弈树 + 策略自适应 + 后手反制 |
-| 身份验证 | pbkdf2 (SHA-512, 100k 迭代) + JSON 文件持久化 |
-| 部署 | GitHub Pages (客户端) + ngrok/Render (服务端) |
-
-## 人机 AI
-
-| 难度 | 策略 |
-|------|------|
-| 🤖 简单 | minimax 递归评估 + 策略自适应 + 防卡死检测 |
-| 🧠 普通 | 上下文过滤 + Top-N 随机选择（不可预测） |
-| 💀 困难 | 后手反制：等所有人出招后选择最优解，含反杀判断和防御突破 |
-
-## 项目结构
-
-```
-energy-duel/
-├── client/                # React 前端
-│   └── src/
-│       ├── App.tsx        # 主状态机
-│       ├── socket.ts      # Socket.IO 客户端
-│       ├── auth.ts        # 本地认证存储
-│       ├── moves.ts       # 招式定义
-│       └── components/    # 游戏 UI 组件
-│           ├── AuthPanel.tsx       # 登录/注册
-│           ├── Lobby.tsx          # 大厅 + 房间列表
-│           ├── WaitingRoom.tsx    # 等待室
-│           ├── PlayerStatusBar.tsx # 玩家状态栏
-│           ├── MoveSelector.tsx   # 招式选择
-│           ├── PhaseResolution.tsx # 回合结算展示
-│           ├── GameScreen.tsx     # 游戏主界面
-│           ├── GameOver.tsx       # 结算画面
-│           ├── ChatPanel.tsx      # 聊天面板
-│           └── RulesModal.tsx     # 规则弹窗
-├── server/                # Node.js 后端
-│   └── src/
-│       ├── index.ts       # Express 入口 + REST API
-│       ├── socket.ts      # Socket.IO 事件
-│       ├── game/          # 游戏引擎
-│       │   ├── GameEngine.ts    # 回合调度
-│       │   ├── BotEngine.ts     # 人机 AI
-│       │   ├── MoveResolver.ts  # 战斗结算
-│       │   ├── EnergyResolver.ts # 能量/欧链
-│       │   └── LevelResolver.ts # 排名/升级
-│       ├── room/          # 房间管理
-│       │   ├── GameRoom.ts      # 房间状态
-│       │   └── RoomManager.ts   # 全局房间池
-│       ├── auth/          # 账号系统
-│       │   └── AuthManager.ts   # 注册/登录/会话
-│       └── data/
-│           └── moves.ts   # 服务端招式定义
-└── shared/                # 共享类型定义
-    └── types.ts
+```bash
+npm test
+npm run typecheck
+npm run build
 ```
 
-## 许可
+## 目录
 
-MIT
+```text
+client/   React、Ant Design 与 PixiJS 客户端
+server/   Colyseus 房间、权威结算与账号 API
+shared/   共享 workspace：协议、几何算法和 JSON 游戏配置
+```
+
+开始开发前请阅读 [AGENTS.md](./AGENTS.md)。

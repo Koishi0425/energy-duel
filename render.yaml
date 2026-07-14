@@ -2,8 +2,8 @@ services:
   - type: web
     name: energy-duel-server
     env: node
-    buildCommand: cd server && npm install
-    startCommand: cd server && npx tsx src/index.ts
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -w server
     envVars:
       - key: NODE_ENV
         value: production

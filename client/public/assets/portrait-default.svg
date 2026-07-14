@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 220" role="img" aria-label="默认角色立绘">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#8d99ff"/>
+      <stop offset="1" stop-color="#5546b8"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#c7d0ff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#6d7cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="80" cy="201" rx="64" ry="15" fill="#050817" opacity=".55"/>
+  <circle cx="80" cy="75" r="65" fill="url(#glow)"/>
+  <path d="M29 199c4-49 19-78 51-78s47 29 51 78z" fill="url(#body)" stroke="#d9deff" stroke-width="4"/>
+  <circle cx="80" cy="74" r="37" fill="#f0d4c2" stroke="#d9deff" stroke-width="4"/>
+  <path d="M43 70c4-35 19-48 40-48 23 0 38 17 39 50-12-4-21-12-27-24-11 14-28 22-52 22z" fill="#22294b"/>
+  <path d="M65 79h2m26 0h2" stroke="#22294b" stroke-width="6" stroke-linecap="round"/>
+  <path d="M71 96c7 5 12 5 19 0" fill="none" stroke="#a95e68" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="80" cy="158" r="13" fill="#f6c85f" stroke="#fff4bd" stroke-width="3"/>
+</svg>

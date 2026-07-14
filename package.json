@@ -1,0 +1,21 @@
+{
+  "name": "energy-duel",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run build -w shared && concurrently -n client,server -c cyan,magenta \"npm run dev -w client\" \"npm run dev -w server\"",
+    "serve": "npm run build && npm run start -w server",
+    "tunnel": "ngrok http 2567",
+    "build": "npm run build -w shared && npm run build -w client && npm run build -w server",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w client && npm run typecheck -w server",
+    "test": "npm run test -w shared && npm run test -w client && npm run test -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
+}
