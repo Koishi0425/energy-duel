@@ -37,6 +37,11 @@ Run commands from the repository root:
 - `npm install` installs every workspace.
 - Local and container builds require Node.js 22 or newer because the Colyseus
   0.17 dependency tree declares a Node 22 engine requirement.
+- Keep the Linux x64 Rollup native package pinned in the client optional
+  dependencies and keep its exact version aligned with the client's direct
+  Rollup development dependency. npm lockfiles generated on Windows may
+  otherwise omit that platform package and make the Linux Docker build fail at
+  Vite startup.
 - `npm run dev` builds shared configuration, then starts the Vite client and
   Colyseus server together.
 - `npm run build` builds both workspaces.
