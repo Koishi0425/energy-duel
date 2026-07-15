@@ -10,10 +10,21 @@ services:
       NODE_ENV: production
       PORT: 2567
     ports:
-      - "${ENERGY_DUEL_PORT:-2567}:2567"
+      - "127.0.0.1:${ENERGY_DUEL_PORT:-2567}:2567"
     volumes:
       - energy-duel-data:/app/server/data
     stop_grace_period: 35s
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # 启动命令：指定容器内刚才挂载进去的配置文件路径
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      # 1. 挂载你保存在宿主机上的凭证文件目录（请确保路径与你实际登录时产生的一致，通常在 ~/.cloudflared 目录）
+      - ./.cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - game
 
 volumes:
   energy-duel-data:

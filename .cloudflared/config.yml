@@ -1,0 +1,15 @@
+tunnel: 280c0898-6166-4fa8-b026-57956d4fd6b4
+credentials-file: /etc/cloudflared/280c0898-6166-4fa8-b026-57956d4fd6b4.json # 如果用docker，注意路径映射
+
+# 3. 强制指定国内相对更稳定的 HTTP2 (TCP) 协议，避免默认 QUIC (UDP) 被严重丢包干扰
+protocol: http2
+
+# 4. 路由转发规则
+ingress:
+  # 当访问你配置的这个域名时
+  - hostname: energyduel.glmg.moe
+    # 转发到 Docker Compose 内网中的 game 服务端口（无需走 127.0.0.1，直接容器名互联）
+    service: http://game:2567
+  
+  # 必须的兜底规则，所有不匹配上述域名的请求直接返回 404
+  - service: http_status:404
