@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAccountAvailable, assignGridIndices, colorForAccount } from './roomSupport.js';
+import { assertAccountAvailable, assignGridIndices, claimRoomCode, colorForAccount, isActionUnlocked, normalizeRoomCode, releaseRoomCode, tickScopedBuffs } from './roomSupport.js';
 
 describe('room support', () => {
   it('assigns unique even indices after joins and leaves', () => {
@@ -30,5 +30,38 @@ describe('room support', () => {
       used.add(colorForAccount(accountId, used));
     }
     expect(used.size).toBe(8);
+  });
+
+  it('normalizes a custom room code and rejects unsafe values', () => {
+    expect(normalizeRoomCode(' duel88 ')).toBe('DUEL88');
+    expect(() => normalizeRoomCode('abc')).toThrow(/4-10/);
+    expect(() => normalizeRoomCode('对决01')).toThrow(/4-10/);
+  });
+
+  it('claims a custom room code once and releases it on disposal', async () => {
+    await claimRoomCode('KSKBL', () => false);
+    await expect(claimRoomCode('KSKBL', () => false)).rejects.toThrow(/已被使用/);
+    releaseRoomCode('KSKBL');
+    await claimRoomCode('KSKBL', () => false);
+    releaseRoomCode('KSKBL');
+    await expect(claimRoomCode('EXISTS', () => true)).rejects.toThrow(/已被使用/);
+  });
+
+  it('unlocks axe defense only after Gonggang raises the axe', () => {
+    expect(isActionUnlocked('gonggang', 'base', 'axe_defend', [])).toBe(false);
+    expect(isActionUnlocked('gonggang', 'base', 'axe_defend', ['axe_raised'])).toBe(true);
+    expect(isActionUnlocked('gonggang', 'base', 'raise_axe', [])).toBe(true);
+  });
+
+  it('ticks finite buffs in inactive character scopes without removing infinite buffs', () => {
+    const gonggang = new Map([['timed', { remainingTurns: 2 }], ['infinite', { remainingTurns: 0 }]]);
+    const jiaosila = new Map<string, { remainingTurns: number }>();
+    const durationFor = (id: string) => id === 'timed' ? 2 : undefined;
+    tickScopedBuffs([gonggang, jiaosila], durationFor);
+    expect(gonggang.get('timed')?.remainingTurns).toBe(1);
+    expect(gonggang.has('infinite')).toBe(true);
+    tickScopedBuffs([gonggang, jiaosila], durationFor);
+    expect(gonggang.has('timed')).toBe(false);
+    expect(gonggang.has('infinite')).toBe(true);
   });
 });

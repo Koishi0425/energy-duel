@@ -1,4 +1,4 @@
-import { characterById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
+import { buffById, characterById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
 import { Progress, Tag } from 'antd';
 
 export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
@@ -8,7 +8,7 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
     <div className="player-details">
       <div className="player-details-heading">
         <span className="details-color" style={{ background: `#${player.color.toString(16).padStart(6, '0')}` }} />
-        <div><strong>{player.nickname}</strong><small>@{player.username}</small></div>
+        <div><strong>{player.nickname}</strong></div>
         <Tag color={player.alive ? 'success' : 'error'}>{player.alive ? '存活' : '已淘汰'}</Tag>
       </div>
       <p className="form-line">{character?.name ?? player.characterId} · {form?.name ?? player.currentFormId}</p>
@@ -25,8 +25,12 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
       <div className="buff-list">
         <strong>状态效果</strong>
         {player.buffs.length === 0
-          ? <span className="muted">暂无 Buff</span>
-          : player.buffs.map((buff) => <Tag key={buff.instanceId}>{buff.buffId} ×{buff.stacks} · {buff.remainingTurns} 回合</Tag>)}
+          ? <span className="muted">暂无状态效果</span>
+          : player.buffs.map((buff) => {
+            const definition = buffById.get(buff.buffId);
+            const duration = buff.remainingTurns > 0 ? `剩余 ${buff.remainingTurns} 回合` : '持续状态';
+            return <div className="buff-detail" key={buff.instanceId}><Tag color={definition?.color}>{definition?.name ?? buff.buffId} ×{buff.stacks} · {duration}</Tag><small>{definition?.description ?? '暂无详细说明'}</small></div>;
+          })}
       </div>
     </div>
   );

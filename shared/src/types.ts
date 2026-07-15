@@ -40,21 +40,62 @@ export interface SyncedPlayer {
   buffs: SyncedBuff[];
   submitted: boolean;
   connected: boolean;
+  resultConfirmed: boolean;
 }
 
-export type GamePhase = 'waiting' | 'choosing' | 'finished';
-export type ActionCategory = 'attack' | 'defense' | 'special';
-export type TargetMode = 'none' | 'single_enemy' | 'all_enemies';
+export type GamePhase = 'waiting' | 'choosing' | 'resolving' | 'finished';
+export type ActionCategory = 'base' | 'attack' | 'defense' | 'resource' | 'special';
+export type TargetMode = 'none' | 'single_enemy' | 'multiple_enemies' | 'all_enemies';
 export type ActionId = string;
 
 export interface SyncedGameState {
   phase: GamePhase;
   round: number;
+  gameNumber: number;
   hostPlayerId: string;
   lastResult: string;
+}
+
+export interface SyncedRoundLogEntry {
+  gameNumber: number;
+  round: number;
+  time: string;
+  text: string;
 }
 
 export interface SubmitActionMessage {
   actionId: ActionId;
   targetId?: string;
+  targetIds?: string[];
+  transformCharacterId?: string;
+  requestId?: string;
+}
+
+export interface ResolutionActor {
+  playerId: string;
+  targetIds: string[];
+  actionId: string;
+  poseId?: string;
+  transformCharacterId?: string;
+}
+
+export interface ResolutionStep {
+  sequence: number;
+  speedPriority: number;
+  actors: ResolutionActor[];
+  participantIds: string[];
+  durationMs: number;
+}
+
+export interface RoundResolutionMessage {
+  round: number;
+  steps: ResolutionStep[];
+  totalDurationMs: number;
+}
+
+export interface CommandResultMessage {
+  requestId?: string;
+  command: string;
+  ok: boolean;
+  message: string;
 }

@@ -1,0 +1,15 @@
+.git
+.gitignore
+node_modules
+**/node_modules
+**/dist
+server/data
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+coverage
+.playwright-cli
+.vite
+~$*

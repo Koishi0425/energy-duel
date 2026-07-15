@@ -1,9 +1,42 @@
+import { actionById, characterById } from '@energy-duel/shared';
+
 export interface PositionedPlayer {
   accountId: string;
   gridIndex: number;
 }
 
 const PLAYER_COLORS = [0x6d7cff, 0xff6f91, 0x28d7b1, 0xffb84d, 0xb879ff, 0x4db8ff, 0xff7a45, 0x8bd450];
+const ROOM_CODE_PATTERN = /^[A-Z0-9]{4,10}$/;
+const claimedRoomCodes = new Set<string>();
+
+export function normalizeRoomCode(value: unknown): string {
+  const roomCode = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (!ROOM_CODE_PATTERN.test(roomCode)) throw new Error('房间号需为 4-10 位字母或数字');
+  return roomCode;
+}
+
+export async function claimRoomCode(roomCode: string, exists: () => boolean | Promise<boolean>): Promise<void> {
+  if (claimedRoomCodes.has(roomCode)) throw new Error('房间号已被使用');
+  claimedRoomCodes.add(roomCode);
+  try {
+    if (await exists()) throw new Error('房间号已被使用');
+  } catch (reason) {
+    claimedRoomCodes.delete(roomCode);
+    throw reason;
+  }
+}
+
+export function releaseRoomCode(roomCode: string): void { claimedRoomCodes.delete(roomCode); }
+
+export function tickScopedBuffs<T extends { remainingTurns: number }>(scopes: Iterable<Map<string, T>>, durationFor: (buffId: string) => number | undefined): void {
+  for (const buffs of scopes) {
+    for (const [buffId, stored] of buffs) {
+      if (durationFor(buffId) === undefined) continue;
+      stored.remainingTurns -= 1;
+      if (stored.remainingTurns <= 0) buffs.delete(buffId);
+    }
+  }
+}
 
 export function assignGridIndices(players: Iterable<PositionedPlayer>): void {
   let playerIndex = 0;
@@ -31,4 +64,12 @@ export function colorForAccount(accountId: string, usedColors: Set<number>): num
     if (!usedColors.has(color)) return color;
   }
   return PLAYER_COLORS[start];
+}
+
+export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffIds: Iterable<string>): boolean {
+  const visibleInTree = characterById.get(characterId)?.forms.find((form) => form.id === formId)?.unlockedActions.includes(actionId) === true;
+  if (!visibleInTree) return false;
+  const requirements = actionById.get(actionId)?.unlockRequirements;
+  const currentBuffs = new Set(buffIds);
+  return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId));
 }

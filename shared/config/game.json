@@ -1,35 +1,60 @@
 {
-  "version": 1,
+  "version": 5,
   "resources": [
-    { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10 }
+    { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10 },
+    { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20 }
+  ],
+  "buffs": [
+    { "id": "axe_raised", "name": "举斧", "description": "贡刚已经举起战斧；之后使用斩时等级提高 0.5。", "color": "#c99555", "scope": "character" },
+    { "id": "fragile", "name": "脆弱", "description": "受到任何有效伤害或健康状态左移时会直接死亡。", "color": "#ff6f91", "scope": "character" }
   ],
   "assets": [
-    { "id": "portrait_default", "url": "/assets/default-character.png" }
+    { "id": "portrait_default", "url": "/assets/default-character.png" },
+    { "id": "portrait_jiaosila", "url": "/assets/jiaosila.png" },
+    { "id": "portrait_gonggang", "url": "/assets/gonggang.png" }
   ],
   "characters": [
     {
-      "id": "default_character",
-      "name": "初始角色",
-      "defaultAssetId": "portrait_default",
-      "forms": [
-        {
-          "id": "base",
-          "name": "基础形态",
-          "defaultAssetId": "portrait_default",
-          "poses": {},
-          "unlockedActions": ["charge", "steal", "chop", "wave", "defend", "hangup", "super_defend"]
-        }
-      ],
-      "transformations": []
+      "id": "default_character", "name": "初始角色", "defaultAssetId": "portrait_default",
+      "forms": [{
+        "id": "base", "name": "基础形态", "defaultAssetId": "portrait_default", "poses": {},
+        "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "transform"]
+      }],
+      "transformations": ["jiaosila", "gonggang"], "transformationCost": {}
+    },
+    {
+      "id": "jiaosila", "name": "娇斯拉", "defaultAssetId": "portrait_jiaosila",
+      "forms": [{
+        "id": "base", "name": "原子形态", "defaultAssetId": "portrait_jiaosila", "poses": {},
+        "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "atomic_breath", "transform"]
+      }],
+      "transformations": ["default_character", "gonggang"], "transformationCost": {}
+    },
+    {
+      "id": "gonggang", "name": "贡刚", "defaultAssetId": "portrait_gonggang",
+      "forms": [{
+        "id": "base", "name": "战斧形态", "defaultAssetId": "portrait_gonggang", "poses": {},
+        "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "raise_axe", "axe_defend", "transform"]
+      }],
+      "transformations": ["default_character", "jiaosila"], "transformationCost": {}
     }
   ],
   "actions": [
-    { "id": "chop", "name": "剁", "category": "attack", "description": "取消全场凹并淘汰凹者", "cost": {}, "target": { "mode": "none" }, "speedPriority": 7, "level": 1, "effects": [{ "handler": "chop" }], "vfxId": "" },
-    { "id": "wave", "name": "波", "category": "attack", "description": "攻击一名玩家，可被防抵挡", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 5, "level": 1, "effects": [{ "handler": "wave" }], "vfxId": "" },
-    { "id": "hangup", "name": "挂机", "category": "attack", "description": "攻击其他所有玩家并无视普通防御", "cost": { "energy": 3 }, "target": { "mode": "all_enemies" }, "speedPriority": 4, "level": 1, "effects": [{ "handler": "hangup" }], "vfxId": "" },
-    { "id": "defend", "name": "防", "category": "defense", "description": "防御波的攻击", "cost": {}, "target": { "mode": "none" }, "speedPriority": 10, "level": 1, "effects": [{ "handler": "defend" }], "vfxId": "" },
-    { "id": "super_defend", "name": "超防", "category": "defense", "description": "免疫本回合所有攻击", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 11, "level": 1, "effects": [{ "handler": "super_defend" }], "vfxId": "" },
-    { "id": "charge", "name": "气", "category": "special", "description": "获得 1 点气", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1, "effects": [{ "handler": "charge" }], "vfxId": "" },
-    { "id": "steal", "name": "凹", "category": "special", "description": "目标本回合出气时偷取该气", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 6, "level": 1, "effects": [{ "handler": "steal" }], "vfxId": "" }
+    { "id": "charge", "name": "气", "category": "base", "description": "获得 1 点气。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "charge" }], "vfxId": "energy_gain" },
+    { "id": "gain_charge", "name": "蓄力", "category": "base", "description": "获得 1 点蓄力。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "gain_charge" }], "vfxId": "charge_gain" },
+    { "id": "fist", "name": "拳", "category": "attack", "description": "0.5 级钝击；出招时处于脆弱状态。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "effects": [{ "handler": "fist" }], "vfxId": "emoji_fist" },
+    { "id": "slash", "name": "斩", "category": "attack", "description": "消耗 1 气的 1.5 级斩击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "effects": [{ "handler": "slash" }], "vfxId": "emoji_slash" },
+    { "id": "defend", "name": "挡", "category": "defense", "description": "2 级格挡；承受不低于格挡等级的伤害时破防。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2, "effects": [{ "handler": "defend" }], "vfxId": "emoji_shield" },
+    { "id": "steal", "name": "凹", "category": "base", "description": "若目标本回合出气，偷取该气。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "steal" }], "vfxId": "steal" },
+    { "id": "double_steal", "name": "紫翼双凹", "category": "base", "description": "选择两次目标；可选同一目标两次。", "cost": {}, "target": { "mode": "multiple_enemies", "maxTargets": 2 }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "double_steal" }], "vfxId": "double_steal" },
+    { "id": "chop", "name": "剁", "category": "base", "description": "取消全场凹，并使凹的玩家损失一个健康状态。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "chop" }], "vfxId": "emoji_chop" },
+    { "id": "super_defend", "name": "超防", "category": "defense", "description": "消耗 1 气，本回合免疫任何攻击。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 4, "level": 999, "effects": [{ "handler": "super_defend" }], "vfxId": "super_shield" },
+    { "id": "heal", "name": "治疗", "category": "special", "description": "恢复一个健康状态；出招时处于脆弱状态。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "heal" }], "vfxId": "heal" },
+    { "id": "transform", "name": "变身", "category": "special", "description": "切换为其他已解锁角色；消耗由目标角色配置决定。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 4, "level": 0, "effects": [{ "handler": "transform" }], "vfxId": "transform_particles" },
+    { "id": "atomic_breath", "name": "原子吐息", "category": "attack", "description": "娇斯拉专属的 3 级攻击。", "cost": { "energy": 2, "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "atomic_breath" }], "vfxId": "atomic_breath" },
+    { "id": "raise_axe", "name": "举斧", "category": "special", "description": "解锁斧挡，之后斩的等级提高 0.5。", "cost": { "energy": 2 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "raise_axe" }], "vfxId": "raise_axe" },
+    { "id": "axe_defend", "name": "斧挡", "category": "defense", "description": "2.5 级格挡；破防时返还 1 气。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2.5, "effects": [{ "handler": "axe_defend" }], "vfxId": "axe_shield", "unlockRequirements": { "allBuffs": ["axe_raised"], "description": "需要先使用「举斧」" } },
+    { "id": "wave", "name": "波（兼容）", "category": "attack", "description": "兼容旧规则的一气攻击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "effects": [{ "handler": "wave" }], "vfxId": "wave" },
+    { "id": "hangup", "name": "挂机（兼容）", "category": "attack", "description": "兼容旧规则的全场攻击。", "cost": { "energy": 3 }, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "hangup" }], "vfxId": "hangup" }
   ]
 }

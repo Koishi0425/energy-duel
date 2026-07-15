@@ -42,6 +42,7 @@ export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined
       buffs,
       submitted: player.submitted,
       connected: player.connected,
+      resultConfirmed: player.resultConfirmed ?? false,
     };
   });
 }

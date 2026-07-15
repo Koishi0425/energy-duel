@@ -1,0 +1,20 @@
+services:
+  game:
+    build:
+      context: .
+      target: runtime
+    image: energy-duel:${ENERGY_DUEL_TAG:-local}
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 2567
+    ports:
+      - "${ENERGY_DUEL_PORT:-2567}:2567"
+    volumes:
+      - energy-duel-data:/app/server/data
+    stop_grace_period: 35s
+
+volumes:
+  energy-duel-data:
+    name: energy-duel-data

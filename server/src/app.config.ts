@@ -24,6 +24,14 @@ const server = defineServer({
       next();
     });
 
+    app.get('/api/health', (_request, response) => {
+      response.json({
+        status: 'ok',
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     app.post('/api/session', (request, response) => {
       try {
         const username = typeof request.body?.username === 'string' ? request.body.username : '';

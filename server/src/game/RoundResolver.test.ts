@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRound, validateAction, type CombatPlayer, type SubmittedAction } from './RoundResolver.js';
+import { buildResolutionSteps, resolveRound, validateAction, type CombatPlayer, type SubmittedAction } from './RoundResolver.js';
 
 function roster(...players: Array<[string, number]>): Map<string, CombatPlayer> {
   return new Map(players.map(([id, energy]) => [id, {
@@ -25,6 +25,12 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('b')?.resources.energy).toBe(1);
   });
 
+  it('logs actions that produce no practical effect', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    const result = resolveRound(players, actions(['a', { actionId: 'steal', targetId: 'b' }], ['b', { actionId: 'gain_charge' }]));
+    expect(result.summary).toContain('A 的凹没有从 B 获得气：目标本回合没有出气。');
+  });
+
   it('chop cancels every steal and eliminates the stealers', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 0]);
     resolveRound(players, actions(
@@ -33,6 +39,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')?.resources.energy).toBe(1);
     expect(players.get('b')?.alive).toBe(false);
     expect(players.get('b')?.currentHp).toBe(0);
+    expect(resolveRound(roster(['x', 0], ['y', 0]), actions(['x', { actionId: 'chop' }], ['y', { actionId: 'steal', targetId: 'x' }])).summary[0]).toContain('X：剁');
   });
 
   it('defense blocks wave and super defense blocks all attacks', () => {
@@ -58,5 +65,94 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(players.get('a')!, { actionId: 'wave', targetId: 'b' }, players)).toThrow(/资源不足/);
     expect(() => validateAction(players.get('a')!, { actionId: 'steal' }, players)).toThrow(/请选择/);
     expect(() => validateAction(players.get('a')!, { actionId: 'defend', targetId: 'b' }, players)).toThrow(/不接受/);
+  });
+
+  it('orders the client timeline by speed then player id and pairs mutual targets', () => {
+    const steps = buildResolutionSteps(actions(
+      ['b', { actionId: 'fist', targetId: 'a' }],
+      ['a', { actionId: 'fist', targetId: 'b' }],
+      ['c', { actionId: 'super_defend' }],
+    ));
+    expect(steps[0].actors[0].playerId).toBe('c');
+    expect(steps[1].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
+  });
+
+  it('pairs a targetless action with the next action at the same speed', () => {
+    const steps = buildResolutionSteps(actions(
+      ['a', { actionId: 'charge' }],
+      ['b', { actionId: 'fist', targetId: 'c' }],
+      ['c', { actionId: 'fist', targetId: 'b' }],
+    ));
+    expect(steps[0].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
+    expect(steps[1].actors.map((actor) => actor.playerId)).toEqual(['c']);
+  });
+
+  it('groups a defense with its incoming attack even when their speeds differ', () => {
+    const steps = buildResolutionSteps(actions(['a', { actionId: 'defend' }], ['b', { actionId: 'fist', targetId: 'a' }]));
+    expect(steps).toHaveLength(1);
+    expect(steps[0].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
+  });
+
+  it('limits attacks below level three to one health-state shift', () => {
+    const players = roster(['a', 1], ['b', 0]);
+    const target = players.get('b')!;
+    target.currentHp = 2;
+    target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'slash', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(1);
+    const result = resolveRound(roster(['c', 0], ['d', 0]), actions(['c', { actionId: 'fist', targetId: 'd' }], ['d', { actionId: 'charge' }]));
+    expect(result.summary.join('\n')).toMatch(/D 进入死亡状态/);
+  });
+
+  it('breaks an equal-or-lower block before applying the attack', () => {
+    const players = roster(['a', 2], ['b', 0]);
+    players.get('a')!.resources.charge = 1;
+    const target = players.get('b')!;
+    target.currentHp = 2;
+    target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'axe_defend' }]));
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(1);
+    expect(target.resources.energy).toBe(2);
+  });
+
+  it('cancels equal-level attacks and applies only the positive level difference', () => {
+    const equalPlayers = roster(['a', 1], ['b', 1]);
+    resolveRound(equalPlayers, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'wave', targetId: 'a' }]));
+    expect(equalPlayers.get('a')?.alive).toBe(true);
+    expect(equalPlayers.get('b')?.alive).toBe(true);
+
+    const differentPlayers = roster(['a', 1], ['b', 1]);
+    for (const player of differentPlayers.values()) { player.currentHp = 2; player.maxHp = 2; }
+    resolveRound(differentPlayers, actions(['a', { actionId: 'slash', targetId: 'b' }], ['b', { actionId: 'wave', targetId: 'a' }]));
+    expect(differentPlayers.get('a')?.currentHp).toBe(2);
+    expect(differentPlayers.get('b')?.currentHp).toBe(1);
+  });
+
+  it('writes explicit health-state names in attack logs', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.nickname = 'momoi';
+    players.get('b')!.nickname = 'Glmg';
+    players.get('b')!.currentHp = 2;
+    players.get('b')!.maxHp = 2;
+    const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(result.summary).toContain('momoi 的拳（0.5级）对 Glmg 的气（0级）：等级差 0.5，Glmg 进入濒死状态。');
+  });
+
+  it('switches characters repeatedly using target-configured free transformation costs', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    const actor = players.get('a')!;
+    actor.characterId = 'gonggang'; actor.currentFormId = 'base'; actor.buffs = new Set(['axe_raised']);
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'jiaosila' }], ['b', { actionId: 'defend' }]));
+    expect(actor.characterId).toBe('jiaosila');
+    expect(actor.resources.energy).toBe(0);
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'gonggang' }], ['b', { actionId: 'defend' }]));
+    expect(actor.characterId).toBe('gonggang');
+  });
+
+  it('accepts repeated targets for the planned double steal', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    expect(() => validateAction(players.get('a')!, { actionId: 'double_steal', targetIds: ['b', 'b'] }, players)).not.toThrow();
   });
 });

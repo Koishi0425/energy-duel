@@ -10,7 +10,7 @@ describe('readSyncedPlayers', () => {
     const player = {
       playerId: 'player-1', accountId: 'account-1', username: 'PlayerOne', nickname: '一号玩家',
       gridIndex: 0, color: 0x6d7cff, ready: true, alive: true, currentHp: 1, maxHp: 1,
-      characterId: 'default_character', currentFormId: 'base', submitted: false, connected: true,
+      characterId: 'default_character', currentFormId: 'base', submitted: false, connected: true, resultConfirmed: false,
       resources: { values: () => [{ resourceId: 'energy', current: 2, max: 0 }][Symbol.iterator]() },
       buffs: { values: () => [{ instanceId: 'frozen-1', buffId: 'frozen', stacks: 1, remainingTurns: 2, sourcePlayerId: 'player-2' }][Symbol.iterator]() },
     };

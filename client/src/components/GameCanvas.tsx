@@ -1,107 +1,89 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { resourceById, type SyncedPlayer } from '@energy-duel/shared';
+import { assetById, characterById, resourceById, type ResolutionStep, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitUrl } from '../game/visualResolver';
 
 interface ScreenPoint { x: number; y: number }
-
 interface Props {
   players: SyncedPlayer[];
   targeting?: boolean;
   targetablePlayerIds?: string[];
-  selectedTargetId?: string;
+  selectedTargetIds?: string[];
   resetViewKey?: number;
+  resolutionStep?: ResolutionStep;
   onPlayerSelect?: (player: SyncedPlayer) => void;
   onPlayerInspect?: (player: SyncedPlayer) => void;
   onPlayerHover?: (player: SyncedPlayer | null, point?: ScreenPoint) => void;
 }
-
-interface TokenView {
-  root: Container;
-  portrait: Sprite;
-  ring: Graphics;
-  name: Text;
-  status: Text;
-  assetUrl: string;
-}
+interface TokenView { root: Container; portrait: Sprite; ring: Graphics; name: Text; status: Text; assetUrl: string }
 
 export default function GameCanvas(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<Application | null>(null);
   const mapRef = useRef<CircularMap | null>(null);
   const tokenLayerRef = useRef<Container | null>(null);
+  const effectLayerRef = useRef<Container | null>(null);
   const tokenViewsRef = useRef(new Map<string, TokenView>());
   const propsRef = useRef(props);
   propsRef.current = props;
 
-  const redraw = () => {
+  const positionViews = () => {
     const map = mapRef.current;
-    const layer = tokenLayerRef.current;
-    if (!map || !layer) return;
-    const players = propsRef.current.players;
-    const activeIds = new Set(players.map((player) => player.playerId));
-    for (const [playerId, view] of tokenViewsRef.current) {
-      if (!activeIds.has(playerId)) {
-        view.root.destroy({ children: true });
-        tokenViewsRef.current.delete(playerId);
-      }
-    }
-    for (const player of players) {
-      let view = tokenViewsRef.current.get(player.playerId);
-      if (!view) {
-        view = createTokenView(player);
-        tokenViewsRef.current.set(player.playerId, view);
-        layer.addChild(view.root);
-      }
-      updateTokenView(view, player, players.length, propsRef.current);
+    if (!map) return;
+    for (const player of propsRef.current.players) {
+      const view = tokenViewsRef.current.get(player.playerId);
+      if (!view) continue;
       const point = map.getGridCoordinates(player.gridIndex);
       view.root.position.set(point.x, point.y);
     }
   };
 
+  const syncViews = () => {
+    const layer = tokenLayerRef.current;
+    if (!layer) return;
+    const players = propsRef.current.players;
+    const activeIds = new Set(players.map((player) => player.playerId));
+    for (const [playerId, view] of tokenViewsRef.current) if (!activeIds.has(playerId)) {
+      view.root.destroy({ children: true }); tokenViewsRef.current.delete(playerId);
+    }
+    for (const player of players) {
+      let view = tokenViewsRef.current.get(player.playerId);
+      if (!view) {
+        view = createTokenView(player.playerId, propsRef);
+        tokenViewsRef.current.set(player.playerId, view); layer.addChild(view.root);
+      }
+      updateTokenView(view, player, players.length, propsRef.current);
+    }
+    positionViews();
+  };
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    let cancelled = false;
-    let initialized = false;
+    let cancelled = false; let initialized = false;
     const app = new Application();
     const observer = new ResizeObserver(() => {
       const map = mapRef.current;
       if (!map || host.clientWidth <= 0 || host.clientHeight <= 0) return;
       map.resize(host.clientWidth, host.clientHeight);
-      if (app.stage) app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
-      redraw();
-    });
-
-    void Promise.all([
-      app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }),
-      Assets.load<Texture>(FALLBACK_PORTRAIT_URL),
-    ]).then(() => {
-      initialized = true;
-      if (cancelled) {
-        app.destroy(true);
-        return;
-      }
-      host.appendChild(app.canvas);
-      const map = new CircularMap(Math.max(1, propsRef.current.players.length));
-      const tokenLayer = new Container();
-      app.stage.addChild(map, tokenLayer);
-      app.stage.eventMode = 'static';
       app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
-      installRotationGestures(app, map, redraw);
-      mapRef.current = map;
-      tokenLayerRef.current = tokenLayer;
-      map.resize(host.clientWidth, host.clientHeight);
-      redraw();
-      observer.observe(host);
+      positionViews();
     });
-
+    void Promise.all([app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(() => {
+      initialized = true;
+      if (cancelled) { app.destroy(true); return; }
+      host.appendChild(app.canvas); appRef.current = app;
+      const map = new CircularMap(Math.max(1, propsRef.current.players.length));
+      const tokenLayer = new Container(); const effectLayer = new Container();
+      app.stage.addChild(map, tokenLayer, effectLayer);
+      app.stage.eventMode = 'static'; app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
+      mapRef.current = map; tokenLayerRef.current = tokenLayer; effectLayerRef.current = effectLayer;
+      installRotationGestures(app, map, positionViews);
+      map.resize(host.clientWidth, host.clientHeight); syncViews(); observer.observe(host);
+    });
     return () => {
-      cancelled = true;
-      observer.disconnect();
-      mapRef.current = null;
-      tokenLayerRef.current = null;
-      tokenViewsRef.current.clear();
+      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; tokenLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear();
       if (initialized) app.destroy(true, { children: true });
     };
   }, []);
@@ -109,109 +91,145 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPlayerCount(Math.max(1, props.players.length));
-    redraw();
-  }, [props.players, props.targeting, props.selectedTargetId, props.targetablePlayerIds]);
+    map.setPlayerCount(Math.max(1, props.players.length)); syncViews();
+  }, [props.players, props.targeting, props.selectedTargetIds, props.targetablePlayerIds]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setViewRotation(0);
-    redraw();
+    map.setViewRotation(0); positionViews();
   }, [props.resetViewKey]);
 
-  function createTokenView(player: SyncedPlayer): TokenView {
-    const root = new Container();
-    const ring = new Graphics();
-    const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL));
-    portrait.anchor.set(0.5, 1);
-    const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } });
-    name.anchor.set(0.5, 0);
-    const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } });
-    status.anchor.set(0.5, 0);
-    root.addChild(ring, portrait, name, status);
-    root.eventMode = 'static';
-    root.cursor = 'pointer';
-    root.on('pointerover', (event: FederatedPointerEvent) => {
-      const current = propsRef.current.players.find((candidate) => candidate.playerId === player.playerId);
-      if (current) propsRef.current.onPlayerHover?.(current, { x: event.clientX, y: event.clientY });
-    });
-    root.on('pointermove', (event: FederatedPointerEvent) => {
-      const current = propsRef.current.players.find((candidate) => candidate.playerId === player.playerId);
-      if (current) propsRef.current.onPlayerHover?.(current, { x: event.clientX, y: event.clientY });
-    });
-    root.on('pointerout', () => propsRef.current.onPlayerHover?.(null));
-    root.on('pointertap', () => {
-      const current = propsRef.current.players.find((candidate) => candidate.playerId === player.playerId);
-      if (!current) return;
-      const state = propsRef.current;
-      if (state.targeting && state.targetablePlayerIds?.includes(current.playerId)) state.onPlayerSelect?.(current);
-      else if (!state.targeting) state.onPlayerInspect?.(current);
-    });
-    return { root, portrait, ring, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
-  }
+  useEffect(() => {
+    const app = appRef.current; const layer = effectLayerRef.current;
+    if (!app || !layer || !props.resolutionStep) return;
+    return animateResolutionStep(app, layer, props.resolutionStep, props.players, mapRef.current, tokenViewsRef.current);
+  }, [props.resolutionStep]);
 
   return <div className={`game-canvas${props.targeting ? ' is-targeting' : ''}`} ref={hostRef} aria-label="可旋转圆形战棋地图" />;
 }
 
+function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {
+  const root = new Container(); const ring = new Graphics();
+  const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL)); portrait.anchor.set(0.5, 1);
+  const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } }); name.anchor.set(0.5, 0);
+  const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
+  root.addChild(ring, portrait, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
+  const currentPlayer = () => propsRef.current.players.find((candidate) => candidate.playerId === playerId);
+  root.on('pointerover', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
+  root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
+  root.on('pointerout', () => propsRef.current.onPlayerHover?.(null));
+  root.on('pointertap', () => {
+    const player = currentPlayer(); if (!player) return;
+    if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
+    else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
+  });
+  return { root, portrait, ring, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
+}
+
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
-  const portraitHeight = playerCount > 12 ? 38 : playerCount > 8 ? 48 : 64;
-  const portraitWidth = portraitHeight * 0.72;
-  view.portrait.width = portraitWidth;
-  view.portrait.height = portraitHeight;
-  view.portrait.position.set(0, 8);
+  const portraitHeight = playerCount > 12 ? 44 : playerCount > 8 ? 54 : 76;
+  view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
   const assetUrl = resolvePortraitUrl(player.characterId, player.currentFormId);
   if (assetUrl !== view.assetUrl) {
     view.assetUrl = assetUrl;
-    void Assets.load<Texture>(assetUrl).then((texture) => {
-      if (view.assetUrl === assetUrl) view.portrait.texture = texture;
-    }).catch(() => { view.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
+    void loadTrimmedTexture(assetUrl).then((texture) => { if (view.assetUrl === assetUrl) view.portrait.texture = texture; }).catch(() => { view.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
   }
-
   const targetable = props.targeting && props.targetablePlayerIds?.includes(player.playerId);
-  const selected = props.selectedTargetId === player.playerId;
-  const dimmedForTargeting = props.targeting && !targetable;
-  view.root.alpha = !player.connected ? 0.22 : !player.alive ? 0.38 : dimmedForTargeting ? 0.28 : 1;
-  const ringRadius = portraitWidth * 0.62;
-  view.ring.clear()
-    .ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32))
-    .fill({ color: player.color, alpha: 0.3 })
-    .stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
-  view.name.text = truncate(player.nickname, playerCount > 12 ? 6 : 12);
-  view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12;
-  view.name.position.set(0, 11);
-  const resources = Object.values(player.resources)
-    .sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999))
-    .map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${resource.current}`)
-    .join(' · ');
-  view.status.text = player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰';
-  view.status.style.fontSize = playerCount > 12 ? 8 : 10;
-  view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  const selected = props.selectedTargetIds?.includes(player.playerId);
+  view.root.alpha = !player.connected ? 0.22 : !player.alive ? 0.38 : props.targeting && !targetable ? 0.28 : 1;
+  const ringRadius = portraitHeight * 0.34;
+  view.ring.clear().ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32)).fill({ color: player.color, alpha: 0.3 }).stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
+  view.name.text = truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
+  const resources = Object.values(player.resources).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${resource.current}`).join(' · ');
+  view.status.text = player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
 }
 
-function installRotationGestures(app: Application, map: CircularMap, redraw: () => void): void {
-  let dragging = false;
-  let lastAngle = 0;
+function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {
+  let dragging = false; let lastAngle = 0; let velocity = 0; let moved = 0; let inertiaFrame = 0;
   app.stage.on('pointerdown', (event: FederatedPointerEvent) => {
     if (event.target !== app.stage) return;
-    dragging = true;
+    cancelAnimationFrame(inertiaFrame); dragging = true; moved = 0; velocity = 0;
     lastAngle = Math.atan2(event.global.y - app.screen.height / 2, event.global.x - app.screen.width / 2);
   });
   app.stage.on('globalpointermove', (event: FederatedPointerEvent) => {
     if (!dragging) return;
     const nextAngle = Math.atan2(event.global.y - app.screen.height / 2, event.global.x - app.screen.width / 2);
-    let delta = nextAngle - lastAngle;
-    if (delta > Math.PI) delta -= Math.PI * 2;
-    if (delta < -Math.PI) delta += Math.PI * 2;
-    map.setViewRotation(map.rotationRadians + delta);
-    lastAngle = nextAngle;
-    redraw();
+    let delta = nextAngle - lastAngle; if (delta > Math.PI) delta -= Math.PI * 2; if (delta < -Math.PI) delta += Math.PI * 2;
+    map.setViewRotation(map.rotationRadians + delta); velocity = velocity * 0.6 + delta * 0.4; moved += Math.abs(delta); lastAngle = nextAngle; reposition();
   });
-  const stop = () => { dragging = false; };
-  app.stage.on('pointerup', stop);
-  app.stage.on('pointerupoutside', stop);
+  const stop = () => {
+    dragging = false;
+    if (moved < 0.015 || Math.abs(velocity) < 0.001) return;
+    const tick = () => { velocity *= 0.92; if (Math.abs(velocity) < 0.0002) return; map.setViewRotation(map.rotationRadians + velocity); reposition(); inertiaFrame = requestAnimationFrame(tick); };
+    inertiaFrame = requestAnimationFrame(tick);
+  };
+  app.stage.on('pointerup', stop); app.stage.on('pointerupoutside', stop);
 }
 
-function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+const trimmedTextureCache = new Map<string, Promise<Texture>>();
+function loadTrimmedTexture(url: string): Promise<Texture> {
+  const cached = trimmedTextureCache.get(url); if (cached) return cached;
+  const promise = new Promise<Texture>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const source = document.createElement('canvas'); source.width = image.naturalWidth; source.height = image.naturalHeight;
+      const context = source.getContext('2d', { willReadFrequently: true }); if (!context) return resolve(Texture.from(image));
+      context.drawImage(image, 0, 0); const pixels = context.getImageData(0, 0, source.width, source.height).data;
+      let left = source.width; let right = 0; let top = source.height; let bottom = 0;
+      for (let y = 0; y < source.height; y += 2) for (let x = 0; x < source.width; x += 2) if (pixels[(y * source.width + x) * 4 + 3] >= 8) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
+      if (right <= left || bottom <= top) return resolve(Texture.from(image));
+      const padding = Math.max(4, Math.round(Math.max(right - left, bottom - top) * 0.05)); left = Math.max(0, left - padding); top = Math.max(0, top - padding); right = Math.min(source.width - 1, right + padding); bottom = Math.min(source.height - 1, bottom + padding);
+      const scale = Math.min(1, 512 / Math.max(right - left + 1, bottom - top + 1)); const output = document.createElement('canvas'); output.width = Math.max(1, Math.round((right - left + 1) * scale)); output.height = Math.max(1, Math.round((bottom - top + 1) * scale));
+      output.getContext('2d')?.drawImage(source, left, top, right - left + 1, bottom - top + 1, 0, 0, output.width, output.height); resolve(Texture.from(output));
+    };
+    image.onerror = reject; image.src = url;
+  });
+  trimmedTextureCache.set(url, promise); return promise;
 }
+
+function animateResolutionStep(app: Application, layer: Container, step: ResolutionStep, players: SyncedPlayer[], map: CircularMap | null, views: Map<string, TokenView>): () => void {
+  layer.removeChildren().forEach((child) => child.destroy());
+  const animations: Array<{ display: Text; from: ScreenPoint; to: ScreenPoint; lift: number; stationary: boolean }> = [];
+  const impacts: Text[] = [];
+  const defendingPlayerIds = new Set(step.actors.filter((actor) => isDefenseAction(actor.actionId)).map((actor) => actor.playerId));
+  for (const actor of step.actors) {
+    const sourcePlayer = players.find((player) => player.playerId === actor.playerId); if (!sourcePlayer || !map) continue;
+    const source = map.getGridCoordinates(sourcePlayer.gridIndex); const targetPlayer = players.find((player) => player.playerId === actor.targetIds[0]); const target = targetPlayer ? map.getGridCoordinates(targetPlayer.gridIndex) : { x: source.x, y: source.y - 52 };
+    const stationary = isDefenseAction(actor.actionId);
+    const from = { x: source.x, y: source.y - 28 };
+    const to = stationary ? from : { x: target.x, y: target.y - 28 };
+    const display = new Text({ text: effectEmoji(actor.actionId), style: { fontSize: stationary ? 42 : 30, dropShadow: true } });
+    display.anchor.set(0.5); display.position.set(from.x, from.y); layer.addChild(display);
+    animations.push({ display, from, to, lift: targetPlayer ? 0 : 12, stationary });
+    if (targetPlayer && defendingPlayerIds.has(targetPlayer.playerId) && isAttackAction(actor.actionId)) {
+      const impact = new Text({ text: '💥', style: { fontSize: 26, dropShadow: true } });
+      impact.anchor.set(0.5); impact.position.set(target.x, target.y - 28); impact.alpha = 0; impact.scale.set(0.2); layer.addChild(impact); impacts.push(impact);
+    }
+    if (actor.transformCharacterId) {
+      const view = views.get(actor.playerId); const character = characterById.get(actor.transformCharacterId); const assetId = character?.forms[0]?.defaultAssetId; const url = assetId ? assetById.get(assetId)?.url : undefined;
+      if (view && url) void loadTrimmedTexture(url).then((texture) => { view.portrait.texture = texture; view.assetUrl = url; });
+    }
+  }
+  const start = performance.now();
+  const update = () => {
+    const progress = Math.min(1, (performance.now() - start) / step.durationMs); const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - ((-2 * progress + 2) ** 3) / 2;
+    for (const animation of animations) {
+      animation.display.position.set(animation.from.x + (animation.to.x - animation.from.x) * eased, animation.from.y + (animation.to.y - animation.from.y) * eased - Math.sin(Math.PI * eased) * animation.lift);
+      animation.display.alpha = progress > 0.86 ? (1 - progress) / 0.14 : 1;
+      animation.display.scale.set(animation.stationary ? 1 + Math.sin(Math.PI * progress) * 0.12 : 1 + Math.sin(Math.PI * progress) * 0.2);
+    }
+    const impactProgress = Math.max(0, Math.min(1, (progress - 0.68) / 0.2));
+    for (const impact of impacts) { impact.alpha = impactProgress < 0.75 ? impactProgress / 0.75 : (1 - impactProgress) / 0.25; impact.scale.set(0.2 + impactProgress * 1.15); }
+  };
+  app.ticker.add(update);
+  return () => { app.ticker.remove(update); layer.removeChildren().forEach((child) => child.destroy()); };
+}
+
+function isDefenseAction(actionId: string): boolean { return ['defend', 'axe_defend', 'super_defend'].includes(actionId); }
+function isAttackAction(actionId: string): boolean { return ['fist', 'slash', 'wave', 'atomic_breath', 'chop', 'hangup'].includes(actionId); }
+
+function effectEmoji(actionId: string): string {
+  if (actionId === 'fist') return '👊'; if (actionId === 'slash' || actionId === 'chop') return '⚔️'; if (['defend', 'axe_defend', 'super_defend'].includes(actionId)) return '🛡️'; if (actionId === 'transform') return '✨'; if (actionId === 'atomic_breath') return '☄️'; if (actionId === 'heal') return '💚'; if (actionId === 'charge' || actionId === 'gain_charge') return '⚡'; return '💥';
+}
+function truncate(value: string, maxLength: number): string { return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value; }

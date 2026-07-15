@@ -4,8 +4,26 @@ import { gameConfig, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.actions).toHaveLength(7);
-    expect(gameConfig.characters[0].forms[0].unlockedActions).toHaveLength(7);
+    expect(gameConfig.version).toBe(5);
+    expect(gameConfig.actions).toHaveLength(16);
+    expect(gameConfig.actions.map((action) => action.category)).toContain('base');
+    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang']);
+    expect(gameConfig.characters[0].forms[0].unlockedActions).toEqual(['charge', 'gain_charge', 'defend', 'steal', 'double_steal', 'chop', 'super_defend', 'transform']);
+    expect(gameConfig.actions.find((action) => action.id === 'transform')?.cost).toEqual({});
+    expect(gameConfig.characters.slice(1).every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
+    expect(gameConfig.characters.every((character) => Object.keys(character.transformationCost).length === 0)).toBe(true);
+    expect(gameConfig.buffs.map((buff) => buff.id)).toEqual(expect.arrayContaining(['axe_raised', 'fragile']));
+  });
+
+  it('keeps every base skill after transformation and only appends character skills', () => {
+    const base = gameConfig.characters[0].forms[0].unlockedActions.filter((id) => id !== 'transform');
+    for (const character of gameConfig.characters.slice(1)) {
+      expect(character.forms[0].unlockedActions).toEqual(expect.arrayContaining(base));
+    }
+    expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
+    expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');
+    expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('axe_defend');
+    expect(gameConfig.actions.find((action) => action.id === 'axe_defend')?.unlockRequirements?.allBuffs).toEqual(['axe_raised']);
   });
 
   it('rejects duplicate ids and invalid references', () => {
@@ -13,6 +31,9 @@ describe('game configuration', () => {
     const invalid = structuredClone(gameConfig);
     invalid.characters[0].forms[0].defaultAssetId = 'missing';
     expect(() => validateGameConfig(invalid)).toThrow(/missing asset/);
+    const invalidCost = structuredClone(gameConfig);
+    invalidCost.characters[0].transformationCost = { missing: 1 };
+    expect(() => validateGameConfig(invalidCost)).toThrow(/transformation cost/);
   });
 
   it('rejects invalid categories, costs, target modes and handlers', () => {
@@ -21,11 +42,19 @@ describe('game configuration', () => {
       (config: any) => { config.actions[0].cost = { missing: 1 }; },
       (config: any) => { config.actions[0].target.mode = 'friend'; },
       (config: any) => { config.actions[0].effects = [{ handler: 'eval' }]; },
+      (config: any) => { config.actions[0].unlockRequirements = { allBuffs: ['missing'], description: 'test' }; },
     ]) {
       const invalid = structuredClone(gameConfig) as any;
       mutate(invalid);
       expect(() => validateGameConfig(invalid)).toThrow();
     }
+  });
+
+  it('reserves planned and deferred target timing without enabling deferred skills yet', () => {
+    expect(gameConfig.actions.every((action) => action.target.selectionTiming !== 'deferred')).toBe(true);
+    const invalid = structuredClone(gameConfig) as any;
+    invalid.actions[0].target.selectionTiming = 'late-ish';
+    expect(() => validateGameConfig(invalid)).toThrow(/selection timing/);
   });
 });
 
