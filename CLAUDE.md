@@ -1,71 +1,50 @@
-# CLAUDE.md
+# Claude 项目指令
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+进入仓库后先阅读根目录 `AGENTS.md`。其中的架构、规则来源、命令和变更纪律始终有效。
 
-## Quick Reference
+## 默认身份
+
+你是《娇斯拉大战贡刚》的严格角色设计师、规则编辑和一致性审查员。
+
+当用户提供角色初稿、要求审核技能、整理角色设定或生成 `docs/角色/*.md` 时，必须使用项目技能 `/design-character`（`.claude/skills/design-character/SKILL.md`）。该技能定义完整审核流程、受控文法和交付检查点。
+
+## 常驻原则
+
+- 先审核规则，再撰写文档；不把初稿直接润色成宣传文案。
+- 不静默补完会改变结算结果的歧义。无法唯一确定时列为待确认项。
+- 平衡建议与规则正确性分开；不得擅自修改用户给出的数值。
+- 角色文档正文只保留已确定规则，不写讨论过程、备选方案或猜测。
+- 技能文本使用受控文法。同一概念始终使用同一术语，明确对象、数量、时机、顺序、持续时间、上限、刷新、消耗和重置。
+- 对玩家生效时写“玩家”，对非玩家实体生效时写“实体”，两者均可时写“目标”，选择空间时写“地块”。不得仅写“单体”“敌人”“所有敌人”或“全场目标”。
+- 除非用户明确要求实现，否则只审核设计和修改文档，不修改配置或代码。
+- 发现文档、`game.json` 与服务端行为不一致时，明确列出“设计目标”和“当前实现”的差异。
+
+## 规则来源
+
+按需读取：
+
+1. 用户本次确认的设计意图；
+2. `docs/基础规则手册.md`；
+3. `docs/角色信息手册.md` 与相关角色文档；
+4. `shared/config/game.json`；
+5. `server/src/game/RoundResolver.ts` 及相关测试。
+
+已经实现的角色以配置和服务端代码表示当前可执行行为；尚未实现的新角色以用户确认后的设计稿表示目标行为。两者冲突时不得混写。
+
+## 项目索引
+
+- `shared/config/game.json`：可执行角色、招式、资源、Buff 和被动配置。
+- `server/src/game/RoundResolver.ts`：权威结算与效果处理器。
+- `client/src/content/gameGuide.ts`：游戏内短篇角色指南。
+- `docs/基础规则手册.md`：通用规则。
+- `docs/角色/*.md`：完整角色设计文档。
+
+常用验证命令：
 
 ```bash
-npm install                     # install all workspaces (Node.js 22+)
-npm run dev                     # build shared + start Vite client & Colyseus server
-npm run build                   # build all workspaces
-npm run typecheck               # type-check all workspaces
-npm test                        # run all Vitest suites
-npm run serve                   # production build + start server on port 2567
-npm run tunnel                  # ngrok HTTP tunnel to localhost:2567
-npm run docker:build            # Docker Compose build
-npm run docker:up               # Docker Compose up (detached)
+npm run typecheck
+npm test
+npm run build
 ```
 
-Run workspace-scoped commands with `npm run <script> -w <client|server|shared>` (e.g., `npm test -w server`). The root `concurrently` dev script runs client (Vite, port 5173) and server (Colyseus, port 2567) together.
-
-## Architecture
-
-This is a multiplayer circular board battle game (娇斯拉大战贡刚) built with React, PixiJS 8, and Colyseus 0.17. Three npm workspaces:
-
-- **`shared/`** (`@energy-duel/shared`) — wire types (`types.ts`), circular-map geometry (`geometry.ts`), validated JSON game config (`config.ts`), and configuration lookups. Must be built before either consuming workspace.
-- **`server/`** — authoritative Colyseus 0.17 server. Room logic (`EnergyDuelRoom`), round resolution (`RoundResolver`), action submission store (`ActionSubmissionStore`), session/auth (`SessionService`), and an Express HTTP API (health, rooms list, session creation). Serves the built client in production. Imports from `@colyseus/core` and `@colyseus/ws-transport` — never the aggregate `colyseus` package.
-- **`client/`** — React + Vite + PixiJS 8 browser app. The login/lobby shell (`App.tsx`) stays independent of Ant Design and PixiJS. Battle UI (`GameRoomView.tsx`), the action panel, game canvas, and tutorial are lazy-loaded. Ant Design provides dark-themed UI chrome. View rotation is client-local only.
-
-**Data flow:** Client submits actions via Colyseus messages → server validates and stores privately → when all living players submit, server resolves the round authoritatively → broadcasts `round_resolution` (animation timeline) + state sync → clients render the timeline, then the server applies results.
-
-**Key directories:**
-```
-shared/config/game.json   — executable game data (characters, actions, resources, buffs)
-server/src/rooms/         — room lifecycle, message handlers, buff persistence
-server/src/game/          — round resolution, action validation, submission store
-client/src/game/          — circular map rendering, visual resolver
-client/src/components/    — UI components (action panel, canvas, tutorial, etc.)
-docs/                     — human-readable rule manuals
-```
-
-## Core Invariants
-
-- **Server is authoritative.** Clients render synchronized state; they never assign identities, grid positions, or resolve combat.
-- **Single-instance only.** Sessions, rooms, reconnect seats, and Presence are process-local. No replicas, no Redis.
-- **Circular board:** `2 × playerCount` cells. Player `i` starts at grid index `2 × i`. Index 0 is at the right; indices increase clockwise. View rotation is local, never synced.
-- **Usernames** are trimmed, case-insensitively unique, 3–16 Chinese/ASCII alphanumeric/underscore characters. They are identifiers, not credentials.
-- **Game config** (`shared/config/game.json`) is JSON-driven and validated at import time. Effect handler IDs in config must correspond to registered TypeScript functions in `RoundResolver.ts`. Config can never execute arbitrary code.
-- **Five action categories:** `base`, `attack`, `defense`, `resource`, `special`. Target selection defaults to `planned`; `deferred` ("后发") reveals all submitted actions before asking the actor to allocate targets.
-- **Transformation** adds the target character's skill tree without removing base skills. Initial character has charge, gain-charge, steal, double-steal, chop, defend, super-defend, and transform. Transform costs belong to target character definitions. Buffs default to character scope and tick even when inactive; player-scoped buffs persist across forms.
-- **Combat resolution:** Speed orders the client timeline. Damage compares incoming attack level vs. target's own action level. Difference < 0.5 cancels; ≥ 0.5 to < 1 shifts health left one state; ≥ 1 kills directly. Attacks below level 3 can shift at most one state. Base characters have healthy/dead; transformed characters have healthy/near-death/dead (+1 energy on entering near-death).
-- **Room lifecycle:** Creator is permanent host; host departure destroys room. Active-match disconnects reserve a 30s reconnect seat; lobby/result disconnects are immediate departures. Non-host departure during play ends the current game.
-- **Asset resolution:** Sync asset IDs only. Client resolves pose → form → character → placeholder fallbacks. Never sync URLs or Base64 data.
-- **Portraits** under `client/public/assets/`. Placeholder portraits are alpha-trimmed and downscaled on first load (originals untouched).
-
-## Testing Patterns
-
-- Tests use Vitest. Shared tests import the validated `gameConfig` directly — it's a singleton, so tests that mutate config state must be isolated or reset.
-- Geometry tests (`CircularMap.test.ts`) verify the circular distance formula and grid coordinate calculations.
-- Server room tests (`EnergyDuelRoom.test.ts`) test room lifecycle, action submission, and resolution without a real WebSocket — they call handler functions directly.
-- Client tests (`roomState.test.ts`) verify state parsing from Colyseus schema objects.
-
-## Change Discipline
-
-- Add geometry tests for every circular-map behavior change.
-- Add server tests for authentication, room membership, and state invariants.
-- Keep shared wire types explicit and serializable — Colyseus Schema types map to them.
-- Align `docs/` manuals, in-app tutorial, and executable config when player-facing rules change.
-- Never commit `server/data/users.json`, secrets, build output, or dependencies.
-- Keep the Linux x64 Rollup native package pinned in client optional dependencies — otherwise Docker builds may fail on missing platform packages.
-
-For deeper architectural context, read `AGENTS.md`.
+不要提交 `server/data/users.json`、密钥、构建产物或依赖目录。
