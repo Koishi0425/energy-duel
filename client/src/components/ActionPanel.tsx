@@ -138,9 +138,22 @@ function reconcileLayout(layout: ActionLayout, actions: ActionDefinition[]): Act
   return { categories, actionCategories, actionOrder, hiddenActionIds: layout.hiddenActionIds ?? [], detachedCategoryIds: (layout.detachedCategoryIds ?? []).filter((id) => validCategories.has(id)) };
 }
 function actionsForCategory(categoryId: string, actions: ActionDefinition[], layout: ActionLayout): ActionDefinition[] { const byId = new Map(actions.map((action) => [action.id, action])); return (layout.actionOrder[categoryId] ?? []).filter((id) => !layout.hiddenActionIds.includes(id)).map((id) => byId.get(id)).filter((action): action is ActionDefinition => Boolean(action)); }
-function canAfford(player: SyncedPlayer, action: ActionDefinition): boolean { return Object.entries(action.cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) >= amount); }
+function canAfford(player: SyncedPlayer, action: ActionDefinition): boolean {
+  if (!Object.entries(action.cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) >= amount)) return false;
+  return !action.variable || (player.resources[action.variable.resourceId]?.current ?? 0) >= action.variable.costPerPower * action.variable.minPower;
+}
 function canAffordCost(player: SyncedPlayer, cost: Record<string, number>): boolean { return Object.entries(cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) >= amount); }
-function meetsUnlockRequirements(player: SyncedPlayer, action: ActionDefinition): boolean { const buffs = new Set(player.buffs.map((buff) => buff.buffId)); return (action.unlockRequirements?.allBuffs ?? []).every((buffId) => buffs.has(buffId)); }
-function formatCost(action: ActionDefinition): string { const entries = Object.entries(action.cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
+function meetsUnlockRequirements(player: SyncedPlayer, action: ActionDefinition): boolean {
+  const buffs = new Map(player.buffs.map((buff) => [buff.buffId, buff.stacks]));
+  const requirements = action.unlockRequirements;
+  return (requirements?.allBuffs ?? []).every((buffId) => buffs.has(buffId))
+    && (requirements?.noneBuffs ?? []).every((buffId) => !buffs.has(buffId))
+    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (buffs.get(buffId) ?? 0) >= stacks);
+}
+function formatCost(action: ActionDefinition): string {
+  const entries = Object.entries(action.cost).map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`);
+  if (action.variable) entries.push(`${action.variable.costPerPower}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`);
+  return entries.length === 0 ? '无消耗' : entries.join('、');
+}
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
-function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }
+function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.maxTargetsByPower) return '后发分配 n 次'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }

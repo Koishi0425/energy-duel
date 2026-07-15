@@ -4,10 +4,10 @@ import { gameConfig, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(5);
-    expect(gameConfig.actions).toHaveLength(16);
+    expect(gameConfig.version).toBe(6);
+    expect(gameConfig.actions).toHaveLength(26);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
-    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang']);
+    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent']);
     expect(gameConfig.characters[0].forms[0].unlockedActions).toEqual(['charge', 'gain_charge', 'defend', 'steal', 'double_steal', 'chop', 'super_defend', 'transform']);
     expect(gameConfig.actions.find((action) => action.id === 'transform')?.cost).toEqual({});
     expect(gameConfig.characters.slice(1).every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
@@ -23,6 +23,7 @@ describe('game configuration', () => {
     expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('axe_defend');
+    expect(gameConfig.characters[3].forms[0].unlockedActions).toEqual(expect.arrayContaining(['stardust', 'sovereign_blade', 'summon_forth']));
     expect(gameConfig.actions.find((action) => action.id === 'axe_defend')?.unlockRequirements?.allBuffs).toEqual(['axe_raised']);
   });
 
@@ -50,8 +51,8 @@ describe('game configuration', () => {
     }
   });
 
-  it('reserves planned and deferred target timing without enabling deferred skills yet', () => {
-    expect(gameConfig.actions.every((action) => action.target.selectionTiming !== 'deferred')).toBe(true);
+  it('enables deferred target timing for Stardust and rejects unknown timing values', () => {
+    expect(gameConfig.actions.filter((action) => action.target.selectionTiming === 'deferred').map((action) => action.id)).toEqual(['stardust']);
     const invalid = structuredClone(gameConfig) as any;
     invalid.actions[0].target.selectionTiming = 'late-ish';
     expect(() => validateGameConfig(invalid)).toThrow(/selection timing/);

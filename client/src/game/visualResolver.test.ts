@@ -9,4 +9,8 @@ describe('resolvePortraitUrl', () => {
   it('falls back for unknown characters and forms', () => {
     expect(resolvePortraitUrl('missing', 'missing')).toBe(FALLBACK_PORTRAIT_URL);
   });
+
+  it('resolves the Regent portrait asset', () => {
+    expect(resolvePortraitUrl('regent', 'base')).toBe('/assets/regent.png');
+  });
 });

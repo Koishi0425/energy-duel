@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineRoom, defineServer } from '@colyseus/core';
+import { defineRoom, defineServer, matchMaker } from '@colyseus/core';
 import express from 'express';
 import { EnergyDuelRoom } from './rooms/EnergyDuelRoom.js';
+import { summarizeJoinableRooms } from './rooms/roomDirectory.js';
 import { sessionService } from './services.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,19 @@ const server = defineServer({
         uptimeSeconds: Math.floor(process.uptime()),
         timestamp: new Date().toISOString(),
       });
+    });
+
+    app.get('/api/rooms', async (_request, response) => {
+      try {
+        const listings = await matchMaker.driver.query({ name: 'energy_duel_demo' });
+        response.setHeader('Cache-Control', 'no-store');
+        response.json({
+          rooms: summarizeJoinableRooms(listings),
+          generatedAt: new Date().toISOString(),
+        });
+      } catch {
+        response.status(503).json({ error: '暂时无法读取房间列表' });
+      }
     });
 
     app.post('/api/session', (request, response) => {

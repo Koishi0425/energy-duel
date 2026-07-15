@@ -1,4 +1,4 @@
-import type { SessionResponse } from '@energy-duel/shared';
+import type { PublicRoomListResponse, SessionResponse } from '@energy-duel/shared';
 
 const STORAGE_KEY = 'energy-duel-session';
 
@@ -34,5 +34,12 @@ export async function createSession(username: string): Promise<SessionResponse> 
   const body = await response.json() as SessionResponse & { error?: string };
   if (!response.ok) throw new Error(body.error || '无法创建会话');
   saveSession(body);
+  return body;
+}
+
+export async function fetchPublicRooms(signal?: AbortSignal): Promise<PublicRoomListResponse> {
+  const response = await fetch(`${getServerUrl()}/api/rooms`, { signal, cache: 'no-store' });
+  const body = await response.json() as PublicRoomListResponse & { error?: string };
+  if (!response.ok) throw new Error(body.error || '无法读取房间列表');
   return body;
 }

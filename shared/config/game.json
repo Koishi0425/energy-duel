@@ -1,17 +1,24 @@
 {
-  "version": 5,
+  "version": 6,
   "resources": [
     { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10 },
-    { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20 }
+    { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20 },
+    { "id": "stars", "name": "辉星", "shortName": "星", "color": "#ffd86b", "displayOrder": 30 }
   ],
   "buffs": [
     { "id": "axe_raised", "name": "举斧", "description": "贡刚已经举起战斧；之后使用斩时等级提高 0.5。", "color": "#c99555", "scope": "character" },
-    { "id": "fragile", "name": "脆弱", "description": "受到任何有效伤害或健康状态左移时会直接死亡。", "color": "#ff6f91", "scope": "character" }
+    { "id": "fragile", "name": "脆弱", "description": "受到任何有效伤害或健康状态左移时会直接死亡。", "color": "#ff6f91", "scope": "character" },
+    { "id": "regent_claimed", "name": "辉星君权", "description": "本局已经获得过储君首次变身的 3 点辉星。", "color": "#ffd86b", "scope": "player" },
+    { "id": "iridescence_afterglow", "name": "流光余辉", "description": "下回合结算受到的攻击时，自身招式等级最低视为 1.5。", "color": "#fff0a6", "scope": "character" },
+    { "id": "hidden_cache_pending", "name": "隐秘藏品", "description": "下回合开始时获得 3 辉星，然后移除此状态。", "color": "#f5ca66", "scope": "character" },
+    { "id": "sovereign_blade_forged", "name": "君王之剑", "description": "当前层数即君王之剑的锻造等级，最高为 3。", "color": "#ff9f43", "scope": "character" },
+    { "id": "sovereign_blade_active", "name": "王剑激活", "description": "君王之剑已经激活，可以发动一次攻击。", "color": "#ffcc66", "scope": "character" }
   ],
   "assets": [
     { "id": "portrait_default", "url": "/assets/default-character.png" },
     { "id": "portrait_jiaosila", "url": "/assets/jiaosila.png" },
-    { "id": "portrait_gonggang", "url": "/assets/gonggang.png" }
+    { "id": "portrait_gonggang", "url": "/assets/gonggang.png" },
+    { "id": "portrait_regent", "url": "/assets/regent.png" }
   ],
   "characters": [
     {
@@ -20,7 +27,7 @@
         "id": "base", "name": "基础形态", "defaultAssetId": "portrait_default", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "transform"]
       }],
-      "transformations": ["jiaosila", "gonggang"], "transformationCost": {}
+      "transformations": ["jiaosila", "gonggang", "regent"], "transformationCost": {}
     },
     {
       "id": "jiaosila", "name": "娇斯拉", "defaultAssetId": "portrait_jiaosila",
@@ -28,7 +35,7 @@
         "id": "base", "name": "原子形态", "defaultAssetId": "portrait_jiaosila", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "atomic_breath", "transform"]
       }],
-      "transformations": ["default_character", "gonggang"], "transformationCost": {}
+      "transformations": ["default_character", "gonggang", "regent"], "transformationCost": {}
     },
     {
       "id": "gonggang", "name": "贡刚", "defaultAssetId": "portrait_gonggang",
@@ -36,7 +43,15 @@
         "id": "base", "name": "战斧形态", "defaultAssetId": "portrait_gonggang", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "raise_axe", "axe_defend", "transform"]
       }],
-      "transformations": ["default_character", "jiaosila"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "regent"], "transformationCost": {}
+    },
+    {
+      "id": "regent", "name": "储君", "description": "群星王座的继承人。拥有宇宙的力量，但总是让他的仆从们去做各种事情。", "defaultAssetId": "portrait_regent",
+      "forms": [{
+        "id": "base", "name": "辉星王储", "defaultAssetId": "portrait_regent", "poses": {},
+        "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "collect_light", "iridescence", "hidden_cache", "particle_wall", "winning_hand", "stardust", "forge_sword", "forge_wall", "sovereign_blade", "summon_forth", "transform"]
+      }],
+      "transformations": ["default_character", "jiaosila", "gonggang"], "transformationCost": {}
     }
   ],
   "actions": [
@@ -54,6 +69,16 @@
     { "id": "atomic_breath", "name": "原子吐息", "category": "attack", "description": "娇斯拉专属的 3 级攻击。", "cost": { "energy": 2, "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "atomic_breath" }], "vfxId": "atomic_breath" },
     { "id": "raise_axe", "name": "举斧", "category": "special", "description": "解锁斧挡，之后斩的等级提高 0.5。", "cost": { "energy": 2 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "raise_axe" }], "vfxId": "raise_axe" },
     { "id": "axe_defend", "name": "斧挡", "category": "defense", "description": "2.5 级格挡；破防时返还 1 气。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2.5, "effects": [{ "handler": "axe_defend" }], "vfxId": "axe_shield", "unlockRequirements": { "allBuffs": ["axe_raised"], "description": "需要先使用「举斧」" } },
+    { "id": "collect_light", "name": "收集光辉", "category": "defense", "description": "2 级格挡；若完全抵消至少一次攻击且没有受到伤害，结算后获得 1 辉星。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2, "effects": [{ "handler": "collect_light" }], "vfxId": "collect_light" },
+    { "id": "iridescence", "name": "流光溢彩", "category": "defense", "description": "本回合 3 级格挡；下回合受到攻击时，自身招式等级最低视为 1.5。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 3, "effects": [{ "handler": "iridescence" }], "vfxId": "iridescence" },
+    { "id": "hidden_cache", "name": "隐秘藏品", "category": "resource", "description": "获得 1 辉星；下回合开始时再获得 3 辉星。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "hidden_cache" }], "vfxId": "hidden_cache" },
+    { "id": "particle_wall", "name": "粒子墙", "category": "defense", "description": "选择正整数 n，消耗 2n 辉星并获得 2n 级格挡。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 2, "levelPerPower": 2, "minPower": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "particle_wall" }], "vfxId": "particle_wall" },
+    { "id": "winning_hand", "name": "胜券在王", "category": "resource", "description": "消耗 5 辉星，获得 9 辉星；出招时处于脆弱状态。", "cost": { "stars": 5 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "winning_hand" }], "vfxId": "winning_hand" },
+    { "id": "stardust", "name": "星尘", "category": "attack", "description": "选择正整数 n 并消耗 n 辉星；公开行动后，将总计 n/2 级攻击以 0.5 级为单位后发分配，可对同一目标累加。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 1, "levelPerPower": 0.5, "minPower": 1 }, "target": { "mode": "multiple_enemies", "selectionTiming": "deferred", "maxTargetsByPower": true }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "stardust" }], "vfxId": "stardust" },
+    { "id": "forge_sword", "name": "铸剑者", "category": "resource", "description": "锻造 3；首次锻造时激活君王之剑。", "cost": { "energy": 1, "stars": 4 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "forge_sword" }], "vfxId": "forge_sword" },
+    { "id": "forge_wall", "name": "筑墙", "category": "defense", "description": "本回合获得 2.5 级格挡并锻造 1；首次锻造时激活君王之剑。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 2.5, "effects": [{ "handler": "forge_wall" }], "vfxId": "forge_wall" },
+    { "id": "sovereign_blade", "name": "君王之剑", "category": "attack", "description": "以当前锻造等级发动攻击，最高 3 级；使用后进入锁定，继续锻造不会解除锁定。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "sovereign_blade" }], "vfxId": "sovereign_blade", "unlockRequirements": { "allBuffs": ["sovereign_blade_forged", "sovereign_blade_active"], "description": "需要君王之剑已经生成且处于激活状态" } },
+    { "id": "summon_forth", "name": "征召上前", "category": "special", "description": "锻造 0.5 并生成或重新激活君王之剑。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "summon_forth" }], "vfxId": "summon_forth", "unlockRequirements": { "noneBuffs": ["sovereign_blade_active"], "description": "君王之剑已经激活" } },
     { "id": "wave", "name": "波（兼容）", "category": "attack", "description": "兼容旧规则的一气攻击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "effects": [{ "handler": "wave" }], "vfxId": "wave" },
     { "id": "hangup", "name": "挂机（兼容）", "category": "attack", "description": "兼容旧规则的全场攻击。", "cost": { "energy": 3 }, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "hangup" }], "vfxId": "hangup" }
   ]

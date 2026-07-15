@@ -12,6 +12,7 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
         <Tag color={player.alive ? 'success' : 'error'}>{player.alive ? '存活' : '已淘汰'}</Tag>
       </div>
       <p className="form-line">{character?.name ?? player.characterId} · {form?.name ?? player.currentFormId}</p>
+      {character?.description && <p className="muted">{character.description}</p>}
       <div className="detail-section">
         <span>生命 {player.currentHp}/{player.maxHp}</span>
         <Progress percent={player.maxHp > 0 ? Math.round(player.currentHp / player.maxHp * 100) : 0} showInfo={false} status={player.alive ? 'active' : 'exception'} />

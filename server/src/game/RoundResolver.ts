@@ -16,6 +16,7 @@ export interface CombatPlayer {
   characterId?: string;
   currentFormId?: string;
   buffs?: Set<string>;
+  buffStacks?: Record<string, number>;
 }
 
 export interface SubmittedAction {
@@ -23,6 +24,7 @@ export interface SubmittedAction {
   targetId?: string;
   targetIds?: string[];
   transformCharacterId?: string;
+  power?: number;
 }
 
 export interface RoundResult {
@@ -38,14 +40,23 @@ export function validateAction(
 ): void {
   if (!player.alive) throw new Error('已淘汰玩家不能出招');
   const definition = requireAction(action.actionId);
-  for (const [resourceId, amount] of Object.entries(definition.cost)) {
+  const variable = definition.variable;
+  if (variable) {
+    if (!Number.isInteger(action.power) || (action.power ?? 0) < variable.minPower
+      || (variable.maxPower !== undefined && (action.power ?? 0) > variable.maxPower)) {
+      throw new Error('请选择有效的技能参数 n');
+    }
+  } else if (action.power !== undefined) throw new Error('该行动不接受参数 n');
+  for (const [resourceId, amount] of Object.entries(costForSubmittedAction(action))) {
     if (resourceValue(player, resourceId) < amount) throw new Error(`${resourceId}资源不足`);
   }
   const targets = actionTargets(action);
+  const deferredPending = definition.target.selectionTiming === 'deferred' && targets.length === 0;
   if (definition.target.mode === 'single_enemy') {
     if (targets.length !== 1) throw new Error('请选择其他存活玩家作为目标');
   } else if (definition.target.mode === 'multiple_enemies') {
-    if (targets.length !== definition.target.maxTargets) throw new Error(`请选择 ${definition.target.maxTargets} 次目标`);
+    const expected = definition.target.maxTargetsByPower ? action.power : definition.target.maxTargets;
+    if (!deferredPending && targets.length !== expected) throw new Error(`请选择 ${expected} 次目标`);
   } else if (targets.length > 0) {
     throw new Error('该行动不接受单体目标');
   }
@@ -101,18 +112,20 @@ export function resolveRound(
 ): RoundResult {
   const summary: string[] = [];
   const aliveAtStart = Array.from(players.values()).filter((player) => player.alive);
+  const hpAtStart = new Map(aliveAtStart.map((player) => [player.id, player.currentHp]));
   summary.push(`本回合行动：${aliveAtStart.map((player) => describeSubmittedAction(player, actions.get(player.id), players)).join('；')}。`);
   const effectFor = (playerId: string) => primaryEffect(actions.get(playerId));
   const hasChop = aliveAtStart.some((player) => effectFor(player.id) === 'chop');
   const immune = new Set(aliveAtStart.filter((player) => effectFor(player.id) === 'super_defend').map((player) => player.id));
   const blockers = new Map(aliveAtStart.flatMap((player) => {
-    const effect = effectFor(player.id);
-    return effect === 'defend' || effect === 'axe_defend'
-      ? [[player.id, requireAction(actions.get(player.id)!.actionId)]] as const
+    const action = actions.get(player.id);
+    return action && requireAction(action.actionId).category === 'defense'
+      ? [[player.id, requireAction(action.actionId)]] as const
       : [];
   }));
-  const fragile = new Set(aliveAtStart.filter((player) => ['fist', 'double_steal', 'heal'].includes(effectFor(player.id) ?? '')).map((player) => player.id));
+  const fragile = new Set(aliveAtStart.filter((player) => ['fist', 'double_steal', 'heal', 'winning_hand'].includes(effectFor(player.id) ?? '')).map((player) => player.id));
   const eliminated = new Set<string>();
+  const canceledAttackTargets = new Set<string>();
 
   for (const player of aliveAtStart) {
     const action = actions.get(player.id);
@@ -167,14 +180,35 @@ export function resolveRound(
       player.currentHp = Math.min(player.maxHp, player.currentHp + 1);
       summary.push(`${player.nickname} 使用治疗，进入${healthStateName(player)}。`);
     } else if (effect === 'raise_axe') {
-      player.buffs ??= new Set();
-      player.buffs.add('axe_raised');
+      setBuff(player, 'axe_raised');
       summary.push(`${player.nickname} 举起战斧。`);
+    } else if (effect === 'hidden_cache') {
+      player.resources.stars = resourceValue(player, 'stars') + 1;
+      setBuff(player, 'hidden_cache_pending');
+      summary.push(`${player.nickname} 使用隐秘藏品，获得 1 辉星，并将在下回合开始时再获得 3 辉星。`);
+    } else if (effect === 'winning_hand') {
+      player.resources.stars = resourceValue(player, 'stars') + 9;
+      summary.push(`${player.nickname} 使用胜券在王，获得 9 辉星。`);
+    } else if (effect === 'forge_sword') {
+      const level = forge(player, 3);
+      summary.push(`${player.nickname} 使用铸剑者，君王之剑锻造至 ${formatLevel(level)}。`);
+    } else if (effect === 'forge_wall') {
+      const level = forge(player, 1);
+      summary.push(`${player.nickname} 使用筑墙，君王之剑锻造至 ${formatLevel(level)}。`);
+    } else if (effect === 'summon_forth') {
+      const level = forge(player, 0.5);
+      setBuff(player, 'sovereign_blade_active');
+      summary.push(`${player.nickname} 征召君王之剑上前，锻造提升至 ${formatLevel(level)} 并重新激活。`);
     } else if (effect === 'transform') {
       player.characterId = actions.get(player.id)?.transformCharacterId ?? player.characterId;
       player.currentFormId = 'base';
       player.maxHp = player.characterId === 'default_character' ? 1 : 2;
       player.currentHp = player.maxHp;
+      if (player.characterId === 'regent' && !player.buffs?.has('regent_claimed')) {
+        player.resources.stars = resourceValue(player, 'stars') + 3;
+        setBuff(player, 'regent_claimed');
+        summary.push(`${player.nickname} 首次成为储君，获得 3 辉星。`);
+      }
       summary.push(`${player.nickname} 变身为${characterById.get(player.characterId ?? '')?.name ?? player.characterId}。`);
     }
   }
@@ -185,10 +219,25 @@ export function resolveRound(
     if (!submitted) continue;
     const definition = requireAction(submitted.actionId);
     const effect = primaryEffect(submitted);
-    if (!['wave', 'fist', 'slash', 'atomic_breath'].includes(effect ?? '')) continue;
-    for (const targetId of actionTargets(submitted)) {
+    if (!['wave', 'fist', 'slash', 'atomic_breath', 'sovereign_blade'].includes(effect ?? '')) continue;
+    for (const targetId of new Set(actionTargets(submitted))) {
       attackAttempts.add(targetId);
-      applyAttack(attacker, players.get(targetId), definition, actions, blockers, immune, fragile, eliminated, summary);
+      const outcome = applyAttack(attacker, players.get(targetId), definition, submittedActionLevel(attacker, submitted), actions, blockers, immune, fragile, eliminated, summary);
+      if (outcome === 'none') canceledAttackTargets.add(targetId);
+    }
+    if (effect === 'sovereign_blade') removeBuff(attacker, 'sovereign_blade_active');
+  }
+
+  for (const attacker of aliveAtStart) {
+    const submitted = actions.get(attacker.id);
+    if (!submitted || effectFor(attacker.id) !== 'stardust') continue;
+    const allocations = new Map<string, number>();
+    for (const targetId of actionTargets(submitted)) allocations.set(targetId, (allocations.get(targetId) ?? 0) + 0.5);
+    const definition = requireAction(submitted.actionId);
+    for (const [targetId, level] of allocations) {
+      attackAttempts.add(targetId);
+      const outcome = applyAttack(attacker, players.get(targetId), definition, level, actions, blockers, immune, fragile, eliminated, summary);
+      if (outcome === 'none') canceledAttackTargets.add(targetId);
     }
   }
 
@@ -214,6 +263,19 @@ export function resolveRound(
     }
   }
 
+  for (const player of aliveAtStart) {
+    const effect = effectFor(player.id);
+    if (effect === 'collect_light' && canceledAttackTargets.has(player.id) && player.currentHp === hpAtStart.get(player.id) && !eliminated.has(player.id)) {
+      player.resources.stars = resourceValue(player, 'stars') + 1;
+      summary.push(`${player.nickname} 的收集光辉完全抵消了攻击且没有受到伤害，获得 1 辉星。`);
+    }
+    removeBuff(player, 'iridescence_afterglow');
+    if (effect === 'iridescence') {
+      setBuff(player, 'iridescence_afterglow');
+      summary.push(`${player.nickname} 获得流光余辉，下回合自身招式等级最低视为 1.5。`);
+    }
+  }
+
   for (const playerId of eliminated) {
     const player = players.get(playerId);
     if (player) { player.alive = false; player.currentHp = 0; }
@@ -226,25 +288,23 @@ function applyAttack(
   attacker: CombatPlayer,
   target: CombatPlayer | undefined,
   attack: ActionDefinition,
+  attackerLevel: number,
   actions: ReadonlyMap<string, SubmittedAction>,
   blockers: Map<string, ActionDefinition>,
   immune: Set<string>,
   fragile: Set<string>,
   eliminated: Set<string>,
   summary: string[],
-): void {
-  if (!target) return;
-  if (immune.has(target.id)) { summary.push(`${target.nickname} 的超防挡住了 ${attacker.nickname}。`); return; }
+): DamageOutcome {
+  if (!target) return 'none';
+  if (immune.has(target.id)) { summary.push(`${target.nickname} 的超防挡住了 ${attacker.nickname}。`); return 'none'; }
   const block = blockers.get(target.id);
-  const attackerLevel = attack.id === 'slash' && attacker.buffs?.has('axe_raised') ? attack.level + 0.5 : attack.level;
   const targetAction = actions.get(target.id);
   const targetDefinition = targetAction ? requireAction(targetAction.actionId) : undefined;
-  const targetLevel = targetDefinition?.id === 'slash' && target.buffs?.has('axe_raised')
-    ? targetDefinition.level + 0.5
-    : targetDefinition?.level ?? 0;
+  const targetLevel = submittedActionLevel(target, targetAction);
   if (block && attackerLevel < targetLevel) {
     summary.push(`${target.nickname} 的${targetDefinition?.name ?? '格挡'}（${targetLevel}级）挡住了 ${attacker.nickname} 的${attack.name}（${attackerLevel}级）。`);
-    return;
+    return 'none';
   }
   if (block?.effects[0]?.handler === 'axe_defend') target.resources.energy = resourceValue(target, 'energy') + 1;
   const outcome = damagePlayer(target, attackerLevel, targetLevel, fragile.has(target.id), eliminated, false, attackerLevel < 3);
@@ -252,6 +312,7 @@ function applyAttack(
   if (outcome === 'eliminated') summary.push(`${comparison}：等级差 ${formatLevel(attackerLevel - targetLevel)}，${target.nickname} 进入死亡状态。`);
   else if (outcome === 'shifted_out' || outcome === 'shifted') summary.push(`${comparison}：等级差 ${formatLevel(attackerLevel - targetLevel)}，${target.nickname} 进入${healthStateName(target)}。`);
   else summary.push(`${comparison}：等级差不足 0.5，攻击被抵消。`);
+  return outcome;
 }
 
 type DamageOutcome = 'none' | 'shifted' | 'shifted_out' | 'eliminated';
@@ -287,6 +348,7 @@ function resolutionActor(playerId: string, action: SubmittedAction) {
     targetIds: actionTargets(action),
     poseId: definition.vfxId || undefined,
     transformCharacterId: action.transformCharacterId,
+    power: action.power,
   };
 }
 
@@ -308,9 +370,51 @@ function resourceValue(player: CombatPlayer, resourceId: string): number {
   return player.resources[resourceId] ?? 0;
 }
 
+function buffStacks(player: CombatPlayer, buffId: string): number {
+  if (!player.buffs?.has(buffId)) return 0;
+  return player.buffStacks?.[buffId] ?? 1;
+}
+
+function setBuff(player: CombatPlayer, buffId: string, stacks = 1): void {
+  player.buffs ??= new Set();
+  player.buffStacks ??= {};
+  player.buffs.add(buffId);
+  player.buffStacks[buffId] = stacks;
+}
+
+function removeBuff(player: CombatPlayer, buffId: string): void {
+  player.buffs?.delete(buffId);
+  if (player.buffStacks) delete player.buffStacks[buffId];
+}
+
+function forge(player: CombatPlayer, amount: number): number {
+  const previous = buffStacks(player, 'sovereign_blade_forged');
+  const next = Math.min(3, previous + amount);
+  setBuff(player, 'sovereign_blade_forged', next);
+  if (previous === 0) setBuff(player, 'sovereign_blade_active');
+  return next;
+}
+
+function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | undefined): number {
+  if (!action) return 0;
+  const definition = requireAction(action.actionId);
+  let level = definition.variable && action.power !== undefined
+    ? definition.variable.levelPerPower * action.power
+    : definition.level;
+  if (definition.id === 'slash' && player.buffs?.has('axe_raised')) level += 0.5;
+  if (definition.effects[0]?.handler === 'sovereign_blade') level = Math.min(3, buffStacks(player, 'sovereign_blade_forged'));
+  if (player.buffs?.has('iridescence_afterglow')) level = Math.max(1.5, level);
+  return level;
+}
+
 function costForSubmittedAction(action: SubmittedAction): Record<string, number> {
   if (action.actionId === 'transform' && action.transformCharacterId) return characterById.get(action.transformCharacterId)?.transformationCost ?? {};
-  return requireAction(action.actionId).cost;
+  const definition = requireAction(action.actionId);
+  const cost = { ...definition.cost };
+  if (definition.variable && action.power !== undefined) {
+    cost[definition.variable.resourceId] = (cost[definition.variable.resourceId] ?? 0) + definition.variable.costPerPower * action.power;
+  }
+  return cost;
 }
 
 function describeSubmittedAction(player: CombatPlayer, action: SubmittedAction | undefined, players: ReadonlyMap<string, CombatPlayer>): string {
@@ -318,5 +422,6 @@ function describeSubmittedAction(player: CombatPlayer, action: SubmittedAction |
   const definition = requireAction(action.actionId);
   if (action.actionId === 'transform') return `${player.nickname}：变身为${characterById.get(action.transformCharacterId ?? '')?.name ?? action.transformCharacterId ?? '未知角色'}`;
   const targets = actionTargets(action).map((id) => players.get(id)?.nickname ?? id);
-  return `${player.nickname}：${definition.name}${targets.length ? ` → ${targets.join('、')}` : ''}`;
+  const power = action.power === undefined ? '' : `（n=${action.power}）`;
+  return `${player.nickname}：${definition.name}${power}${targets.length ? ` → ${targets.join('、')}` : ''}`;
 }

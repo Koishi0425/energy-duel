@@ -53,6 +53,22 @@ describe('room support', () => {
     expect(isActionUnlocked('gonggang', 'base', 'raise_axe', [])).toBe(true);
   });
 
+  it('supports stack and absent-buff unlock requirements for the sovereign blade', () => {
+    expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(false);
+    expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [
+      { buffId: 'sovereign_blade_forged', stacks: 1 },
+      { buffId: 'sovereign_blade_active', stacks: 1 },
+    ])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [
+      { buffId: 'sovereign_blade_forged', stacks: 0.5 },
+      { buffId: 'sovereign_blade_active', stacks: 1 },
+    ])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_forged', stacks: 0.5 }])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_active', stacks: 1 }])).toBe(false);
+  });
+
   it('ticks finite buffs in inactive character scopes without removing infinite buffs', () => {
     const gonggang = new Map([['timed', { remainingTurns: 2 }], ['infinite', { remainingTurns: 0 }]]);
     const jiaosila = new Map<string, { remainingTurns: number }>();

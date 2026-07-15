@@ -155,4 +155,76 @@ describe('RoundResolver JSON-driven actions', () => {
     const players = roster(['a', 0], ['b', 0]);
     expect(() => validateAction(players.get('a')!, { actionId: 'double_steal', targetIds: ['b', 'b'] }, players)).not.toThrow();
   });
+
+  it('grants Regent stars only on the first transformation of a game', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    const actor = players.get('a')!;
+    actor.characterId = 'default_character';
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'regent' }], ['b', { actionId: 'defend' }]));
+    expect(actor.resources.stars).toBe(3);
+    expect(actor.buffs?.has('regent_claimed')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'jiaosila' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'regent' }], ['b', { actionId: 'defend' }]));
+    expect(actor.resources.stars).toBe(3);
+  });
+
+  it('validates and pays variable particle-wall costs', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.resources.stars = 4;
+    expect(() => validateAction(players.get('a')!, { actionId: 'particle_wall' }, players)).toThrow(/参数/);
+    expect(() => validateAction(players.get('a')!, { actionId: 'particle_wall', power: 3 }, players)).toThrow(/资源不足/);
+    resolveRound(players, actions(['a', { actionId: 'particle_wall', power: 2 }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.resources.stars).toBe(0);
+  });
+
+  it('resolves Regent star income and collect-light defense', () => {
+    const players = roster(['a', 1], ['b', 1]);
+    players.get('a')!.resources.stars = 0;
+    resolveRound(players, actions(['a', { actionId: 'hidden_cache' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.resources.stars).toBe(1);
+    expect(players.get('a')!.buffs?.has('hidden_cache_pending')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'collect_light' }], ['b', { actionId: 'wave', targetId: 'a' }]));
+    expect(players.get('a')!.resources.stars).toBe(2);
+  });
+
+  it('uses afterglow as a minimum next-round action level', () => {
+    const players = roster(['a', 1], ['b', 1]);
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
+    resolveRound(players, actions(['a', { actionId: 'iridescence' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.buffs?.has('iridescence_afterglow')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(players.get('a')!.currentHp).toBe(2);
+    expect(players.get('a')!.buffs?.has('iridescence_afterglow')).toBe(false);
+  });
+
+  it('forges, fires and locks the sovereign blade', () => {
+    const players = roster(['a', 2], ['b', 0]);
+    const actor = players.get('a')!;
+    actor.resources.stars = 4;
+    resolveRound(players, actions(['a', { actionId: 'forge_sword' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.sovereign_blade_forged).toBe(3);
+    expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'sovereign_blade', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('sovereign_blade_active')).toBe(false);
+  });
+
+  it('lets Summon Forth create the sovereign blade from zero forge', () => {
+    const players = roster(['a', 1], ['b', 0]);
+    const actor = players.get('a')!;
+    resolveRound(players, actions(['a', { actionId: 'summon_forth' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.sovereign_blade_forged).toBe(0.5);
+    expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
+  });
+
+  it('aggregates repeated deferred Stardust allocations per target', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    players.get('a')!.resources.stars = 4;
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
+    const stardust = { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'c', 'c'] };
+    expect(() => validateAction(players.get('a')!, stardust, players)).not.toThrow();
+    resolveRound(players, actions(['a', stardust], ['b', { actionId: 'charge' }], ['c', { actionId: 'defend' }]));
+    expect(players.get('a')!.resources.stars).toBe(0);
+    expect(players.get('b')!.currentHp).toBe(1);
+    expect(players.get('c')!.currentHp).toBe(2);
+  });
 });

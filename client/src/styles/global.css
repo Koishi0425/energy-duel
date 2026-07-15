@@ -18,6 +18,44 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #30d6a3; box-shadow: 0 0 12px #30d6a3; }
 .lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
 .shell-links { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 12px; }
+.lobby-hub { width: min(960px, 100%); padding: 28px; }
+.lobby-header { padding-bottom: 22px; border-bottom: 1px solid #283252; }
+.lobby-header .identity { margin-bottom: 20px; }
+.lobby-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.lobby-title-row h1 { font-size: clamp(29px, 4vw, 42px); }
+.lobby-title-row .muted { margin-bottom: 0; }
+.lobby-support { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; padding-top: 8px; }
+.nickname-field { max-width: 360px; margin: 18px 0 0; }
+.lobby-error { margin: 12px 0 -5px; padding: 9px 12px; border: 1px solid #633746; border-radius: 9px; background: rgba(84,25,39,.38); }
+.lobby-main-grid { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.35fr); gap: 16px; margin-top: 18px; }
+.lobby-card { min-width: 0; padding: 20px; border: 1px solid #2b365b; border-radius: 15px; background: rgba(10,14,29,.68); }
+.lobby-card h2 { margin: 0; font-size: 23px; }
+.lobby-card .muted { margin: 7px 0 0; font-size: 13px; }
+.quick-join-card { display: flex; flex-direction: column; }
+.quick-join-card form { display: grid; gap: 12px; margin-top: auto; padding-top: 18px; }
+.quick-join-card label, .create-room-section label { margin: 0; }
+.room-directory { display: grid; grid-template-rows: auto minmax(150px, 1fr) auto; min-height: 280px; }
+.room-directory > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.room-list { min-height: 0; max-height: 260px; overflow-y: auto; margin: 12px -5px 0 0; padding-right: 5px; }
+.room-list-item { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid #252e4d; }
+.room-list-item:last-child { border-bottom: 0; }
+.room-list-item > div { display: grid; min-width: 0; }
+.room-list-item strong { color: #f5f6ff; font-family: "Cascadia Code", Consolas, monospace; letter-spacing: .04em; }
+.room-list-item span, .room-list-item small { overflow: hidden; color: #929cbd; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.room-population { padding: 4px 8px; border: 1px solid #34416b; border-radius: 999px; color: #cbd3f2 !important; font-size: 12px !important; }
+.room-list-state { display: grid; place-content: center; justify-items: center; gap: 7px; min-height: 150px; color: #bbc3df; text-align: center; }
+.room-list-state p { margin: 0; }
+.room-list-state small, .room-list-updated { color: #7f89aa; }
+.room-list-updated { align-self: end; margin-top: 8px; font-size: 10px; }
+.create-room-section { margin-top: 16px; border: 1px solid #2b365b; border-radius: 14px; background: rgba(10,14,29,.46); }
+.create-room-section > summary { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 15px 18px; color: #dce1f7; cursor: pointer; list-style: none; }
+.create-room-section > summary::-webkit-details-marker { display: none; }
+.create-room-section > summary span:first-child { display: grid; gap: 3px; }
+.create-room-section > summary small { color: #8791b1; font-size: 11px; font-weight: 400; }
+.create-room-section > summary span:last-child { color: #8f9cff; font-size: 22px; transition: transform .18s ease; }
+.create-room-section[open] > summary span:last-child { transform: rotate(45deg); }
+.create-room-section form { display: grid; grid-template-columns: minmax(190px,1fr) auto auto; align-items: end; gap: 12px; padding: 0 18px 18px; }
+.create-room-section form .text-button { align-self: center; margin-top: 22px; }
 
 .game-shell { position: relative; width: 100%; height: 100dvh; min-height: 620px; padding: 20px 24px; overflow: hidden; }
 .game-header { position: relative; z-index: 8; display: flex; align-items: flex-start; justify-content: space-between; pointer-events: none; }
@@ -82,6 +120,8 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .confirm-action h3 { margin-top: 0; }
 
 @media (max-width: 900px) {
+  .lobby-main-grid { grid-template-columns: 1fr; }
+  .room-directory { min-height: 260px; }
   .game-shell { height: auto; min-height: 100dvh; display: grid; grid-template-rows: auto clamp(340px, 45dvh, 520px) auto auto; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); overflow: visible; }
   .game-header { min-width: 0; gap: 8px; }
   .game-header h1 { font-size: 22px; }
@@ -101,6 +141,17 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 @media (max-width: 520px) {
   .shell { padding: 14px; }
   .panel { padding: 24px; }
+  .lobby-hub { padding: 18px; }
+  .lobby-title-row { display: grid; gap: 8px; }
+  .lobby-support { padding-top: 0; }
+  .nickname-field { max-width: none; }
+  .lobby-main-grid { gap: 12px; }
+  .lobby-card { padding: 16px; }
+  .room-list-item { grid-template-columns: minmax(0,1fr) auto; }
+  .room-list-item .room-population { grid-column: 2; grid-row: 1; }
+  .room-list-item button { grid-column: 1 / -1; }
+  .create-room-section form { grid-template-columns: 1fr; }
+  .create-room-section form .text-button { margin-top: 0; }
   .game-header { flex-direction: column; }
   .game-actions { justify-content: flex-start; }
   .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

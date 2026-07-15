@@ -66,10 +66,14 @@ export function colorForAccount(accountId: string, usedColors: Set<number>): num
   return PLAYER_COLORS[start];
 }
 
-export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffIds: Iterable<string>): boolean {
+export interface UnlockBuff { buffId: string; stacks: number }
+
+export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>): boolean {
   const visibleInTree = characterById.get(characterId)?.forms.find((form) => form.id === formId)?.unlockedActions.includes(actionId) === true;
   if (!visibleInTree) return false;
   const requirements = actionById.get(actionId)?.unlockRequirements;
-  const currentBuffs = new Set(buffIds);
-  return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId));
+  const currentBuffs = new Map(Array.from(buffs, (buff) => typeof buff === 'string' ? [buff, 1] : [buff.buffId, buff.stacks]));
+  return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId))
+    && (requirements?.noneBuffs ?? []).every((buffId) => !currentBuffs.has(buffId))
+    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (currentBuffs.get(buffId) ?? 0) >= stacks);
 }

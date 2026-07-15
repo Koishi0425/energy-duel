@@ -9,6 +9,19 @@ export interface SessionIdentity {
   username: string;
 }
 
+export interface PublicRoomSummary {
+  roomId: string;
+  hostNickname: string;
+  clients: number;
+  maxClients: number;
+  createdAt: string;
+}
+
+export interface PublicRoomListResponse {
+  rooms: PublicRoomSummary[];
+  generatedAt: string;
+}
+
 export interface SyncedResource {
   resourceId: string;
   current: number;
@@ -43,7 +56,7 @@ export interface SyncedPlayer {
   resultConfirmed: boolean;
 }
 
-export type GamePhase = 'waiting' | 'choosing' | 'resolving' | 'finished';
+export type GamePhase = 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished';
 export type ActionCategory = 'base' | 'attack' | 'defense' | 'resource' | 'special';
 export type TargetMode = 'none' | 'single_enemy' | 'multiple_enemies' | 'all_enemies';
 export type ActionId = string;
@@ -68,7 +81,26 @@ export interface SubmitActionMessage {
   targetId?: string;
   targetIds?: string[];
   transformCharacterId?: string;
+  power?: number;
   requestId?: string;
+}
+
+export interface SubmitDeferredTargetsMessage {
+  targetIds: string[];
+  requestId?: string;
+}
+
+export interface RevealedAction {
+  playerId: string;
+  actionId: string;
+  power?: number;
+}
+
+export interface DeferredActionRequiredMessage {
+  actionId: string;
+  power: number;
+  allocationCount: number;
+  revealedActions: RevealedAction[];
 }
 
 export interface ResolutionActor {
@@ -77,6 +109,7 @@ export interface ResolutionActor {
   actionId: string;
   poseId?: string;
   transformCharacterId?: string;
+  power?: number;
 }
 
 export interface ResolutionStep {

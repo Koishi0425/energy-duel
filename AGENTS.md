@@ -25,7 +25,8 @@ interfaces, directory responsibilities, or architecture invariants change.
 
 The current milestone includes the multiplayer circular board, JSON-defined
 actions, extensible player resources, portrait rendering, local board rotation,
-the first transformation branches, a client resolution timeline, and the first
+the first transformation branches including Regent's Stars and Sovereign Blade,
+a client resolution timeline, deferred target allocation, and the first
 simultaneous-action ruleset. Movement, production art, and the character editor
 remain out of scope. Human-readable rules live in `docs/`; the executable source
 of truth remains `shared/config/game.json`.
@@ -77,8 +78,9 @@ Run commands from the repository root:
   can never execute arbitrary code.
 - Actions use five UI categories: base, attack, defense, resource, and special. The
   spreadsheet's “做功/非做功” labels are descriptive only and do not affect
-  runtime logic. Target selection defaults to `planned`; `deferred` (“后发”) is
-  reserved for future resolution-stage target windows and is not enabled yet.
+  runtime logic. Target selection defaults to `planned`; `deferred` (“后发”)
+  reveals every submitted action, then lets each deferred actor allocate targets
+  before authoritative resolution. Stardust is the first deferred action.
 - Transforming adds the target character's skill tree without removing any
   base skills. The initial character may use charge, gain-charge, steal,
   double-steal, chop, defend, super-defend, and the transform entry;
@@ -93,6 +95,13 @@ Run commands from the repository root:
   other than the current one. Buffs default to character scope: inactive
   character buffs remain server-side and finite durations keep ticking; only
   explicitly player-scoped buffs follow across forms.
+  Regent unlocks the persistent `stars` resource and receives three Stars only
+  on the first transformation each game. Sovereign Blade forge level is capped
+  at three, supports half-point stacks, and its forge/active/locked state is
+  character-scoped and restored when switching back. Summon Forth can create the
+  Blade from zero forge or reactivate it while locked. Variable actions choose an
+  integer power at submission; their dynamic costs are validated and paid by
+  the server.
 - Player combat state carries character/form IDs, HP, a general resource map,
   and a buff map. Do not reintroduce top-level resource fields such as `energy`.
 - Room state synchronizes asset IDs only. Portrait files belong under
@@ -102,6 +111,10 @@ Run commands from the repository root:
   load; keep originals non-destructive until production art replaces them.
 - Players explicitly create or join rooms by room ID. Rooms support at most 20
   players. Waiting rooms require every player to be ready and only the host may start.
+  `/api/rooms` exposes only non-empty, unlocked, non-private rooms with public
+  room ID, host nickname, occupancy, and creation time. The lobby is join-first:
+  its primary room-code form and Enter key always join, while creation stays in
+  a separate, explicitly expanded section.
   Actions remain private on the server until every living player submits. A
   submitted player may send `cancel_action` and replace their choice before the
   final living player submits; the final submission resolves synchronously.

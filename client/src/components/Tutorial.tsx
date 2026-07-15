@@ -24,15 +24,15 @@ export default function Tutorial({ open, onClose }: Props) {
 }
 
 function FlowGuide() {
-  return <><h3>同时选择，分组展示，统一结算</h3><ol><li>选择一个行动；需要目标时直接点击战场上的高亮角色，选择完成后立即提交。</li><li>行动内容对其他玩家保密。最后一人提交前可随时撤销重选。</li><li>速度越高越先进入动画队列；互相出招或攻击与防御会成组同时播放。</li><li>只剩一名玩家时获胜；无人存活则平局。所有玩家确认结算后返回准备阶段。</li></ol><div className="tutorial-callout"><strong>等级差与生命状态</strong><p>等级差 = 受到的攻击等级 − 自己本回合招式等级，自己的攻击、防御或其他招式都参与比较。差值小于 0.5 时抵消；0.5 至不足 1 时左移一层；达到 1 时直接死亡。等级低于 3 的伤害最多左移一层。治疗造成右移。</p></div><div className="tutorial-callout"><strong>变身与战斗日志</strong><p>变身前没有濒死状态；变身后拥有健康、濒死、死亡三档，首次进入濒死获得 1 气。房间右上角的日志会保留每局、每回合和时间标记。</p></div><div className="tutorial-callout"><strong>预选与后发</strong><p>当前技能都在提交时预选目标。未来“后发”技能会在结算阶段根据战况再次选择目标。</p></div></>;
+  return <><h3>同时选择，分组展示，统一结算</h3><ol><li>选择一个行动；需要目标时直接点击战场上的高亮角色，选择完成后立即提交。</li><li>行动内容对其他玩家保密。最后一人提交前可随时撤销重选。</li><li>速度越高越先进入动画队列；互相出招或攻击与防御会成组同时播放。</li><li>只剩一名玩家时获胜；无人存活则平局。所有玩家确认结算后返回准备阶段。</li></ol><div className="tutorial-callout"><strong>等级差与生命状态</strong><p>等级差 = 受到的攻击等级 − 自己本回合招式等级，自己的攻击、防御或其他招式都参与比较。差值小于 0.5 时抵消；0.5 至不足 1 时左移一层；达到 1 时直接死亡。等级低于 3 的伤害最多左移一层。治疗造成右移。</p></div><div className="tutorial-callout"><strong>变身与战斗日志</strong><p>变身前没有濒死状态；变身后拥有健康、濒死、死亡三档，首次进入濒死获得 1 气。房间右上角的日志会保留每局、每回合和时间标记。</p></div><div className="tutorial-callout"><strong>预选与后发</strong><p>普通技能在提交时预选目标。储君的“星尘”先确定 n 并提交；所有行动公开后，使用者再把 n 个 0.5 级攻击分配给存活目标，可以重复选择同一人。</p></div></>;
 }
 
 function ActionGuide() {
-  return <div className="tutorial-action-sections">{(Object.keys(categoryLabels) as ActionCategory[]).map((category) => <section key={category}><h3>{categoryLabels[category]}</h3><div className="tutorial-card-grid">{gameConfig.actions.filter((action) => action.category === category && !['wave', 'hangup'].includes(action.id)).map((action) => <article key={action.id}><strong>{action.name}</strong><small>{formatCost(action.cost)} · 速度 {action.speedPriority} · 等级 {action.level >= 999 ? '∞' : action.level}</small><p>{action.description}</p></article>)}</div></section>)}</div>;
+  return <div className="tutorial-action-sections">{(Object.keys(categoryLabels) as ActionCategory[]).map((category) => <section key={category}><h3>{categoryLabels[category]}</h3><div className="tutorial-card-grid">{gameConfig.actions.filter((action) => action.category === category && !['wave', 'hangup'].includes(action.id)).map((action) => <article key={action.id}><strong>{action.name}</strong><small>{formatActionCost(action)} · 速度 {action.speedPriority} · 等级 {action.variable ? `${action.variable.levelPerPower}n` : action.id === 'sovereign_blade' ? '锻造等级' : action.level >= 999 ? '∞' : action.level}</small><p>{action.description}</p></article>)}</div></section>)}</div>;
 }
 
 function CharacterGuide() {
-  return <><div className="tutorial-callout"><strong>可以反复切换角色</strong><p>初始角色可以使用气、蓄力、凹、紫翼双凹、剁、挡和超防。娇斯拉与贡刚当前都可免费变身；变身后仍能选择当前角色以外的角色，未来角色的消耗由其配置决定。</p></div><div className="tutorial-callout"><strong>角色分别保存 Buff</strong><p>Buff 默认跟随产生它的角色。切换后暂时隐藏，但有限持续时间仍在后台减少；例如贡刚的永久举斧在切换为娇斯拉时隐藏，切回贡刚后恢复。</p></div><div className="tutorial-card-grid">{gameConfig.characters.map((character) => <article key={character.id}><strong>{character.name}</strong><small>{character.id === 'default_character' ? '初始形态' : '当前免费变身'}</small><p>{character.id === 'jiaosila' ? '通用战斗招式 + 原子吐息（2 气 + 1 蓄力，3 级攻击）' : character.id === 'gonggang' ? '通用战斗招式 + 举斧；举斧后解锁斧挡，并使斩提高 0.5 级' : '拥有基础招式、挡和超防，可变身为娇斯拉或贡刚'}</p></article>)}</div></>;
+  return <><div className="tutorial-callout"><strong>可以反复切换角色</strong><p>初始角色可以使用气、蓄力、凹、紫翼双凹、剁、挡和超防。娇斯拉、贡刚与储君当前都可免费变身；变身后仍能选择当前角色以外的角色，未来角色的消耗由其配置决定。</p></div><div className="tutorial-callout"><strong>角色分别保存 Buff</strong><p>Buff 默认跟随产生它的角色。切换后暂时隐藏，但有限持续时间仍在后台减少；贡刚的举斧以及储君的君王之剑锻造、激活和锁定状态都会在切回对应角色后恢复。</p></div><div className="tutorial-card-grid">{gameConfig.characters.map((character) => <article key={character.id}><strong>{character.name}</strong><small>{character.id === 'default_character' ? '初始形态' : '当前免费变身'}</small><p>{character.description ?? (character.id === 'jiaosila' ? '通用战斗招式 + 原子吐息（2 气 + 1 蓄力，3 级攻击）' : character.id === 'gonggang' ? '通用战斗招式 + 举斧；举斧后解锁斧挡，并使斩提高 0.5 级' : '拥有基础招式、挡和超防，可变身为娇斯拉、贡刚或储君')}</p></article>)}</div></>;
 }
 
 function NetworkGuide() {
@@ -42,4 +42,10 @@ function NetworkGuide() {
 function formatCost(cost: Record<string, number>): string {
   const entries = Object.entries(cost);
   return entries.length ? entries.map(([id, value]) => `${value} ${resourceById.get(id)?.shortName ?? id}`).join(' + ') : '无消耗';
+}
+
+function formatActionCost(action: (typeof gameConfig.actions)[number]): string {
+  const fixed = formatCost(action.cost);
+  const variable = action.variable ? `${action.variable.costPerPower}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}` : '';
+  return [fixed === '无消耗' ? '' : fixed, variable].filter(Boolean).join(' + ') || '无消耗';
 }

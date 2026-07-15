@@ -5,6 +5,7 @@ import {
   resourceById,
   type ActionDefinition,
   type CommandResultMessage,
+  type DeferredActionRequiredMessage,
   type ResolutionStep,
   type RoundResolutionMessage,
   type SessionResponse,
@@ -13,7 +14,7 @@ import {
   type SyncedRoundLogEntry,
 } from '@energy-duel/shared';
 import type { Room } from '@colyseus/sdk';
-import { Button, Card, Collapse, ConfigProvider, Drawer, Modal, Tag, message, theme } from 'antd';
+import { Button, Card, Collapse, ConfigProvider, Drawer, InputNumber, Modal, Tag, message, theme } from 'antd';
 import 'antd/dist/reset.css';
 import type { DemoRoomState } from './App';
 import ActionPanel from './components/ActionPanel';
@@ -41,6 +42,9 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [logOpen, setLogOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string>();
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+  const [parameterAction, setParameterAction] = useState<ActionDefinition>();
+  const [variablePower, setVariablePower] = useState(1);
+  const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
   const [hovered, setHovered] = useState<{ player: SyncedPlayer; x: number; y: number }>();
@@ -76,6 +80,10 @@ function RoomContent({ room, session, onLeave }: Props) {
       if (typeof payload.sentAt === 'number') setRtt(Math.max(0, Math.round(performance.now() - payload.sentAt)));
     });
     const removeResolution = room.onMessage('round_resolution', (payload: RoundResolutionMessage) => void playTimeline(payload));
+    const removeDeferred = room.onMessage('deferred_action_required', (payload: DeferredActionRequiredMessage) => {
+      setDeferredRequest(payload); setSelectedActionId(payload.actionId); setSelectedTargetIds([]);
+      void api.info({ content: `行动已公开：请为「${actionById.get(payload.actionId)?.name ?? payload.actionId}」后发分配目标`, duration: 2 });
+    });
     const handleDrop = () => setNetworkState('reconnecting');
     const handleReconnect = () => { setNetworkState('online'); void api.success({ content: '已重新连接', duration: 1 }); };
     const handleLeave = () => { setNetworkState('offline'); onLeave(); };
@@ -84,12 +92,12 @@ function RoomContent({ room, session, onLeave }: Props) {
     room.send('ping', { sentAt: performance.now() });
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
-      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution();
+      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
 
     async function playTimeline(payload: RoundResolutionMessage) {
-      setSelectedActionId(undefined); setSelectedTargetIds([]);
+      setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined);
       for (const step of payload.steps) {
         if (!mounted.current) return;
         setActiveStep(step);
@@ -112,7 +120,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => query.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined);
+    setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); setDeferredRequest(undefined); setParameterAction(undefined);
   }, [gameState.round]);
   useEffect(() => {
     if (panelPosition) localStorage.setItem('energy-duel-panel-position', JSON.stringify(panelPosition));
@@ -121,38 +129,64 @@ function RoomContent({ room, session, onLeave }: Props) {
   const me = players.find((player) => player.accountId === session.accountId);
   const isHost = me?.playerId === gameState.hostPlayerId;
   const selectedAction = selectedActionId ? actionById.get(selectedActionId) : undefined;
-  const targeting = Boolean(selectedAction && ['single_enemy', 'multiple_enemies'].includes(selectedAction.target.mode) && !me?.submitted);
+  const targeting = Boolean(deferredRequest || (selectedAction && ['single_enemy', 'multiple_enemies'].includes(selectedAction.target.mode) && !me?.submitted));
   const validTargets = useMemo(() => players.filter((player) => player.alive && player.playerId !== me?.playerId), [players, me?.playerId]);
   const battleLogGroups = useMemo(() => groupBattleLog(battleLog), [battleLog]);
+  const variableMax = parameterAction?.variable
+    ? Math.max(parameterAction.variable.minPower, Math.min(
+      parameterAction.variable.maxPower ?? Number.MAX_SAFE_INTEGER,
+      Math.floor((me?.resources[parameterAction.variable.resourceId]?.current ?? 0) / parameterAction.variable.costPerPower),
+    ))
+    : 1;
 
-  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string) => {
+  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number) => {
     const targetNames = targetIds.map((id) => players.find((player) => player.playerId === id)?.nickname ?? id);
     const label = transformCharacterId
       ? `已选择变身：${characterById.get(transformCharacterId)?.name ?? transformCharacterId}`
-      : `已选择「${action.name}」${targetNames.length ? ` → ${targetNames.join('、')}` : ''}`;
+      : `已选择「${action.name}」${power === undefined ? '' : `（n=${power}）`}${targetNames.length ? ` → ${targetNames.join('、')}` : ''}`;
     setSubmittedLabel(label);
     room.send('submit_action', {
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
       targetIds: action.target.mode === 'multiple_enemies' ? targetIds : undefined,
-      transformCharacterId,
+      transformCharacterId, power,
     });
     void api.info({ content: label, duration: 1.6 });
   };
 
   const chooseAction = (action: ActionDefinition) => {
     setSelectedActionId(action.id); setSelectedTargetIds([]);
+    if (action.variable) {
+      setVariablePower(action.variable.minPower);
+      setParameterAction(action);
+      return;
+    }
     if (action.target.mode === 'single_enemy' || action.target.mode === 'multiple_enemies') {
       void api.open({ type: 'info', content: action.target.mode === 'multiple_enemies' ? `请选择 ${action.target.maxTargets} 次目标` : '请在战场上选择目标', duration: 1.5 });
     } else submit(action);
   };
 
   const chooseTarget = (player: SyncedPlayer) => {
+    if (deferredRequest) {
+      const next = [...selectedTargetIds, player.playerId];
+      setSelectedTargetIds(next);
+      if (next.length >= deferredRequest.allocationCount) {
+        room.send('submit_deferred_targets', { requestId: requestId(), targetIds: next });
+        setDeferredRequest(undefined); setSubmittedLabel(`后发目标已分配：${next.map((id) => players.find((candidate) => candidate.playerId === id)?.nickname ?? id).join('、')}`);
+      } else void api.info({ content: `已分配 ${next.length}/${deferredRequest.allocationCount} 个 0.5 级攻击`, duration: 1.1 });
+      return;
+    }
     if (!selectedAction) return;
     const next = [...selectedTargetIds, player.playerId];
     setSelectedTargetIds(next);
     if (selectedAction.target.mode === 'single_enemy' || next.length >= (selectedAction.target.maxTargets ?? 1)) submit(selectedAction, next);
     else void api.info({ content: `已选择 ${player.nickname}，还需选择 ${(selectedAction.target.maxTargets ?? 1) - next.length} 次`, duration: 1.2 });
+  };
+
+  const confirmVariableAction = () => {
+    if (!parameterAction) return;
+    submit(parameterAction, [], undefined, variablePower);
+    setParameterAction(undefined);
   };
 
   const chooseTransform = (characterId: string) => {
@@ -176,7 +210,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); event.preventDefault();
   };
   const roster = <Roster players={players} gameState={gameState} />;
-  const targetHint = targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
+  const targetHint = deferredRequest
+    ? `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
+    : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
 
   return <main className="game-shell">
     {contextHolder}
@@ -201,6 +237,8 @@ function RoomContent({ room, session, onLeave }: Props) {
       <div className="round-result">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
       {gameState.phase === 'waiting' && <div className="ready-controls"><Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || players.some((player) => !player.ready || !player.connected)}>开始游戏</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
       {gameState.phase === 'choosing' && me?.alive && <ActionPanel player={me} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId() }); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }} />}
+      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>星尘后发分配</strong><p>所有行动已经公开。点击战场角色分配 {deferredRequest.allocationCount} 个 0.5 级攻击，可重复点击同一目标。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div></div>}
+      {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
       {gameState.phase === 'choosing' && me && !me.alive && <p className="eliminated-notice">你已淘汰，正在观战</p>}
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
@@ -208,6 +246,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     <Drawer title="角色详情" placement="bottom" height="min(72dvh, 520px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} />}</Drawer>
     {compactLayout ? <Drawer title="战斗日志" placement="right" width="min(440px, 92vw)" open={logOpen} onClose={() => setLogOpen(false)}><BattleLog groups={battleLogGroups} /></Drawer> : logOpen && <FloatingWindow storageId="battle-log" title="战斗日志" initialPosition={{ x: Math.max(20, window.innerWidth - 500), y: 92 }} initialSize={{ width: 440, height: 520 }} onClose={() => setLogOpen(false)} className="battle-log-window"><BattleLog groups={battleLogGroups} /></FloatingWindow>}
     <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div><p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
+    <Modal title={parameterAction ? `${parameterAction.name} · 选择 n` : '选择技能参数'} open={Boolean(parameterAction)} okText="确认行动" cancelText="取消" onCancel={() => { setParameterAction(undefined); setSelectedActionId(undefined); }} onOk={confirmVariableAction} okButtonProps={{ disabled: !parameterAction || variableMax < (parameterAction.variable?.minPower ?? 1) }}>
+      {parameterAction?.variable && <><p>{parameterAction.description}</p><InputNumber min={parameterAction.variable.minPower} max={variableMax} value={variablePower} precision={0} onChange={(value) => setVariablePower(value ?? parameterAction.variable!.minPower)} /><p className="muted">将消耗 {parameterAction.variable.costPerPower * variablePower} {resourceById.get(parameterAction.variable.resourceId)?.name ?? parameterAction.variable.resourceId}，技能等级为 {parameterAction.variable.levelPerPower * variablePower}。</p></>}
+    </Modal>
     {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
     {tutorialOpen && <Suspense fallback={null}><Tutorial open onClose={() => setTutorialOpen(false)} /></Suspense>}
@@ -240,6 +281,7 @@ function BattleLog({ groups }: { groups: BattleLogGroup[] }) {
 function phaseTitle(state: SyncedGameState): string {
   if (state.phase === 'waiting') return '房间准备';
   if (state.phase === 'finished') return '游戏结束';
+  if (state.phase === 'deferred') return `第 ${state.round} 回合 · 后发选择`;
   if (state.phase === 'resolving') return `第 ${state.round} 回合 · 结算`;
   return `第 ${state.round} 回合`;
 }

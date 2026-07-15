@@ -20,4 +20,18 @@ describe('EnergyDuelRoom character-scoped buffs', () => {
     room.syncActiveBuffs('p', 'gonggang', gonggang);
     expect(Array.from(gonggang.values(), (buff) => buff.buffId)).toEqual(['axe_raised']);
   });
+
+  it('preserves fractional Regent forge stacks across character switches', () => {
+    const room = new EnergyDuelRoom() as any;
+    const current = new MapSchema<BuffState>();
+    const forged = new BuffState(); forged.instanceId = 'p:sovereign_blade_forged'; forged.buffId = 'sovereign_blade_forged'; forged.stacks = 2.5; forged.sourcePlayerId = 'p';
+    current.set(forged.instanceId, forged);
+    room.captureActiveBuffs('p', 'regent', new Set(['sovereign_blade_forged']), current, { sovereign_blade_forged: 2.5 });
+    const away = new MapSchema<BuffState>();
+    room.syncActiveBuffs('p', 'jiaosila', away);
+    expect(away.size).toBe(0);
+    const restored = new MapSchema<BuffState>();
+    room.syncActiveBuffs('p', 'regent', restored);
+    expect(restored.get('p:sovereign_blade_forged')?.stacks).toBe(2.5);
+  });
 });

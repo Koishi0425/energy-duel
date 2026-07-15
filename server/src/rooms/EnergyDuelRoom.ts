@@ -1,8 +1,10 @@
 import {
+  actionById,
   buffById,
   characterById,
   gameConfig,
   type SessionIdentity,
+  type SubmitDeferredTargetsMessage,
   type SubmitActionMessage,
 } from '@energy-duel/shared';
 import { ArraySchema, MapSchema, Schema, type } from '@colyseus/schema';
@@ -33,7 +35,7 @@ export class ResourceState extends Schema {
 export class BuffState extends Schema {
   @type('string') instanceId = '';
   @type('string') buffId = '';
-  @type('uint8') stacks = 1;
+  @type('float32') stacks = 1;
   @type('uint16') remainingTurns = 0;
   @type('string') sourcePlayerId = '';
 }
@@ -67,7 +69,7 @@ export class RoundLogEntryState extends Schema {
 
 export class DemoRoomState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
-  @type('string') phase: 'waiting' | 'choosing' | 'resolving' | 'finished' = 'waiting';
+  @type('string') phase: 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished' = 'waiting';
   @type('uint16') round = 0;
   @type('uint16') gameNumber = 0;
   @type('string') hostPlayerId = '';
@@ -97,7 +99,7 @@ export class EnergyDuelRoom extends Room {
     catch (reason) { throw new ServerError(409, reason instanceof Error ? reason.message : '房间号已被使用'); }
     this.claimedRoomCode = roomCode;
     this.roomId = roomCode;
-    this.setMetadata({ roomCode });
+    await this.setMetadata({ roomCode, hostNickname: '' });
 
     this.onMessage('set_ready', (client, payload: { ready?: unknown; requestId?: string }) => {
       const player = this.state.players.get(client.sessionId);
@@ -107,6 +109,7 @@ export class EnergyDuelRoom extends Room {
     });
     this.onMessage('start_game', (client, payload: { requestId?: string }) => this.startGame(client, payload?.requestId));
     this.onMessage('submit_action', (client, payload: SubmitActionMessage) => this.submitAction(client, payload));
+    this.onMessage('submit_deferred_targets', (client, payload: SubmitDeferredTargetsMessage) => this.submitDeferredTargets(client, payload));
     this.onMessage('cancel_action', (client, payload: { requestId?: string }) => this.cancelAction(client, payload?.requestId));
     this.onMessage('acknowledge_result', (client, payload: { requestId?: string }) => this.acknowledgeResult(client, payload?.requestId));
     this.onMessage('ping', (client, payload: { sentAt?: number }) => client.send('pong', { sentAt: payload?.sentAt, serverAt: Date.now() }));
@@ -139,20 +142,26 @@ export class EnergyDuelRoom extends Room {
     }
     this.state.players.set(client.sessionId, player);
     this.storedBuffs.set(client.sessionId, new Map());
-    if (!this.state.hostPlayerId) this.state.hostPlayerId = client.sessionId;
+    if (!this.state.hostPlayerId) {
+      this.state.hostPlayerId = client.sessionId;
+      void this.setMetadata({ hostNickname: nickname });
+    }
     assignGridIndices(this.state.players.values());
   }
 
   async onDrop(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
-    if (!player || (this.state.phase !== 'choosing' && this.state.phase !== 'resolving')) return;
+    if (!player || !['choosing', 'deferred', 'resolving'].includes(this.state.phase)) return;
     player.connected = false;
     try { await this.allowReconnection(client, 30); } catch { /* onLeave completes departure */ }
   }
 
   onReconnect(client: Client): void {
     const player = this.state.players.get(client.sessionId);
-    if (player) player.connected = true;
+    if (player) {
+      player.connected = true;
+      if (this.state.phase === 'deferred') this.sendDeferredPrompt(client);
+    }
   }
 
   onLeave(client: Client): void {
@@ -169,7 +178,7 @@ export class EnergyDuelRoom extends Room {
     this.storedBuffs.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     assignGridIndices(this.state.players.values());
-    if (this.state.phase === 'choosing' || this.state.phase === 'resolving') {
+    if (this.state.phase === 'choosing' || this.state.phase === 'deferred' || this.state.phase === 'resolving') {
       this.actions.clear();
       this.state.phase = 'finished';
       this.state.lastResult = `${leavingPlayer.nickname} 已退出，游戏结束。`;
@@ -218,6 +227,7 @@ export class EnergyDuelRoom extends Room {
       targetId: typeof payload.targetId === 'string' ? payload.targetId : undefined,
       targetIds: Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : undefined,
       transformCharacterId: typeof payload.transformCharacterId === 'string' ? payload.transformCharacterId : undefined,
+      power: typeof payload.power === 'number' ? payload.power : undefined,
     };
     if (action.actionId === 'transform') {
       const transformations = characterById.get(player.characterId)?.transformations ?? [];
@@ -235,7 +245,60 @@ export class EnergyDuelRoom extends Room {
     player.submitted = true;
     this.sendSuccess(client, requestId, 'submit_action', '行动已提交，可在结算前撤销');
     const aliveIds = Array.from(this.state.players.values()).filter((candidate) => candidate.alive).map((candidate) => candidate.playerId);
-    if (this.actions.allSubmitted(aliveIds)) this.resolveCurrentRound();
+    if (this.actions.allSubmitted(aliveIds)) this.beginDeferredOrResolve();
+  }
+
+  private beginDeferredOrResolve(): void {
+    const pending = Array.from(this.actions.asReadonlyMap().entries()).filter(([, action]) => {
+      const definition = actionById.get(action.actionId);
+      return definition?.target.selectionTiming === 'deferred' && !(action.targetIds?.length);
+    });
+    if (pending.length === 0) return this.resolveCurrentRound();
+    this.state.phase = 'deferred';
+    this.state.lastResult = '行动已经公开，等待后发技能选择目标。';
+    for (const [playerId] of pending) {
+      const client = this.clients.find((candidate) => candidate.sessionId === playerId);
+      if (client) this.sendDeferredPrompt(client);
+    }
+  }
+
+  private sendDeferredPrompt(client: Client): void {
+    const action = this.actions.get(client.sessionId);
+    const definition = action && actionById.get(action.actionId);
+    if (!action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) return;
+    client.send('deferred_action_required', {
+      actionId: action.actionId,
+      power: action.power ?? 1,
+      allocationCount: action.power ?? 1,
+      revealedActions: Array.from(this.actions.asReadonlyMap(), ([playerId, submitted]) => ({
+        playerId, actionId: submitted.actionId, power: submitted.power,
+      })),
+    });
+  }
+
+  private submitDeferredTargets(client: Client, payload: SubmitDeferredTargetsMessage): void {
+    const requestId = payload?.requestId;
+    if (this.state.phase !== 'deferred') return this.sendError(client, '当前没有待选择的后发目标', requestId, 'submit_deferred_targets');
+    const player = this.state.players.get(client.sessionId);
+    const action = this.actions.get(client.sessionId);
+    const definition = action && actionById.get(action.actionId);
+    if (!player?.alive || !action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) {
+      return this.sendError(client, '没有可提交的后发目标', requestId, 'submit_deferred_targets');
+    }
+    const targetIds = Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : [];
+    const expected = definition.target.maxTargetsByPower ? action.power ?? 0 : definition.target.maxTargets ?? 0;
+    if (targetIds.length !== expected) return this.sendError(client, `请选择 ${expected} 次目标`, requestId, 'submit_deferred_targets');
+    for (const targetId of targetIds) {
+      const target = this.state.players.get(targetId);
+      if (!target?.alive || target.playerId === player.playerId) return this.sendError(client, '请选择其他存活玩家作为目标', requestId, 'submit_deferred_targets');
+    }
+    this.actions.setTargets(client.sessionId, targetIds);
+    this.sendSuccess(client, requestId, 'submit_deferred_targets', '后发目标已提交');
+    const waiting = Array.from(this.actions.asReadonlyMap().values()).some((submitted) => {
+      const candidate = actionById.get(submitted.actionId);
+      return candidate?.target.selectionTiming === 'deferred' && !(submitted.targetIds?.length);
+    });
+    if (!waiting) this.resolveCurrentRound();
   }
 
   private cancelAction(client: Client, requestId?: string): void {
@@ -263,7 +326,7 @@ export class EnergyDuelRoom extends Room {
       const synced = this.state.players.get(playerId);
       if (!synced) continue;
       const previousCharacterId = synced.characterId;
-      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs);
+      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs, combatPlayer.buffStacks);
       this.tickStoredBuffs(playerId);
       synced.currentHp = combatPlayer.currentHp;
       synced.maxHp = combatPlayer.maxHp;
@@ -277,6 +340,7 @@ export class EnergyDuelRoom extends Room {
       }
       this.syncActiveBuffs(playerId, synced.characterId, synced.buffs);
     }
+    if (Array.from(combatPlayers.values()).filter((player) => player.alive).length > 1) this.applyNextRoundStartEffects(result);
     this.state.lastResult = result.summary.join('\n');
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     for (const text of result.summary) {
@@ -301,6 +365,18 @@ export class EnergyDuelRoom extends Room {
     this.state.lastResult += survivors.length === 1 ? `\n${survivors[0].nickname} 获胜！` : '\n无人存活，本局平局。';
     for (const player of this.state.players.values()) player.resultConfirmed = false;
     return true;
+  }
+
+  private applyNextRoundStartEffects(result: RoundResult): void {
+    for (const player of this.state.players.values()) {
+      const pendingId = `${player.playerId}:hidden_cache_pending`;
+      if (!player.buffs.has(pendingId)) continue;
+      const stars = player.resources.get('stars');
+      if (stars) stars.current += 3;
+      player.buffs.delete(pendingId);
+      this.storedBuffs.get(player.playerId)?.get(player.characterId)?.delete('hidden_cache_pending');
+      result.summary.push(`${player.nickname} 的隐秘藏品在下回合开始时生效，获得 3 辉星。`);
+    }
   }
 
   private acknowledgeResult(client: Client, requestId?: string): void {
@@ -334,7 +410,7 @@ export class EnergyDuelRoom extends Room {
   }
 
   private isActionUnlocked(player: PlayerState, actionId: string): boolean {
-    return isActionUnlocked(player.characterId, player.currentFormId, actionId, Array.from(player.buffs.values(), (buff) => buff.buffId));
+    return isActionUnlocked(player.characterId, player.currentFormId, actionId, Array.from(player.buffs.values(), (buff) => ({ buffId: buff.buffId, stacks: buff.stacks })));
   }
 
   private combatPlayers(): Map<string, CombatPlayer> {
@@ -352,10 +428,11 @@ export class EnergyDuelRoom extends Room {
       currentFormId: player.currentFormId,
       resources: Object.fromEntries(Array.from(player.resources.entries(), ([id, resource]) => [id, resource.current])),
       buffs: new Set(Array.from(player.buffs.values(), (buff) => buff.buffId)),
+      buffStacks: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.stacks])),
     };
   }
 
-  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>): void {
+  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>, activeBuffStacks: Readonly<Record<string, number>> = {}): void {
     const scopes = this.storedBuffs.get(playerId) ?? new Map<string, Map<string, StoredBuff>>();
     this.storedBuffs.set(playerId, scopes);
     const priorById = new Map(Array.from(syncedBuffs.values(), (buff) => [buff.buffId, buff]));
@@ -368,10 +445,11 @@ export class EnergyDuelRoom extends Room {
       const synced = priorById.get(buffId);
       const stored: StoredBuff = existing ?? {
         buffId,
-        stacks: synced?.stacks ?? 1,
+        stacks: activeBuffStacks[buffId] ?? synced?.stacks ?? 1,
         remainingTurns: synced?.remainingTurns || definition?.durationTurns || 0,
         sourcePlayerId: synced?.sourcePlayerId || playerId,
       };
+      stored.stacks = activeBuffStacks[buffId] ?? stored.stacks;
       (scopeId === PLAYER_BUFF_SCOPE ? nextPlayer : nextCharacter).set(buffId, stored);
     }
     scopes.set(characterId, nextCharacter);

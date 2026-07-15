@@ -20,4 +20,11 @@ describe('ActionSubmissionStore', () => {
     store.clear();
     expect(store.allSubmitted(['a', 'b'])).toBe(false);
   });
+
+  it('fills deferred targets without replacing the submitted action', () => {
+    const store = new ActionSubmissionStore();
+    store.submit('a', { actionId: 'stardust', power: 3 });
+    expect(store.setTargets('a', ['b', 'b', 'c'])).toBe(true);
+    expect(store.get('a')).toEqual({ actionId: 'stardust', power: 3, targetIds: ['b', 'b', 'c'], targetId: undefined });
+  });
 });

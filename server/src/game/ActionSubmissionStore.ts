@@ -17,6 +17,18 @@ export class ActionSubmissionStore {
     return this.actions.has(playerId);
   }
 
+  get(playerId: string): SubmittedAction | undefined {
+    return this.actions.get(playerId);
+  }
+
+  setTargets(playerId: string, targetIds: string[]): boolean {
+    const action = this.actions.get(playerId);
+    if (!action) return false;
+    action.targetIds = [...targetIds];
+    action.targetId = undefined;
+    return true;
+  }
+
   allSubmitted(playerIds: Iterable<string>): boolean {
     for (const playerId of playerIds) if (!this.actions.has(playerId)) return false;
     return true;

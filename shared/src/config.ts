@@ -4,7 +4,9 @@ import type { ActionCategory, TargetMode } from './types.js';
 export const EFFECT_HANDLERS = [
   'charge', 'gain_charge', 'steal', 'double_steal', 'chop', 'wave', 'fist', 'slash',
   'defend', 'axe_defend', 'hangup', 'super_defend', 'heal', 'transform',
-  'atomic_breath', 'raise_axe',
+  'atomic_breath', 'raise_axe', 'collect_light', 'iridescence', 'hidden_cache',
+  'particle_wall', 'winning_hand', 'stardust', 'forge_sword', 'forge_wall',
+  'sovereign_blade', 'summon_forth',
 ] as const;
 export type EffectHandlerId = typeof EFFECT_HANDLERS[number];
 
@@ -32,6 +34,15 @@ export interface TargetDefinition {
   range?: number;
   maxTargets?: number;
   selectionTiming?: 'planned' | 'deferred';
+  maxTargetsByPower?: boolean;
+}
+
+export interface VariableActionDefinition {
+  resourceId: string;
+  costPerPower: number;
+  levelPerPower: number;
+  minPower: number;
+  maxPower?: number;
 }
 
 export interface ActionDefinition {
@@ -45,8 +56,11 @@ export interface ActionDefinition {
   level: number;
   effects: EffectDefinition[];
   vfxId: string;
+  variable?: VariableActionDefinition;
   unlockRequirements?: {
     allBuffs?: string[];
+    noneBuffs?: string[];
+    minBuffStacks?: Record<string, number>;
     description: string;
   };
 }
@@ -62,6 +76,7 @@ export interface FormDefinition {
 export interface CharacterDefinition {
   id: string;
   name: string;
+  description?: string;
   defaultAssetId: string;
   forms: FormDefinition[];
   transformations: string[];
@@ -107,9 +122,12 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (action.target.selectionTiming && !['planned', 'deferred'].includes(action.target.selectionTiming)) {
       throw new Error(`Action ${action.id} has an invalid target selection timing.`);
     }
-    if (action.target.mode === 'multiple_enemies'
+    if (action.target.mode === 'multiple_enemies' && !action.target.maxTargetsByPower
       && (!Number.isInteger(action.target.maxTargets) || (action.target.maxTargets ?? 0) < 2)) {
       throw new Error(`Action ${action.id} must define at least two targets.`);
+    }
+    if (action.target.maxTargetsByPower && (!action.variable || action.target.mode !== 'multiple_enemies')) {
+      throw new Error(`Action ${action.id} has invalid power-based targets.`);
     }
     if (!Array.isArray(action.effects) || action.effects.some((effect) => !handlers.has(effect.handler))) {
       throw new Error(`Action ${action.id} references an unsupported effect handler.`);
@@ -119,14 +137,26 @@ export function validateGameConfig(input: unknown): GameConfig {
         throw new Error(`Action ${action.id} has an invalid resource cost.`);
       }
     }
-    if (action.unlockRequirements && (typeof action.unlockRequirements.description !== 'string'
-      || !action.unlockRequirements.description.trim()
-      || !Array.isArray(action.unlockRequirements.allBuffs)
-      || action.unlockRequirements.allBuffs.some((buffId) => !buffIds.has(buffId)))) {
+    if (action.variable && (!resourceIds.has(action.variable.resourceId)
+      || !Number.isFinite(action.variable.costPerPower) || action.variable.costPerPower <= 0
+      || !Number.isFinite(action.variable.levelPerPower) || action.variable.levelPerPower < 0
+      || !Number.isInteger(action.variable.minPower) || action.variable.minPower < 1
+      || (action.variable.maxPower !== undefined && (!Number.isInteger(action.variable.maxPower) || action.variable.maxPower < action.variable.minPower)))) {
+      throw new Error(`Action ${action.id} has invalid variable parameters.`);
+    }
+    const requirements = action.unlockRequirements;
+    const requiredBuffs = [...(requirements?.allBuffs ?? []), ...(requirements?.noneBuffs ?? []), ...Object.keys(requirements?.minBuffStacks ?? {})];
+    if (requirements && (typeof requirements.description !== 'string'
+      || !requirements.description.trim()
+      || requiredBuffs.some((buffId) => !buffIds.has(buffId))
+      || Object.values(requirements.minBuffStacks ?? {}).some((stacks) => !Number.isFinite(stacks) || stacks <= 0))) {
       throw new Error(`Action ${action.id} has invalid unlock requirements.`);
     }
   }
   for (const character of config.characters) {
+    if (character.description !== undefined && (typeof character.description !== 'string' || !character.description.trim())) {
+      throw new Error(`Character ${character.id} has an invalid description.`);
+    }
     if (!assetIds.has(character.defaultAssetId)) throw new Error(`Character ${character.id} references a missing asset.`);
     assertUnique(character.forms, `form on ${character.id}`);
     for (const form of character.forms) {
