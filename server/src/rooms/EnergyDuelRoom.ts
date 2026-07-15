@@ -6,7 +6,7 @@ import {
   type SubmitActionMessage,
 } from '@energy-duel/shared';
 import { ArraySchema, MapSchema, Schema, type } from '@colyseus/schema';
-import { Client, Room, ServerError, matchMaker } from 'colyseus';
+import { Client, Room, ServerError, matchMaker } from '@colyseus/core';
 import { resolveRound, validateAction, type CombatPlayer, type RoundResult, type SubmittedAction } from '../game/RoundResolver.js';
 import { ActionSubmissionStore } from '../game/ActionSubmissionStore.js';
 import { sessionService } from '../services.js';

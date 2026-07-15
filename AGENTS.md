@@ -11,6 +11,9 @@ interfaces, directory responsibilities, or architecture invariants change.
   read ID is a localStorage cursor; the announcement dialog stays lazy-loaded
   so it does not add its full UI to the login bundle.
 - `server/` is the authoritative Colyseus 0.17 server and HTTP API.
+  Import runtime room/server APIs from `@colyseus/core` and transport support
+  from `@colyseus/ws-transport`; do not reintroduce the `colyseus` aggregate
+  package because its unused transport peers pull GitHub-only native packages.
 - `shared/` is the `@energy-duel/shared` workspace. It owns wire types,
   geometry helpers, validated gameplay JSON, and configuration lookups used by
   both the client and server. Build it before either consuming workspace.

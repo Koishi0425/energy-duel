@@ -11,10 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@colyseus/core": "^0.17.44",
     "@energy-duel/shared": "0.1.0",
     "@colyseus/schema": "^4.0.8",
     "@colyseus/ws-transport": "^0.17.13",
-    "colyseus": "^0.17.8",
     "express": "^5.1.0"
   },
   "devDependencies": {

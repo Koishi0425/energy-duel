@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineRoom, defineServer } from 'colyseus';
+import { defineRoom, defineServer } from '@colyseus/core';
 import express from 'express';
 import { EnergyDuelRoom } from './rooms/EnergyDuelRoom.js';
 import { sessionService } from './services.js';
