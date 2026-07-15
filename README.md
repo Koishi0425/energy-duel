@@ -40,7 +40,7 @@ curl http://127.0.0.1:2567/api/health
 
 ## 开发
 
-需要 Node.js 20+ 和 npm 10+：
+需要 Node.js 22+ 和 npm 10+：
 
 ```bash
 npm install

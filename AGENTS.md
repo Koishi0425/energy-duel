@@ -32,6 +32,8 @@ of truth remains `shared/config/game.json`.
 Run commands from the repository root:
 
 - `npm install` installs every workspace.
+- Local and container builds require Node.js 22 or newer because the Colyseus
+  0.17 dependency tree declares a Node 22 engine requirement.
 - `npm run dev` builds shared configuration, then starts the Vite client and
   Colyseus server together.
 - `npm run build` builds both workspaces.
