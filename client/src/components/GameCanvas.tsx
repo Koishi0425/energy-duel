@@ -10,6 +10,7 @@ interface Props {
   targeting?: boolean;
   targetablePlayerIds?: string[];
   selectedTargetIds?: string[];
+  obscuredPlayerIds?: string[];
   resetViewKey?: number;
   resolutionStep?: ResolutionStep;
   onPlayerSelect?: (player: SyncedPlayer) => void;
@@ -137,12 +138,13 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   }
   const targetable = props.targeting && props.targetablePlayerIds?.includes(player.playerId);
   const selected = props.selectedTargetIds?.includes(player.playerId);
+  const obscured = props.obscuredPlayerIds?.includes(player.playerId);
   view.root.alpha = !player.connected ? 0.22 : !player.alive ? 0.38 : props.targeting && !targetable ? 0.28 : 1;
   const ringRadius = portraitHeight * 0.34;
   view.ring.clear().ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32)).fill({ color: player.color, alpha: 0.3 }).stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
-  view.name.text = truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
-  const resources = Object.values(player.resources).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${resource.current}`).join(' · ');
-  view.status.text = player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
+  const resources = Object.values(player.resources).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
+  view.status.text = obscured ? '状态未知' : player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
 }
 
 function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {
@@ -233,3 +235,4 @@ function effectEmoji(actionId: string): string {
   if (actionId === 'fist') return '👊'; if (actionId === 'slash' || actionId === 'chop') return '⚔️'; if (['defend', 'axe_defend', 'super_defend'].includes(actionId)) return '🛡️'; if (actionId === 'transform') return '✨'; if (actionId === 'atomic_breath') return '☄️'; if (actionId === 'heal') return '💚'; if (actionId === 'charge' || actionId === 'gain_charge') return '⚡'; return '💥';
 }
 function truncate(value: string, maxLength: number): string { return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value; }
+function formatResource(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }

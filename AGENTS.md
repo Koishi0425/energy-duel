@@ -10,6 +10,12 @@ interfaces, directory responsibilities, or architecture invariants change.
   for project announcements. Keep announcement IDs stable because the latest
   read ID is a localStorage cursor; the announcement dialog stays lazy-loaded
   so it does not add its full UI to the login bundle.
+- `client/src/content/gameGuide.ts` owns the short, structured presentation
+  layer for the in-game help center: reading order, role summaries, strategy
+  hints, and glossary entries. Reference characters and actions by stable ID;
+  never duplicate executable costs, levels, speeds, targets, or action text
+  from `shared/config/game.json`. Detailed edge cases and design notes remain
+  in the split Markdown manuals under `docs/`.
 - `server/` is the authoritative Colyseus 0.17 server and HTTP API.
   Import runtime room/server APIs from `@colyseus/core` and transport support
   from `@colyseus/ws-transport`; do not reintroduce the `colyseus` aggregate
@@ -25,10 +31,10 @@ interfaces, directory responsibilities, or architecture invariants change.
 
 The current milestone includes the multiplayer circular board, JSON-defined
 actions, extensible player resources, portrait rendering, local board rotation,
-the first transformation branches including Regent's Stars and Sovereign Blade,
-a client resolution timeline, deferred target allocation, and the first
-simultaneous-action ruleset. Movement, production art, and the character editor
-remain out of scope. Human-readable rules live in `docs/`; the executable source
+the transformation branches through Pikachu, Li Chungang, Ao, Nightmare, and
+Mudrock, a client resolution timeline, deferred target allocation, first-class
+passives, fractional/flexible resource costs, and authoritative adjacent-cell
+movement. Production art and the character editor remain out of scope. Human-readable rules live in `docs/`; the executable source
 of truth remains `shared/config/game.json`.
 
 ## Commands
@@ -68,6 +74,10 @@ Run commands from the repository root:
   in its parent Pixi container after `resize()` has initialized the layout.
   View rotation is local to one client and never changes the authoritative
   `gridIndex` or gets synchronized to the room.
+  A normal move selects one clockwise or counterclockwise adjacent empty cell.
+  Simultaneous attempts to occupy one cell resolve deterministically in the
+  authoritative speed/ID order; later movers stay in place. Spatial attacks read
+  positions when their effect resolves, not when actions are submitted.
 - Usernames are trimmed, case-insensitively unique, and contain 3-16 Chinese
   characters, ASCII letters, digits, or underscores. They are identifiers, not
   secure credentials: anyone who knows a username can enter that account.
@@ -80,7 +90,8 @@ Run commands from the repository root:
   spreadsheet's “做功/非做功” labels are descriptive only and do not affect
   runtime logic. Target selection defaults to `planned`; `deferred` (“后发”)
   reveals every submitted action, then lets each deferred actor allocate targets
-  before authoritative resolution. Stardust is the first deferred action.
+  before authoritative resolution. Deferred selection supports single targets,
+  repeated allocations, and explicitly skippable windows such as Haunting Shadows.
 - Transforming adds the target character's skill tree without removing any
   base skills. The initial character may use charge, gain-charge, steal,
   double-steal, chop, defend, super-defend, and the transform entry;
@@ -102,6 +113,16 @@ Run commands from the repository root:
   Blade from zero forge or reactivate it while locked. Variable actions choose an
   integer power at submission; their dynamic costs are validated and paid by
   the server.
+  Character passives are first-class JSON definitions referenced by character
+  IDs, displayed by the client, and enforced by registered server handlers.
+  Buff definitions may grant actions outside the current form tree; client and
+  server derive those actions from the same `grantedActionIds`. Resource values
+  may be fractional, and flexible-cost actions submit an explicit serializable
+  resource-spend map whose total and balances are validated server-side.
+  Pikachu's quick-move waiver, Ao mastery, Nightmare cooldown/path/darkness,
+  and Mudrock counters/sleep are character-scoped unless their definitions
+  explicitly use player scope. Transforming into Ao grants every player the
+  player-scoped Cut action for the rest of that game.
 - Player combat state carries character/form IDs, HP, a general resource map,
   and a buff map. Do not reintroduce top-level resource fields such as `energy`.
 - Room state synchronizes asset IDs only. Portrait files belong under
@@ -128,7 +149,7 @@ Run commands from the repository root:
   30 seconds; lobby and result-screen disconnects are immediate departures. A
   reconnect timeout becomes a permanent departure. A non-host departure during
   play ends the current game and leaves remaining clients on the result screen.
-- Base combat follows `docs/基础规则手册.md`: speed orders the client timeline,
+- Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
   while damage compares the incoming attack level with the target's own selected
   action level (attack, defense, or otherwise). A difference below 0.5 cancels,
   0.5 to below 1 shifts health left once, and 1 or more kills directly; attacks

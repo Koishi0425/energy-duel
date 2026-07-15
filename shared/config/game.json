@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "resources": [
     { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10 },
     { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20 },
@@ -12,7 +12,33 @@
     { "id": "iridescence_afterglow", "name": "流光余辉", "description": "下回合结算受到的攻击时，自身招式等级最低视为 1.5。", "color": "#fff0a6", "scope": "character" },
     { "id": "hidden_cache_pending", "name": "隐秘藏品", "description": "下回合开始时获得 3 辉星，然后移除此状态。", "color": "#f5ca66", "scope": "character" },
     { "id": "sovereign_blade_forged", "name": "君王之剑", "description": "当前层数即君王之剑的锻造等级，最高为 3。", "color": "#ff9f43", "scope": "character" },
-    { "id": "sovereign_blade_active", "name": "王剑激活", "description": "君王之剑已经激活，可以发动一次攻击。", "color": "#ffcc66", "scope": "character" }
+    { "id": "sovereign_blade_active", "name": "王剑激活", "description": "君王之剑已经激活，可以发动一次攻击。", "color": "#ffcc66", "scope": "character" },
+    { "id": "quick_attack_ready", "name": "迅雷余势", "description": "下一次十伯伏特不消耗蓄力。", "color": "#ffe066", "scope": "character" },
+    { "id": "ao_mastery", "name": "熟能生巧", "description": "当前层数为凹与吸的升级阶段，最高四层。", "color": "#b8f2e6", "scope": "character" },
+    { "id": "cut_granted", "name": "削已解锁", "description": "本局可以使用削。", "color": "#ff8fab", "scope": "player", "grantedActionIds": ["cut"] },
+    { "id": "shadow_blade_cooldown", "name": "暗影之刃冷却", "description": "每完成一次行动减少一层；归零后可再次使用。", "color": "#8d99ae", "scope": "character" },
+    { "id": "dream_path", "name": "魇之梦径", "description": "位于梦径时攻击等级提高0.5，并可在回合末移动一格。", "color": "#6c5ce7", "scope": "character", "durationTurns": 3 },
+    { "id": "dream_path_start", "name": "梦径起点", "description": "记录魇之梦径的起始地块。", "color": "#5f27cd", "scope": "character", "durationTurns": 3 },
+    { "id": "dark_shelter_power", "name": "黑暗庇护", "description": "攻击等级与速度各提高1/0.5。", "color": "#2d3436", "scope": "character", "durationTurns": 3 },
+    { "id": "fear", "name": "恐惧", "description": "只能使用气，受到的攻击等级提高1。", "color": "#6c3483", "scope": "player", "durationTurns": 2 },
+    { "id": "darkness", "name": "黑暗", "description": "除自身地块外的战场信息被遮蔽。", "color": "#111827", "scope": "player", "durationTurns": 2 },
+    { "id": "nightmare_dash_ready", "name": "鬼影锁定", "description": "可在窗口结束前发动一次鬼影冲刺。", "color": "#312e81", "scope": "character", "durationTurns": 2, "grantedActionIds": ["nightmare_dash"] },
+    { "id": "mud_barrier", "name": "屏障", "description": "抵消一次未被防御的伤害，失去时恢复一个健康状态。", "color": "#a47148", "scope": "character" },
+    { "id": "hammer_counter", "name": "岩崩锤计数", "description": "每被明确选中一次增加一层，每三层转化为一次岩崩锤。", "color": "#8d6e63", "scope": "character" },
+    { "id": "hammer_ready", "name": "岩崩锤次数", "description": "每层可以使用一次岩崩锤。", "color": "#bc8f5f", "scope": "character" },
+    { "id": "mud_round_counter", "name": "沃土计数", "description": "无屏障时累计至第四回合获得屏障。", "color": "#a98467", "scope": "character" },
+    { "id": "mud_fist_level", "name": "锤炼拳势", "description": "每层令泥岩的拳永久提高0.5级。", "color": "#9c6644", "scope": "character" },
+    { "id": "sleeping", "name": "沉睡", "description": "无法被选中并免疫伤害；提交其他技能会提前苏醒。", "color": "#90a4ae", "scope": "character", "grantedActionIds": ["continue_sleep"] },
+    { "id": "sleep_progress", "name": "沉睡积蓄", "description": "记录本次已经沉睡的回合数。", "color": "#78909c", "scope": "character" },
+    { "id": "mud_slash_unlocked", "name": "血脉斩", "description": "泥岩已经通过苏醒永久获得斩。", "color": "#c08552", "scope": "character", "grantedActionIds": ["slash"] },
+    { "id": "mud_awakened", "name": "血脉苏醒", "description": "层数为苏醒后临时获得的攻击等级加成。", "color": "#d4a373", "scope": "character" }
+  ],
+  "passives": [
+    { "id": "sword_dao", "name": "剑道", "description": "无法使用拳；斩只消耗1/3气。" },
+    { "id": "practice_makes_perfect", "name": "熟能生巧", "description": "主动资源行动成功时升级凹与吸；依次获得0.5等级、后发选择、再加1等级、可造成伤害。" },
+    { "id": "shadow_blade_passive", "name": "暗影之刃", "description": "无法使用拳和斩；开局可释放一次范围斩击，使用后需完成四次行动恢复。" },
+    { "id": "child_of_earth", "name": "土石之子", "description": "无斩；拳不再脆弱，但使用拳时若承受至少0.5等级差的伤害会直接死亡；每次使用拳永久提高拳0.5级。" },
+    { "id": "fertile_soil", "name": "沃土予身", "description": "变身当回合开始计数；无屏障时每第四回合获得一层屏障，屏障失去时恢复一个健康状态。" }
   ],
   "assets": [
     { "id": "portrait_default", "url": "/assets/default-character.png" },
@@ -27,7 +53,7 @@
         "id": "base", "name": "基础形态", "defaultAssetId": "portrait_default", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "transform"]
       }],
-      "transformations": ["jiaosila", "gonggang", "regent"], "transformationCost": {}
+      "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
     },
     {
       "id": "jiaosila", "name": "娇斯拉", "defaultAssetId": "portrait_jiaosila",
@@ -35,7 +61,7 @@
         "id": "base", "name": "原子形态", "defaultAssetId": "portrait_jiaosila", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "atomic_breath", "transform"]
       }],
-      "transformations": ["default_character", "gonggang", "regent"], "transformationCost": {}
+      "transformations": ["default_character", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
     },
     {
       "id": "gonggang", "name": "贡刚", "defaultAssetId": "portrait_gonggang",
@@ -43,7 +69,7 @@
         "id": "base", "name": "战斧形态", "defaultAssetId": "portrait_gonggang", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "raise_axe", "axe_defend", "transform"]
       }],
-      "transformations": ["default_character", "jiaosila", "regent"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
     },
     {
       "id": "regent", "name": "储君", "description": "群星王座的继承人。拥有宇宙的力量，但总是让他的仆从们去做各种事情。", "defaultAssetId": "portrait_regent",
@@ -51,7 +77,32 @@
         "id": "base", "name": "辉星王储", "defaultAssetId": "portrait_regent", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "collect_light", "iridescence", "hidden_cache", "particle_wall", "winning_hand", "stardust", "forge_sword", "forge_wall", "sovereign_blade", "summon_forth", "transform"]
       }],
-      "transformations": ["default_character", "jiaosila", "gonggang"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+    },
+    {
+      "id": "pikachu", "name": "皮卡丘", "defaultAssetId": "portrait_default",
+      "forms": [{ "id": "base", "name": "雷电形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "ten_volt", "hundred_thousand_volt", "quick_attack", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+    },
+    {
+      "id": "li_chungang", "name": "李淳罡", "defaultAssetId": "portrait_default", "passiveIds": ["sword_dao"],
+      "forms": [{ "id": "base", "name": "剑道宗师", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "sword_aura", "open_heaven_gate", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "ao", "nightmare", "mudrock"], "transformationCost": {}
+    },
+    {
+      "id": "ao", "name": "凹", "defaultAssetId": "portrait_default", "passiveIds": ["practice_makes_perfect"],
+      "forms": [{ "id": "base", "name": "熟练形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "absorb_charge", "aoao_divine", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "nightmare", "mudrock"], "transformationCost": {}
+    },
+    {
+      "id": "nightmare", "name": "梦魇", "defaultAssetId": "portrait_default", "passiveIds": ["shadow_blade_passive"],
+      "forms": [{ "id": "base", "name": "永恒梦魇", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "shadow_blade", "dream_path", "dark_shelter", "silent_fear", "haunting_shadows", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "mudrock"], "transformationCost": {}
+    },
+    {
+      "id": "mudrock", "name": "泥岩", "defaultAssetId": "portrait_default", "passiveIds": ["child_of_earth", "fertile_soil"],
+      "forms": [{ "id": "base", "name": "沃土重装", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "rockfall_hammer", "filthy_bloodline", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare"], "transformationCost": {}
     }
   ],
   "actions": [
@@ -60,9 +111,9 @@
     { "id": "fist", "name": "拳", "category": "attack", "description": "0.5 级钝击；出招时处于脆弱状态。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "effects": [{ "handler": "fist" }], "vfxId": "emoji_fist" },
     { "id": "slash", "name": "斩", "category": "attack", "description": "消耗 1 气的 1.5 级斩击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "effects": [{ "handler": "slash" }], "vfxId": "emoji_slash" },
     { "id": "defend", "name": "挡", "category": "defense", "description": "2 级格挡；承受不低于格挡等级的伤害时破防。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2, "effects": [{ "handler": "defend" }], "vfxId": "emoji_shield" },
-    { "id": "steal", "name": "凹", "category": "base", "description": "若目标本回合出气，偷取该气。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "steal" }], "vfxId": "steal" },
-    { "id": "double_steal", "name": "紫翼双凹", "category": "base", "description": "选择两次目标；可选同一目标两次。", "cost": {}, "target": { "mode": "multiple_enemies", "maxTargets": 2 }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "double_steal" }], "vfxId": "double_steal" },
-    { "id": "chop", "name": "剁", "category": "base", "description": "取消全场凹，并使凹的玩家损失一个健康状态。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "chop" }], "vfxId": "emoji_chop" },
+    { "id": "steal", "name": "凹", "category": "base", "description": "选择 1 名其他存活玩家；若该玩家本回合使用气，偷取该气。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "steal" }], "vfxId": "steal" },
+    { "id": "double_steal", "name": "紫翼双凹", "category": "base", "description": "在其他存活玩家中选择 2 次；可以重复选择同一名玩家。", "cost": {}, "target": { "mode": "multiple_enemies", "maxTargets": 2 }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "double_steal" }], "vfxId": "double_steal" },
+    { "id": "chop", "name": "剁", "category": "base", "description": "取消本回合的所有凹；每名使用凹的玩家损失 1 个健康状态。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "chop" }], "vfxId": "emoji_chop" },
     { "id": "super_defend", "name": "超防", "category": "defense", "description": "消耗 1 气，本回合免疫任何攻击。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 4, "level": 999, "effects": [{ "handler": "super_defend" }], "vfxId": "super_shield" },
     { "id": "heal", "name": "治疗", "category": "special", "description": "恢复一个健康状态；出招时处于脆弱状态。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "heal" }], "vfxId": "heal" },
     { "id": "transform", "name": "变身", "category": "special", "description": "切换为其他已解锁角色；消耗由目标角色配置决定。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 4, "level": 0, "effects": [{ "handler": "transform" }], "vfxId": "transform_particles" },
@@ -74,11 +125,28 @@
     { "id": "hidden_cache", "name": "隐秘藏品", "category": "resource", "description": "获得 1 辉星；下回合开始时再获得 3 辉星。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "hidden_cache" }], "vfxId": "hidden_cache" },
     { "id": "particle_wall", "name": "粒子墙", "category": "defense", "description": "选择正整数 n，消耗 2n 辉星并获得 2n 级格挡。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 2, "levelPerPower": 2, "minPower": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "particle_wall" }], "vfxId": "particle_wall" },
     { "id": "winning_hand", "name": "胜券在王", "category": "resource", "description": "消耗 5 辉星，获得 9 辉星；出招时处于脆弱状态。", "cost": { "stars": 5 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "winning_hand" }], "vfxId": "winning_hand" },
-    { "id": "stardust", "name": "星尘", "category": "attack", "description": "选择正整数 n 并消耗 n 辉星；公开行动后，将总计 n/2 级攻击以 0.5 级为单位后发分配，可对同一目标累加。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 1, "levelPerPower": 0.5, "minPower": 1 }, "target": { "mode": "multiple_enemies", "selectionTiming": "deferred", "maxTargetsByPower": true }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "stardust" }], "vfxId": "stardust" },
+    { "id": "stardust", "name": "星尘", "category": "attack", "description": "选择正整数 n 并消耗 n 辉星；行动公开后，在其他存活玩家中分配 n 次 0.5 级攻击，可以重复选择同一名玩家。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 1, "levelPerPower": 0.5, "minPower": 1 }, "target": { "mode": "multiple_enemies", "selectionTiming": "deferred", "maxTargetsByPower": true }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "stardust" }], "vfxId": "stardust" },
     { "id": "forge_sword", "name": "铸剑者", "category": "resource", "description": "锻造 3；首次锻造时激活君王之剑。", "cost": { "energy": 1, "stars": 4 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "forge_sword" }], "vfxId": "forge_sword" },
     { "id": "forge_wall", "name": "筑墙", "category": "defense", "description": "本回合获得 2.5 级格挡并锻造 1；首次锻造时激活君王之剑。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 2.5, "effects": [{ "handler": "forge_wall" }], "vfxId": "forge_wall" },
     { "id": "sovereign_blade", "name": "君王之剑", "category": "attack", "description": "以当前锻造等级发动攻击，最高 3 级；使用后进入锁定，继续锻造不会解除锁定。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "sovereign_blade" }], "vfxId": "sovereign_blade", "unlockRequirements": { "allBuffs": ["sovereign_blade_forged", "sovereign_blade_active"], "description": "需要君王之剑已经生成且处于激活状态" } },
-    { "id": "summon_forth", "name": "征召上前", "category": "special", "description": "锻造 0.5 并生成或重新激活君王之剑。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "summon_forth" }], "vfxId": "summon_forth", "unlockRequirements": { "noneBuffs": ["sovereign_blade_active"], "description": "君王之剑已经激活" } },
+    { "id": "summon_forth", "name": "征召上前", "category": "special", "description": "始终可用。先锻造 0.5；若君王之剑尚未生成则生成，随后将其激活或重置为可使用状态。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "summon_forth" }], "vfxId": "summon_forth" },
+    { "id": "ten_volt", "name": "十伯伏特", "category": "attack", "description": "沿顺、逆时针逐格传导，各命中第一名未躲开的玩家。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 1, "damageType": "magic", "effects": [{ "handler": "ten_volt" }], "vfxId": "ten_volt" },
+    { "id": "hundred_thousand_volt", "name": "十万伏特", "category": "attack", "description": "沿顺、逆时针逐格传导，各命中第一名未躲开的玩家。", "cost": { "energy": 2, "charge": 2 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 3, "damageType": "magic", "effects": [{ "handler": "hundred_thousand_volt" }], "vfxId": "hundred_thousand_volt" },
+    { "id": "quick_attack", "name": "迅雷", "category": "special", "description": "移动到相邻空格；下一次十伯伏特不消耗蓄力。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 2, "level": 0, "effects": [{ "handler": "quick_attack" }], "vfxId": "quick_attack" },
+    { "id": "sword_aura", "name": "剑气", "category": "attack", "description": "行动公开后选择 1 名其他存活玩家；对该玩家造成 1.5 级斩击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy", "selectionTiming": "deferred" }, "speedPriority": 1, "level": 1.5, "damageType": "slash", "effects": [{ "handler": "sword_aura" }], "vfxId": "sword_aura" },
+    { "id": "open_heaven_gate", "name": "一剑开天门", "category": "attack", "description": "行动公开后选择 1 名其他存活玩家；对该玩家造成 3 级斩击。", "cost": { "energy": 2, "charge": 2 }, "target": { "mode": "single_enemy", "selectionTiming": "deferred" }, "speedPriority": 1, "level": 3, "damageType": "slash", "effects": [{ "handler": "open_heaven_gate" }], "vfxId": "open_heaven_gate" },
+    { "id": "absorb_charge", "name": "吸", "category": "resource", "description": "选择 1 名其他存活玩家；若该玩家本回合使用蓄力，抢夺该蓄力。熟能生巧达到 2 层后改为后发选择，达到 4 层后同时造成伤害。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "absorb_charge" }], "vfxId": "absorb_charge" },
+    { "id": "aoao_divine", "name": "凹凹神功", "category": "attack", "description": "支付5-n点任意资源，造成2.5+0.5n级攻击，使用后熟练归零。", "cost": {}, "anyResourceCost": 5, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2.5, "effects": [{ "handler": "aoao_divine" }], "vfxId": "aoao_divine" },
+    { "id": "cut", "name": "削", "category": "attack", "description": "取消本回合的所有吸；每名使用吸的玩家左移 1 个健康状态。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "cut" }], "vfxId": "cut" },
+    { "id": "shadow_blade", "name": "暗影之刃", "category": "attack", "description": "对自身格及顺、逆时针相邻格内的所有其他存活玩家造成 1.5 级斩击；使用后冷却 4 次行动。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 1.5, "damageType": "slash", "effects": [{ "handler": "shadow_blade" }], "vfxId": "shadow_blade", "unlockRequirements": { "noneBuffs": ["shadow_blade_cooldown"], "description": "暗影之刃仍在冷却" } },
+    { "id": "dream_path", "name": "魇之梦径", "category": "attack", "description": "选择 1 名其他存活玩家；对自身格至该玩家所在地块的顺时针路径内所有存活玩家造成 1 级魔法伤害，并铺设持续 3 回合的梦径。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "magic", "effects": [{ "handler": "dream_path" }], "vfxId": "dream_path" },
+    { "id": "dark_shelter", "name": "黑暗庇护", "category": "defense", "description": "只吸收本回合最高等级的一次攻击；成功后随后三回合速度+1、攻击+0.5。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "speedPriority": 4, "level": 999, "effects": [{ "handler": "dark_shelter" }], "vfxId": "dark_shelter" },
+    { "id": "silent_fear", "name": "无言恐惧", "category": "attack", "description": "选择 1 名其他存活玩家并造成 2 级攻击；若该玩家的招式等级不高于 2，使其本回合尚未结算的非气行动失效，且下回合只能使用气并额外承受 1 级攻击。", "cost": { "energy": 1, "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "damageType": "magic", "effects": [{ "handler": "silent_fear" }], "vfxId": "silent_fear" },
+    { "id": "haunting_shadows", "name": "鬼影重重", "category": "attack", "description": "令全场陷入两回合黑暗；释放时可后发锁定并冲刺一次，也可保留唯一一次冲刺至下一回合。", "cost": { "energy": 1, "charge": 3 }, "target": { "mode": "single_enemy", "selectionTiming": "deferred" }, "canSkipDeferred": true, "speedPriority": 2, "level": 3, "damageType": "magic", "effects": [{ "handler": "haunting_shadows" }], "vfxId": "haunting_shadows" },
+    { "id": "nightmare_dash", "name": "鬼影冲刺", "category": "attack", "description": "选择 1 名其他存活玩家；消耗鬼影锁定并对该玩家造成 3 级冲刺攻击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 3, "damageType": "magic", "effects": [{ "handler": "nightmare_dash" }], "vfxId": "haunting_shadows" },
+    { "id": "rockfall_hammer", "name": "岩崩锤", "category": "attack", "description": "消耗 1 次使用次数；在速度 4 恢复 1 个健康状态，并对自身格及顺、逆时针各 2 格内的所有其他存活玩家造成 2 级钝击。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "rockfall_hammer" }], "vfxId": "rockfall_hammer", "unlockRequirements": { "minBuffStacks": { "hammer_ready": 1 }, "description": "每被其他玩家选中三次获得一次使用次数" } },
+    { "id": "filthy_bloodline", "name": "秽壤的血脉", "category": "special", "description": "消耗3气进入最多三回合沉睡；可提前苏醒并按未沉睡回合返还气。苏醒后获得斩，并按沉睡时长获得等时长攻击加成。", "cost": { "energy": 3 }, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "filthy_bloodline" }], "vfxId": "filthy_bloodline" },
+    { "id": "continue_sleep", "name": "继续沉睡", "category": "special", "description": "保持沉睡一回合；第三个沉睡回合结束后自动苏醒。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "continue_sleep" }], "vfxId": "sleep" },
     { "id": "wave", "name": "波（兼容）", "category": "attack", "description": "兼容旧规则的一气攻击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "effects": [{ "handler": "wave" }], "vfxId": "wave" },
     { "id": "hangup", "name": "挂机（兼容）", "category": "attack", "description": "兼容旧规则的全场攻击。", "cost": { "energy": 3 }, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "hangup" }], "vfxId": "hangup" }
   ]

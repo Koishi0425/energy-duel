@@ -82,6 +82,8 @@ export interface SubmitActionMessage {
   targetIds?: string[];
   transformCharacterId?: string;
   power?: number;
+  targetGridIndex?: number;
+  resourceSpend?: Record<string, number>;
   requestId?: string;
 }
 
@@ -101,6 +103,7 @@ export interface DeferredActionRequiredMessage {
   power: number;
   allocationCount: number;
   revealedActions: RevealedAction[];
+  allowSkip?: boolean;
 }
 
 export interface ResolutionActor {
@@ -110,6 +113,7 @@ export interface ResolutionActor {
   poseId?: string;
   transformCharacterId?: string;
   power?: number;
+  targetGridIndex?: number;
 }
 
 export interface ResolutionStep {

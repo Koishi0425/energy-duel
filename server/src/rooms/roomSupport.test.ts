@@ -53,7 +53,7 @@ describe('room support', () => {
     expect(isActionUnlocked('gonggang', 'base', 'raise_axe', [])).toBe(true);
   });
 
-  it('supports stack and absent-buff unlock requirements for the sovereign blade', () => {
+  it('requires an active forged blade only for the sovereign blade action', () => {
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(false);
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [
       { buffId: 'sovereign_blade_forged', stacks: 1 },
@@ -66,7 +66,18 @@ describe('room support', () => {
     expect(isActionUnlocked('regent', 'base', 'summon_forth', [])).toBe(true);
     expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_forged', stacks: 0.5 }])).toBe(true);
     expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(true);
-    expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_active', stacks: 1 }])).toBe(false);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [{ buffId: 'sovereign_blade_active', stacks: 1 }])).toBe(true);
+    expect(isActionUnlocked('regent', 'base', 'summon_forth', [
+      { buffId: 'sovereign_blade_forged', stacks: 2 },
+      { buffId: 'sovereign_blade_active', stacks: 1 },
+    ])).toBe(true);
+  });
+
+  it('unlocks actions granted by player and character buffs', () => {
+    expect(isActionUnlocked('default_character', 'base', 'cut', [])).toBe(false);
+    expect(isActionUnlocked('default_character', 'base', 'cut', ['cut_granted'])).toBe(true);
+    expect(isActionUnlocked('nightmare', 'base', 'nightmare_dash', ['nightmare_dash_ready'])).toBe(true);
+    expect(isActionUnlocked('mudrock', 'base', 'slash', ['mud_slash_unlocked'])).toBe(true);
   });
 
   it('ticks finite buffs in inactive character scopes without removing infinite buffs', () => {

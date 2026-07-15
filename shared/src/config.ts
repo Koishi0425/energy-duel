@@ -7,6 +7,11 @@ export const EFFECT_HANDLERS = [
   'atomic_breath', 'raise_axe', 'collect_light', 'iridescence', 'hidden_cache',
   'particle_wall', 'winning_hand', 'stardust', 'forge_sword', 'forge_wall',
   'sovereign_blade', 'summon_forth',
+  'ten_volt', 'hundred_thousand_volt', 'quick_attack', 'sword_aura', 'open_heaven_gate',
+  'absorb_charge', 'aoao_divine', 'cut', 'shadow_blade', 'dream_path', 'dark_shelter',
+  'silent_fear', 'haunting_shadows', 'rockfall_hammer', 'filthy_bloodline',
+  'nightmare_dash',
+  'continue_sleep',
 ] as const;
 export type EffectHandlerId = typeof EFFECT_HANDLERS[number];
 
@@ -25,6 +30,13 @@ export interface BuffDefinition {
   color: string;
   scope?: 'character' | 'player';
   durationTurns?: number;
+  grantedActionIds?: string[];
+}
+
+export interface PassiveDefinition {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface AssetDefinition { id: string; url: string }
@@ -57,6 +69,10 @@ export interface ActionDefinition {
   effects: EffectDefinition[];
   vfxId: string;
   variable?: VariableActionDefinition;
+  damageType?: 'generic' | 'blunt' | 'slash' | 'magic';
+  anyResourceCost?: number;
+  targetsGridCell?: boolean;
+  canSkipDeferred?: boolean;
   unlockRequirements?: {
     allBuffs?: string[];
     noneBuffs?: string[];
@@ -81,12 +97,14 @@ export interface CharacterDefinition {
   forms: FormDefinition[];
   transformations: string[];
   transformationCost: Record<string, number>;
+  passiveIds?: string[];
 }
 
 export interface GameConfig {
   version: number;
   resources: ResourceDefinition[];
   buffs: BuffDefinition[];
+  passives: PassiveDefinition[];
   assets: AssetDefinition[];
   characters: CharacterDefinition[];
   actions: ActionDefinition[];
@@ -99,12 +117,13 @@ const handlers = new Set<string>(EFFECT_HANDLERS);
 export function validateGameConfig(input: unknown): GameConfig {
   if (!input || typeof input !== 'object') throw new Error('Game config must be an object.');
   const config = input as Partial<GameConfig>;
-  if (!Number.isInteger(config.version) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.assets)
+  if (!Number.isInteger(config.version) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.passives) || !Array.isArray(config.assets)
     || !Array.isArray(config.characters) || !Array.isArray(config.actions)) {
     throw new Error('Game config is missing required collections or version.');
   }
   assertUnique(config.resources, 'resource');
   assertUnique(config.buffs, 'buff');
+  assertUnique(config.passives, 'passive');
   assertUnique(config.assets, 'asset');
   assertUnique(config.characters, 'character');
   assertUnique(config.actions, 'action');
@@ -112,12 +131,16 @@ export function validateGameConfig(input: unknown): GameConfig {
   const buffIds = new Set(config.buffs.map((item) => item.id));
   const assetIds = new Set(config.assets.map((item) => item.id));
   const actionIds = new Set(config.actions.map((item) => item.id));
+  const passiveIds = new Set(config.passives.map((item) => item.id));
   for (const buff of config.buffs) {
     if (buff.scope && !['character', 'player'].includes(buff.scope)) throw new Error(`Buff ${buff.id} has an invalid scope.`);
     if (buff.durationTurns !== undefined && (!Number.isInteger(buff.durationTurns) || buff.durationTurns < 1)) throw new Error(`Buff ${buff.id} has an invalid duration.`);
+    if (buff.grantedActionIds?.some((id) => !actionIds.has(id))) throw new Error(`Buff ${buff.id} grants a missing action.`);
   }
   for (const action of config.actions) {
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
+    if (action.damageType && !['generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
+    if (action.anyResourceCost !== undefined && (!Number.isInteger(action.anyResourceCost) || action.anyResourceCost < 1)) throw new Error(`Action ${action.id} has an invalid flexible cost.`);
     if (!targetModes.has(action.target?.mode)) throw new Error(`Action ${action.id} has an invalid target mode.`);
     if (action.target.selectionTiming && !['planned', 'deferred'].includes(action.target.selectionTiming)) {
       throw new Error(`Action ${action.id} has an invalid target selection timing.`);
@@ -158,6 +181,7 @@ export function validateGameConfig(input: unknown): GameConfig {
       throw new Error(`Character ${character.id} has an invalid description.`);
     }
     if (!assetIds.has(character.defaultAssetId)) throw new Error(`Character ${character.id} references a missing asset.`);
+    if (character.passiveIds?.some((id) => !passiveIds.has(id))) throw new Error(`Character ${character.id} references a missing passive.`);
     assertUnique(character.forms, `form on ${character.id}`);
     for (const form of character.forms) {
       if (!assetIds.has(form.defaultAssetId) || form.unlockedActions.some((id) => !actionIds.has(id))) {
@@ -191,5 +215,6 @@ export const gameConfig = validateGameConfig(rawGameConfig);
 export const actionById = new Map(gameConfig.actions.map((action) => [action.id, action]));
 export const resourceById = new Map(gameConfig.resources.map((resource) => [resource.id, resource]));
 export const buffById = new Map(gameConfig.buffs.map((buff) => [buff.id, buff]));
+export const passiveById = new Map(gameConfig.passives.map((passive) => [passive.id, passive]));
 export const characterById = new Map(gameConfig.characters.map((character) => [character.id, character]));
 export const assetById = new Map(gameConfig.assets.map((asset) => [asset.id, asset]));
