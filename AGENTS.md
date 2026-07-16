@@ -184,6 +184,13 @@ Run commands from the repository root:
   the best 35 scores and the latest 15 scores; one game may belong to both sets.
   Persist the formula version with each score and never silently recalculate
   historical scores after a formula change.
+  Profile level is capped at 999. Its cumulative EXP threshold follows
+  `50 * (level - 1) + floor(1.5 * (level - 1)^2)` through the early curve, but
+  every advancement from levels 1 through 483 must remain monotonic and below
+  1,500 EXP; 483 to 484 costs 1,497 EXP, and 484 to 485 onward costs exactly
+  1,500 EXP.
+  The client progress bar must subtract the current-level threshold and show
+  progress within that level.
 - The room creator is the permanent host. A permanent host departure destroys
   the room. Only active matches reserve an unexpectedly disconnected seat for
   30 seconds; lobby and result-screen disconnects are immediate departures. A

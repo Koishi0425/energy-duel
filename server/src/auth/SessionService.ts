@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { experienceRequiredForLevel, PROFILE_NAMEPLATES, PROFILE_TITLES, type GameRatingResultMessage, type GameScoreBreakdown, type PlayerProfile, type ProfileUpdateRequest, type RankId } from '@energy-duel/shared';
+import { experienceRequiredForLevel, MAX_PROFILE_LEVEL, profileLevelForExperience, PROFILE_NAMEPLATES, PROFILE_TITLES, type GameRatingResultMessage, type GameScoreBreakdown, type PlayerProfile, type ProfileUpdateRequest, type RankId } from '@energy-duel/shared';
 import { calculateRating, retainRatingScores, type StoredRatingScore } from '../game/RatingCalculator.js';
 
 interface StoredProfile {
@@ -132,9 +132,9 @@ export class SessionService {
 
 function createDefaultProfile(username: string): StoredProfile { return { nickname: username, nameplateId: 'standard', titleId: 'novice', rankId: 'unranked', experience: 0, rating: 0, ratingScores: [], unlockedNameplateIds: [...ALL_NAMEPLATE_IDS], unlockedTitleIds: ['novice'], stats: { totalGames: 0, wins: 0, losses: 0, draws: 0, currentWinStreak: 0, bestWinStreak: 0 } }; }
 function toPublicProfile(account: AccountRecord): PlayerProfile {
-  let level = 1; while (level < 999 && account.profile.experience >= experienceRequiredForLevel(level + 1)) level += 1;
+  const level = profileLevelForExperience(account.profile.experience);
   const rating = calculateRating(account.profile.ratingScores);
-  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(level + 1), rating: rating.rating, ratingBest35: rating.best35Contribution, ratingRecent15: rating.recent15Contribution, lastGameScore: account.profile.ratingScores.at(-1)?.score, unlockedNameplateIds: [...ALL_NAMEPLATE_IDS], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
+  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(Math.min(MAX_PROFILE_LEVEL, level + 1)), rating: rating.rating, ratingBest35: rating.best35Contribution, ratingRecent15: rating.recent15Contribution, lastGameScore: account.profile.ratingScores.at(-1)?.score, unlockedNameplateIds: [...ALL_NAMEPLATE_IDS], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
 }
 function hashPassword(password: string, salt: string): string { return scryptSync(password, salt, 64).toString('hex'); }
 function passwordMatches(password: string, salt: string, expected: string): boolean { const actual = Buffer.from(hashPassword(password, salt), 'hex'); const stored = Buffer.from(expected, 'hex'); return actual.length === stored.length && timingSafeEqual(actual, stored); }

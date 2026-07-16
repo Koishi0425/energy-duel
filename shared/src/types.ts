@@ -111,10 +111,39 @@ export function profileLevelTier(level: number): ProfileLevelTier {
   return 'normal';
 }
 
-export function experienceRequiredForLevel(level: number): number {
-  const normalized = Math.max(1, Math.floor(level));
+export const MAX_PROFILE_LEVEL = 999;
+export const MAX_EXPERIENCE_PER_LEVEL = 1_500;
+const LAST_UNCAPPED_PROFILE_LEVEL = 484;
+
+/** EXP needed to advance from the supplied level, capped once the early quadratic curve reaches the late-game ceiling. */
+export function experienceRequiredForNextLevel(level: number): number {
+  const normalized = Math.max(1, Math.min(MAX_PROFILE_LEVEL, Math.floor(level)));
+  if (normalized >= MAX_PROFILE_LEVEL) return 0;
   const n = normalized - 1;
-  return 100 * n * n + 300 * n;
+  const currentThreshold = 50 * n + Math.floor(3 * n * n / 2);
+  const nextN = n + 1;
+  const nextThreshold = 50 * nextN + Math.floor(3 * nextN * nextN / 2);
+  return Math.min(MAX_EXPERIENCE_PER_LEVEL, nextThreshold - currentThreshold);
+}
+
+/** Cumulative EXP threshold: quadratic through level 484, then a fixed 1,500 EXP per level. */
+export function experienceRequiredForLevel(level: number): number {
+  const normalized = Math.max(1, Math.min(MAX_PROFILE_LEVEL, Math.floor(level)));
+  const n = normalized - 1;
+  const uncappedSteps = Math.min(n, LAST_UNCAPPED_PROFILE_LEVEL - 1);
+  const uncappedExperience = 50 * uncappedSteps + Math.floor(3 * uncappedSteps * uncappedSteps / 2);
+  return uncappedExperience + (n - uncappedSteps) * MAX_EXPERIENCE_PER_LEVEL;
+}
+
+export function profileLevelForExperience(experience: number): number {
+  const normalized = Math.max(0, Math.floor(experience));
+  let low = 1; let high = MAX_PROFILE_LEVEL;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (experienceRequiredForLevel(middle) <= normalized) low = middle;
+    else high = middle - 1;
+  }
+  return low;
 }
 
 export interface SessionIdentity {
