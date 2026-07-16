@@ -53,7 +53,7 @@ async function optimizeNameplates() {
     const label = path.parse(entry.name).name; const id = stableId('nameplate', label); const destination = path.join(outputRoot, 'profiles', 'nameplates', id);
     const frame = await runFfmpeg(path.join(directory, entry.name), path.join(destination, 'frame.webp'), 720, false, 90);
     const thumbnail = await runFfmpeg(path.join(directory, entry.name), path.join(destination, 'thumbnail.webp'), 320, false, 86);
-    assets.push({ id, type: 'nameplate', name: label, url: publicUrl(frame.path), previewUrl: publicUrl(thumbnail.path), width: 720, height: 116, status: 'unregistered', bytes: frame.bytes, previewBytes: thumbnail.bytes });
+    assets.push({ id, type: 'nameplate', name: label, url: publicUrl(frame.path), previewUrl: publicUrl(thumbnail.path), width: 720, height: 116, status: 'testing', bytes: frame.bytes, previewBytes: thumbnail.bytes });
   }
   return assets;
 }
@@ -80,5 +80,19 @@ for (const generatedDirectory of [
 const assets = [...await optimizeCharacters(), ...await optimizeNameplates(), ...await optimizeTitles()];
 const manifestDirectory = path.join(outputRoot, 'manifests'); await mkdir(manifestDirectory, { recursive: true });
 await writeFile(path.join(manifestDirectory, 'assets.json'), `${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), assets }, null, 2)}\n`, 'utf8');
+const nameplates = assets.filter((asset) => asset.type === 'nameplate').map((asset) => ({ id: asset.id, name: asset.name, description: '测试期间开放使用。', assetUrl: asset.url, previewUrl: asset.previewUrl }));
+const titleBadges = Object.fromEntries(assets.filter((asset) => asset.type === 'title-badge').map((asset) => [asset.name.toLowerCase(), asset.url]));
+const profileAssets = {
+  version: 1,
+  nameplates,
+  titleRarities: {
+    normal: { name: '普通', assetUrl: titleBadges.normal },
+    bronze: { name: '铜', assetUrl: titleBadges.bronze },
+    silver: { name: '银', assetUrl: titleBadges.silver },
+    gold: { name: '金', assetUrl: titleBadges.gold },
+    rainbow: { name: '彩', assetUrl: titleBadges.rainbow },
+  },
+};
+await writeFile(path.join(root, 'shared', 'config', 'profile-assets.json'), `${JSON.stringify(profileAssets, null, 2)}\n`, 'utf8');
 const runtimeBytes = assets.reduce((sum, asset) => sum + (asset.bytes ?? 0) + (asset.previewBytes ?? 0), 0);
 console.log(`Optimized ${assets.length} assets (${(runtimeBytes / 1024 / 1024).toFixed(2)} MiB runtime output).`);

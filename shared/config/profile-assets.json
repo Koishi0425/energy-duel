@@ -1,0 +1,727 @@
+{
+  "version": 1,
+  "nameplates": [
+    {
+      "id": "nameplate-13a9f90a2c",
+      "name": "霸者",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-13a9f90a2c/frame.89c70e1382cf.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-13a9f90a2c/thumbnail.39569ab5f122.webp"
+    },
+    {
+      "id": "nameplate-5e9fe96255",
+      "name": "白極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-5e9fe96255/frame.d459f0c8e1fd.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-5e9fe96255/thumbnail.1fee536339a3.webp"
+    },
+    {
+      "id": "nameplate-8d2c9f7b93",
+      "name": "白将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-8d2c9f7b93/frame.bf6ff193fac2.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-8d2c9f7b93/thumbnail.e33a52e3c03d.webp"
+    },
+    {
+      "id": "nameplate-7ef18f4449",
+      "name": "白神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-7ef18f4449/frame.a0b5d6bd733f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-7ef18f4449/thumbnail.1614f8274c04.webp"
+    },
+    {
+      "id": "nameplate-528c0c858a",
+      "name": "白舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-528c0c858a/frame.828f3c2743ed.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-528c0c858a/thumbnail.9f1bbec5640a.webp"
+    },
+    {
+      "id": "nameplate-c29ed44089",
+      "name": "彩極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-c29ed44089/frame.491a1899b81e.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-c29ed44089/thumbnail.15c84862220c.webp"
+    },
+    {
+      "id": "nameplate-2300d22059",
+      "name": "彩将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-2300d22059/frame.252bbab1c6fa.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-2300d22059/thumbnail.9892fbc1751d.webp"
+    },
+    {
+      "id": "nameplate-12ced0abae",
+      "name": "彩神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-12ced0abae/frame.6ff9e110f58f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-12ced0abae/thumbnail.f674ce78c4e6.webp"
+    },
+    {
+      "id": "nameplate-b28ac30ee3",
+      "name": "彩舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-b28ac30ee3/frame.c0ee702432e7.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-b28ac30ee3/thumbnail.5a1cffb43dce.webp"
+    },
+    {
+      "id": "nameplate-bc8f795171",
+      "name": "超極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-bc8f795171/frame.f2e7d163bdbb.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-bc8f795171/thumbnail.b5c4b7063c6a.webp"
+    },
+    {
+      "id": "nameplate-26147bb9db",
+      "name": "超将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-26147bb9db/frame.db922e49ef13.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-26147bb9db/thumbnail.f502a0c36af8.webp"
+    },
+    {
+      "id": "nameplate-6707e1f019",
+      "name": "超神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-6707e1f019/frame.d41756edfb8f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-6707e1f019/thumbnail.87df407580d1.webp"
+    },
+    {
+      "id": "nameplate-16b44bfff8",
+      "name": "超舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-16b44bfff8/frame.5705a080b6ee.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-16b44bfff8/thumbnail.3a5f4e5caf76.webp"
+    },
+    {
+      "id": "nameplate-e237d20cd4",
+      "name": "橙極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e237d20cd4/frame.771b62a709ad.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e237d20cd4/thumbnail.04be63ac7c33.webp"
+    },
+    {
+      "id": "nameplate-efdc8c6a47",
+      "name": "橙将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-efdc8c6a47/frame.62060d6180fa.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-efdc8c6a47/thumbnail.ad1938972331.webp"
+    },
+    {
+      "id": "nameplate-4885f40d7d",
+      "name": "橙神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-4885f40d7d/frame.7f26f64e329b.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-4885f40d7d/thumbnail.8e154926c052.webp"
+    },
+    {
+      "id": "nameplate-f4ab7fb41f",
+      "name": "橙舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-f4ab7fb41f/frame.02935b55ec4d.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-f4ab7fb41f/thumbnail.f15ded2e9b43.webp"
+    },
+    {
+      "id": "nameplate-f935d19738",
+      "name": "華極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-f935d19738/frame.eef7fc944263.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-f935d19738/thumbnail.0c665d832681.webp"
+    },
+    {
+      "id": "nameplate-0389d03bfb",
+      "name": "華将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-0389d03bfb/frame.fc278e272cf5.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-0389d03bfb/thumbnail.1739b1aa8954.webp"
+    },
+    {
+      "id": "nameplate-30263e53f6",
+      "name": "華神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-30263e53f6/frame.3a0488c27075.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-30263e53f6/thumbnail.ed7ebe5f1701.webp"
+    },
+    {
+      "id": "nameplate-df94abb6e7",
+      "name": "華舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-df94abb6e7/frame.f9e23094ade0.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-df94abb6e7/thumbnail.3af90b76d83f.webp"
+    },
+    {
+      "id": "nameplate-ff59797a6f",
+      "name": "煌極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ff59797a6f/frame.8c29d8715f23.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ff59797a6f/thumbnail.bc875d60da11.webp"
+    },
+    {
+      "id": "nameplate-e509e8938c",
+      "name": "煌将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e509e8938c/frame.4fbcc96302ca.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e509e8938c/thumbnail.667cb5ae0d79.webp"
+    },
+    {
+      "id": "nameplate-b5582a8cdb",
+      "name": "煌神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-b5582a8cdb/frame.7a9ac1e1d58d.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-b5582a8cdb/thumbnail.435557506ee9.webp"
+    },
+    {
+      "id": "nameplate-ee75527a53",
+      "name": "煌舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ee75527a53/frame.e4cacd1892bd.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ee75527a53/thumbnail.f668dc8be89c.webp"
+    },
+    {
+      "id": "nameplate-677bbc3e66",
+      "name": "輝極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-677bbc3e66/frame.4222bc849918.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-677bbc3e66/thumbnail.9271f84d4593.webp"
+    },
+    {
+      "id": "nameplate-9d0476f047",
+      "name": "輝将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-9d0476f047/frame.fbd32926f332.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-9d0476f047/thumbnail.6d1572d77908.webp"
+    },
+    {
+      "id": "nameplate-4bf74c7b00",
+      "name": "輝神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-4bf74c7b00/frame.f60997de755c.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-4bf74c7b00/thumbnail.365e3e36e47e.webp"
+    },
+    {
+      "id": "nameplate-e0a8575fa5",
+      "name": "輝舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e0a8575fa5/frame.18aa3b62677c.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e0a8575fa5/thumbnail.5933cb88c4dc.webp"
+    },
+    {
+      "id": "nameplate-252d684ce9",
+      "name": "祭極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-252d684ce9/frame.2857d0504dda.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-252d684ce9/thumbnail.b5a43d790702.webp"
+    },
+    {
+      "id": "nameplate-85828af286",
+      "name": "祭将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-85828af286/frame.96341f44e2ab.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-85828af286/thumbnail.c1c324cd1386.webp"
+    },
+    {
+      "id": "nameplate-28c1a90fd5",
+      "name": "祭神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-28c1a90fd5/frame.fc64e2c400f5.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-28c1a90fd5/thumbnail.66e2b86c6fdb.webp"
+    },
+    {
+      "id": "nameplate-9c861b2063",
+      "name": "祭舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-9c861b2063/frame.7a7e307dbf98.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-9c861b2063/thumbnail.acd363a417ed.webp"
+    },
+    {
+      "id": "nameplate-e89d94ce45",
+      "name": "菫極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e89d94ce45/frame.72697ce30ea2.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e89d94ce45/thumbnail.3a0f21a71cd1.webp"
+    },
+    {
+      "id": "nameplate-4847fecd0e",
+      "name": "菫将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-4847fecd0e/frame.e08bf575b5c9.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-4847fecd0e/thumbnail.67d4144ed48c.webp"
+    },
+    {
+      "id": "nameplate-705343b182",
+      "name": "菫神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-705343b182/frame.3f6ed3ce0a81.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-705343b182/thumbnail.78be2ac47372.webp"
+    },
+    {
+      "id": "nameplate-bfd3e47ce9",
+      "name": "菫舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-bfd3e47ce9/frame.8fcb837c1ca3.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-bfd3e47ce9/thumbnail.015d7702aeed.webp"
+    },
+    {
+      "id": "nameplate-be88b6ad68",
+      "name": "镜極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-be88b6ad68/frame.e813043d7bfc.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-be88b6ad68/thumbnail.c5d47e37372c.webp"
+    },
+    {
+      "id": "nameplate-b301db145d",
+      "name": "镜将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-b301db145d/frame.59aad1e790e7.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-b301db145d/thumbnail.1c404c57efd5.webp"
+    },
+    {
+      "id": "nameplate-d55c501fa1",
+      "name": "镜神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-d55c501fa1/frame.7bccd2720584.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-d55c501fa1/thumbnail.6e2cc21861e3.webp"
+    },
+    {
+      "id": "nameplate-fff862d503",
+      "name": "镜舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-fff862d503/frame.2a4c2d4ddf14.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-fff862d503/thumbnail.2472f9824715.webp"
+    },
+    {
+      "id": "nameplate-586f08fdc9",
+      "name": "双極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-586f08fdc9/frame.813c7b808bfc.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-586f08fdc9/thumbnail.4bee4572842d.webp"
+    },
+    {
+      "id": "nameplate-343756fcc6",
+      "name": "双将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-343756fcc6/frame.5d9cdf9e9b70.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-343756fcc6/thumbnail.719722bccf53.webp"
+    },
+    {
+      "id": "nameplate-62a3abe61b",
+      "name": "双神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-62a3abe61b/frame.943dbe2ca4dc.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-62a3abe61b/thumbnail.af56e28562de.webp"
+    },
+    {
+      "id": "nameplate-9ddeca5caf",
+      "name": "双舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-9ddeca5caf/frame.46c3dd782ef9.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-9ddeca5caf/thumbnail.4afe2ad77c84.webp"
+    },
+    {
+      "id": "nameplate-f5e346df4a",
+      "name": "爽極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-f5e346df4a/frame.29ae6d225048.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-f5e346df4a/thumbnail.186d56a6be9a.webp"
+    },
+    {
+      "id": "nameplate-c7bc70628f",
+      "name": "爽将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-c7bc70628f/frame.b9bce2fcfe0c.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-c7bc70628f/thumbnail.971e8e2d06ed.webp"
+    },
+    {
+      "id": "nameplate-3e78030942",
+      "name": "爽神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-3e78030942/frame.d7cecc5477e2.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-3e78030942/thumbnail.a209b86c3cb6.webp"
+    },
+    {
+      "id": "nameplate-de68789827",
+      "name": "爽舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-de68789827/frame.95a572af33dd.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-de68789827/thumbnail.8a393e122979.webp"
+    },
+    {
+      "id": "nameplate-dc98649d37",
+      "name": "桃極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-dc98649d37/frame.59806d9c4100.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-dc98649d37/thumbnail.f8b60b6e3ceb.webp"
+    },
+    {
+      "id": "nameplate-de2ceac52c",
+      "name": "桃将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-de2ceac52c/frame.aff6581a4a3c.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-de2ceac52c/thumbnail.3bfd102f6519.webp"
+    },
+    {
+      "id": "nameplate-0dd09031d0",
+      "name": "桃神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-0dd09031d0/frame.230ada59c67e.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-0dd09031d0/thumbnail.f759e6e7848f.webp"
+    },
+    {
+      "id": "nameplate-dd58f01520",
+      "name": "桃舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-dd58f01520/frame.b703079dc6e2.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-dd58f01520/thumbnail.0ec263dd1bb3.webp"
+    },
+    {
+      "id": "nameplate-50dc1eff3b",
+      "name": "舞極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-50dc1eff3b/frame.d3d628bb31da.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-50dc1eff3b/thumbnail.6afe47e3a4ea.webp"
+    },
+    {
+      "id": "nameplate-133248a405",
+      "name": "舞将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-133248a405/frame.b652b7f7bd91.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-133248a405/thumbnail.195eac05aa84.webp"
+    },
+    {
+      "id": "nameplate-ee889ea08a",
+      "name": "舞神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ee889ea08a/frame.6289dce3d80c.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ee889ea08a/thumbnail.c26a94506dc2.webp"
+    },
+    {
+      "id": "nameplate-ae102b7e83",
+      "name": "舞舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ae102b7e83/frame.3accaf8c3fb0.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ae102b7e83/thumbnail.0d8bad1213b8.webp"
+    },
+    {
+      "id": "nameplate-042496cd77",
+      "name": "檄極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-042496cd77/frame.2c6ceec63fb8.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-042496cd77/thumbnail.eafd5f053ace.webp"
+    },
+    {
+      "id": "nameplate-9922dc2794",
+      "name": "檄将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-9922dc2794/frame.0f12b9c9f9b2.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-9922dc2794/thumbnail.de9381e8e311.webp"
+    },
+    {
+      "id": "nameplate-8fd282dadb",
+      "name": "檄神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-8fd282dadb/frame.eba2bd221cac.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-8fd282dadb/thumbnail.d7bfd7855ddd.webp"
+    },
+    {
+      "id": "nameplate-128888f554",
+      "name": "檄舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-128888f554/frame.0f80176ba28b.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-128888f554/thumbnail.18008be6162a.webp"
+    },
+    {
+      "id": "nameplate-e506b820c0",
+      "name": "暁極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e506b820c0/frame.10073cc6cae6.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e506b820c0/thumbnail.530f26847586.webp"
+    },
+    {
+      "id": "nameplate-eb79778849",
+      "name": "暁将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-eb79778849/frame.3e7893c16f29.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-eb79778849/thumbnail.1b61d3a58a9e.webp"
+    },
+    {
+      "id": "nameplate-40675faff3",
+      "name": "暁神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-40675faff3/frame.b629af42c274.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-40675faff3/thumbnail.dbda5b02e67b.webp"
+    },
+    {
+      "id": "nameplate-c7b6698c08",
+      "name": "暁舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-c7b6698c08/frame.07fb1610cdeb.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-c7b6698c08/thumbnail.2d569f0369c1.webp"
+    },
+    {
+      "id": "nameplate-4a33bf46c7",
+      "name": "星極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-4a33bf46c7/frame.c776dfdcfdac.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-4a33bf46c7/thumbnail.18b043b937b8.webp"
+    },
+    {
+      "id": "nameplate-19ae97c6ab",
+      "name": "星将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-19ae97c6ab/frame.15cdf42dd108.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-19ae97c6ab/thumbnail.19381e0abaa7.webp"
+    },
+    {
+      "id": "nameplate-433d4bb510",
+      "name": "星神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-433d4bb510/frame.1c0988a2598a.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-433d4bb510/thumbnail.d82f223ff877.webp"
+    },
+    {
+      "id": "nameplate-d278ce23d4",
+      "name": "星舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-d278ce23d4/frame.319ed6aa4e95.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-d278ce23d4/thumbnail.257df095c4cc.webp"
+    },
+    {
+      "id": "nameplate-160c33c209",
+      "name": "熊極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-160c33c209/frame.046d5dff8a72.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-160c33c209/thumbnail.fb95efba255d.webp"
+    },
+    {
+      "id": "nameplate-29e08831d8",
+      "name": "熊将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-29e08831d8/frame.bfde6f6a55d3.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-29e08831d8/thumbnail.8f395d135649.webp"
+    },
+    {
+      "id": "nameplate-e23b3ed843",
+      "name": "熊神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e23b3ed843/frame.28c7a4c51d37.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e23b3ed843/thumbnail.5fab4b43c29c.webp"
+    },
+    {
+      "id": "nameplate-311e97f24f",
+      "name": "熊舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-311e97f24f/frame.5165f74fbe65.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-311e97f24f/thumbnail.ff508b7b4d11.webp"
+    },
+    {
+      "id": "nameplate-fd8ba1c70a",
+      "name": "雪極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-fd8ba1c70a/frame.eee2a9f3628d.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-fd8ba1c70a/thumbnail.c5dfbbf711b2.webp"
+    },
+    {
+      "id": "nameplate-300a8cdae0",
+      "name": "雪将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-300a8cdae0/frame.12d820f2fd26.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-300a8cdae0/thumbnail.8ec4e7f5bf95.webp"
+    },
+    {
+      "id": "nameplate-eae1e151db",
+      "name": "雪神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-eae1e151db/frame.a10c01ff406f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-eae1e151db/thumbnail.96bb1139dd6c.webp"
+    },
+    {
+      "id": "nameplate-6245c12631",
+      "name": "雪舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-6245c12631/frame.6cc0c087d6f1.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-6245c12631/thumbnail.c5eda1df23cf.webp"
+    },
+    {
+      "id": "nameplate-a2623642b0",
+      "name": "宴極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-a2623642b0/frame.6cb9fe5c32f0.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-a2623642b0/thumbnail.4a6b74ee5f54.webp"
+    },
+    {
+      "id": "nameplate-624f5843ee",
+      "name": "宴将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-624f5843ee/frame.cf0302ac737f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-624f5843ee/thumbnail.28b85b50257e.webp"
+    },
+    {
+      "id": "nameplate-2c6e6b47ef",
+      "name": "宴神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-2c6e6b47ef/frame.9f67d1b66b7b.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-2c6e6b47ef/thumbnail.fd794694b9a4.webp"
+    },
+    {
+      "id": "nameplate-b42d930f6a",
+      "name": "宴舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-b42d930f6a/frame.29a011ac3381.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-b42d930f6a/thumbnail.22828308dc86.webp"
+    },
+    {
+      "id": "nameplate-ba1021fca5",
+      "name": "櫻極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ba1021fca5/frame.181481b40666.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ba1021fca5/thumbnail.980be56589d4.webp"
+    },
+    {
+      "id": "nameplate-9a462baeef",
+      "name": "櫻将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-9a462baeef/frame.7df78d530cea.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-9a462baeef/thumbnail.9d34586e70a7.webp"
+    },
+    {
+      "id": "nameplate-433f5ab3fd",
+      "name": "櫻神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-433f5ab3fd/frame.8d5af2d21eea.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-433f5ab3fd/thumbnail.79c9bc6de366.webp"
+    },
+    {
+      "id": "nameplate-a6eca9512e",
+      "name": "櫻舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-a6eca9512e/frame.d4d614898879.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-a6eca9512e/thumbnail.f46fae42a268.webp"
+    },
+    {
+      "id": "nameplate-e5661a90aa",
+      "name": "真極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e5661a90aa/frame.2b6ebbd758a1.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e5661a90aa/thumbnail.b05844c4e53d.webp"
+    },
+    {
+      "id": "nameplate-0e73741980",
+      "name": "真神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-0e73741980/frame.70dabafe84a4.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-0e73741980/thumbnail.80f2f4fd20e3.webp"
+    },
+    {
+      "id": "nameplate-e698e5c7c5",
+      "name": "真舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-e698e5c7c5/frame.3e8e12a47911.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-e698e5c7c5/thumbnail.4633f0573e42.webp"
+    },
+    {
+      "id": "nameplate-493cc2f67e",
+      "name": "宙極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-493cc2f67e/frame.faa0f4c45aa3.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-493cc2f67e/thumbnail.4b09a40fd712.webp"
+    },
+    {
+      "id": "nameplate-1400890694",
+      "name": "宙将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-1400890694/frame.e072265907d6.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-1400890694/thumbnail.08d8c02e3341.webp"
+    },
+    {
+      "id": "nameplate-368e5e880b",
+      "name": "宙神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-368e5e880b/frame.3112fc6aaaab.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-368e5e880b/thumbnail.a694b9e1db8c.webp"
+    },
+    {
+      "id": "nameplate-7d82c7bc9c",
+      "name": "宙舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-7d82c7bc9c/frame.4e500ec8a6dd.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-7d82c7bc9c/thumbnail.2d3873e56483.webp"
+    },
+    {
+      "id": "nameplate-f0cc3bdb6c",
+      "name": "祝極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-f0cc3bdb6c/frame.164ae8b3173f.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-f0cc3bdb6c/thumbnail.7f8bb182a479.webp"
+    },
+    {
+      "id": "nameplate-ec94bb91c4",
+      "name": "祝将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-ec94bb91c4/frame.19b4c5dc4ce4.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-ec94bb91c4/thumbnail.294290340c8a.webp"
+    },
+    {
+      "id": "nameplate-d0908cfdcf",
+      "name": "祝神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-d0908cfdcf/frame.6ce78da03415.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-d0908cfdcf/thumbnail.f47f769164f5.webp"
+    },
+    {
+      "id": "nameplate-55d77539ea",
+      "name": "祝舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-55d77539ea/frame.eb6e9e3f96a3.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-55d77539ea/thumbnail.ef57291a8a93.webp"
+    },
+    {
+      "id": "nameplate-50afb0e092",
+      "name": "紫極",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-50afb0e092/frame.33dd9b266c98.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-50afb0e092/thumbnail.829b9ecdee9c.webp"
+    },
+    {
+      "id": "nameplate-2e8f0ea2fb",
+      "name": "紫将",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-2e8f0ea2fb/frame.54fa53a8c75e.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-2e8f0ea2fb/thumbnail.6429f5468e13.webp"
+    },
+    {
+      "id": "nameplate-f8fc471eef",
+      "name": "紫神",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-f8fc471eef/frame.27601e51cdd6.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-f8fc471eef/thumbnail.abb6ba22ae1f.webp"
+    },
+    {
+      "id": "nameplate-2aa0dd1044",
+      "name": "紫舞舞",
+      "description": "测试期间开放使用。",
+      "assetUrl": "/assets/profiles/nameplates/nameplate-2aa0dd1044/frame.186dc46ad7cb.webp",
+      "previewUrl": "/assets/profiles/nameplates/nameplate-2aa0dd1044/thumbnail.483bc8e84770.webp"
+    }
+  ],
+  "titleRarities": {
+    "normal": {
+      "name": "普通",
+      "assetUrl": "/assets/profiles/titles/title-normal/badge.62f5ce61cad1.webp"
+    },
+    "bronze": {
+      "name": "铜",
+      "assetUrl": "/assets/profiles/titles/title-bronze/badge.a70e21e13651.webp"
+    },
+    "silver": {
+      "name": "银",
+      "assetUrl": "/assets/profiles/titles/title-silver/badge.4c918f7b6a41.webp"
+    },
+    "gold": {
+      "name": "金",
+      "assetUrl": "/assets/profiles/titles/title-gold/badge.e377d69ea5e6.webp"
+    },
+    "rainbow": {
+      "name": "彩",
+      "assetUrl": "/assets/profiles/titles/title-rainbow/badge.5f921435ec3a.webp"
+    }
+  }
+}

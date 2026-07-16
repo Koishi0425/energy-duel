@@ -1,4 +1,4 @@
-import { PROFILE_NAMEPLATES, PROFILE_TITLES, type PlayerProfile, type RankId } from '@energy-duel/shared';
+import { PROFILE_NAMEPLATES, PROFILE_TITLES, PROFILE_TITLE_RARITIES, profileLevelTier, type PlayerProfile, type RankId } from '@energy-duel/shared';
 import type { CSSProperties } from 'react';
 import { getServerUrl } from '../session';
 
@@ -10,6 +10,9 @@ export const rankNames: Record<RankId, string> = {
 export default function PlayerProfileBanner({ profile, onAvatarClick }: { profile: PlayerProfile; onAvatarClick?: () => void }) {
   const avatar = profile.avatarUrl ? <img src={`${getServerUrl()}${profile.avatarUrl}`} alt="玩家头像" /> : <span>{profile.nickname.slice(0, 1).toUpperCase()}</span>;
   const nameplateUrl = PROFILE_NAMEPLATES.find((item) => item.id === profile.nameplateId)?.assetUrl;
+  const title = PROFILE_TITLES.find((item) => item.id === profile.titleId);
+  const titleRarity = PROFILE_TITLE_RARITIES[title?.rarity ?? 'normal'];
+  const levelTier = profileLevelTier(profile.level);
   return <section
     className={`player-banner nameplate-${profile.nameplateId}`}
     style={{ '--nameplate-image': nameplateUrl ? `url("${nameplateUrl}")` : 'linear-gradient(90deg, transparent, transparent)' } as CSSProperties}
@@ -19,7 +22,7 @@ export default function PlayerProfileBanner({ profile, onAvatarClick }: { profil
       : <div className="profile-avatar profile-avatar-static">{avatar}</div>}
     <div className="rating-block"><small>RATING</small><strong>{profile.rating.toString().padStart(5, '0')}</strong></div>
     <div className="banner-identity"><strong>{profile.nickname}</strong><span>{rankNames[profile.rankId]}</span></div>
-    <div className="banner-title-line">{PROFILE_TITLES.find((item) => item.id === profile.titleId)?.name ?? profile.titleId}</div>
-    <div className="level-orb"><small>LV</small><strong>{profile.level}</strong></div>
+    <div className={`banner-title-line title-rarity-${titleRarity.id}`} style={{ '--title-strip-image': `url("${titleRarity.assetUrl}")` } as CSSProperties}><span>{title?.name ?? profile.titleId}</span></div>
+    <div className={`level-orb level-tier-${levelTier}`}><small>LV</small><strong>{profile.level}</strong></div>
   </section>;
 }

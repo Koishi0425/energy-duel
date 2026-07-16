@@ -1,3 +1,5 @@
+import rawProfileAssets from '../config/profile-assets.json' with { type: 'json' };
+
 export interface SessionResponse {
   accountId: string;
   username: string;
@@ -67,17 +69,47 @@ export interface ProfileCosmeticDefinition {
   description: string;
   assetUrl?: string;
   previewUrl?: string;
+  rarity?: ProfileTitleRarity;
 }
+
+export type ProfileTitleRarity = 'normal' | 'bronze' | 'silver' | 'gold' | 'rainbow';
+
+export interface ProfileTitleRarityDefinition {
+  id: ProfileTitleRarity;
+  name: string;
+  assetUrl: string;
+}
+
+export const PROFILE_TITLE_RARITIES: Readonly<Record<ProfileTitleRarity, ProfileTitleRarityDefinition>> = {
+  normal: { id: 'normal', ...rawProfileAssets.titleRarities.normal },
+  bronze: { id: 'bronze', ...rawProfileAssets.titleRarities.bronze },
+  silver: { id: 'silver', ...rawProfileAssets.titleRarities.silver },
+  gold: { id: 'gold', ...rawProfileAssets.titleRarities.gold },
+  rainbow: { id: 'rainbow', ...rawProfileAssets.titleRarities.rainbow },
+};
 
 export const PROFILE_NAMEPLATES: readonly ProfileCosmeticDefinition[] = [
   { id: 'standard', name: '标准竞技框', description: '所有玩家默认拥有。' },
   { id: 'veteran', name: '久经沙场', description: '成就奖励，尚未开放。' },
+  ...rawProfileAssets.nameplates,
 ];
 
 export const PROFILE_TITLES: readonly ProfileCosmeticDefinition[] = [
-  { id: 'novice', name: '初心者', description: '所有玩家默认拥有。' },
-  { id: 'survivor', name: '绝境生还', description: '通过濒死翻盘成就解锁。' },
+  { id: 'novice', name: '初心者', description: '所有玩家默认拥有。', rarity: 'normal' },
+  { id: 'survivor', name: '绝境生还', description: '通过濒死翻盘成就解锁。', rarity: 'bronze' },
 ];
+
+export type ProfileLevelTier = 'normal' | 'purple-bronze' | 'brass' | 'platinum' | 'rainbow' | 'diamond';
+
+export function profileLevelTier(level: number): ProfileLevelTier {
+  const normalized = Math.max(1, Math.floor(level));
+  if (normalized >= 999) return 'diamond';
+  if (normalized >= 500) return 'rainbow';
+  if (normalized >= 100) return 'platinum';
+  if (normalized >= 30) return 'brass';
+  if (normalized >= 10) return 'purple-bronze';
+  return 'normal';
+}
 
 export function experienceRequiredForLevel(level: number): number {
   const normalized = Math.max(1, Math.floor(level));

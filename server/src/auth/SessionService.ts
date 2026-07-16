@@ -37,6 +37,7 @@ export const USERNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{3,16}$/;
 export const NICKNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{1,16}$/;
 export const MIN_PASSWORD_LENGTH = 7;
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ALL_NAMEPLATE_IDS = PROFILE_NAMEPLATES.map((item) => item.id);
 
 export class SessionService {
   private readonly sessions = new Map<string, SessionRecord>();
@@ -84,7 +85,7 @@ export class SessionService {
     if (!account) throw new Error('账号不存在');
     if (update.nickname !== undefined) account.profile.nickname = validateNickname(update.nickname);
     if (update.nameplateId !== undefined) {
-      if (!account.profile.unlockedNameplateIds.includes(update.nameplateId) || !PROFILE_NAMEPLATES.some((item) => item.id === update.nameplateId)) throw new Error('姓名框尚未解锁');
+      if (!PROFILE_NAMEPLATES.some((item) => item.id === update.nameplateId)) throw new Error('姓名框不存在');
       account.profile.nameplateId = update.nameplateId;
     }
     if (update.titleId !== undefined) {
@@ -129,11 +130,11 @@ export class SessionService {
   private writeDatabase(database: AccountDatabase): void { const temporaryPath = `${this.databasePath}.tmp`; writeFileSync(temporaryPath, `${JSON.stringify(database, null, 2)}\n`, 'utf8'); renameSync(temporaryPath, this.databasePath); }
 }
 
-function createDefaultProfile(username: string): StoredProfile { return { nickname: username, nameplateId: 'standard', titleId: 'novice', rankId: 'unranked', experience: 0, rating: 0, ratingScores: [], unlockedNameplateIds: ['standard'], unlockedTitleIds: ['novice'], stats: { totalGames: 0, wins: 0, losses: 0, draws: 0, currentWinStreak: 0, bestWinStreak: 0 } }; }
+function createDefaultProfile(username: string): StoredProfile { return { nickname: username, nameplateId: 'standard', titleId: 'novice', rankId: 'unranked', experience: 0, rating: 0, ratingScores: [], unlockedNameplateIds: [...ALL_NAMEPLATE_IDS], unlockedTitleIds: ['novice'], stats: { totalGames: 0, wins: 0, losses: 0, draws: 0, currentWinStreak: 0, bestWinStreak: 0 } }; }
 function toPublicProfile(account: AccountRecord): PlayerProfile {
   let level = 1; while (level < 999 && account.profile.experience >= experienceRequiredForLevel(level + 1)) level += 1;
   const rating = calculateRating(account.profile.ratingScores);
-  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(level + 1), rating: rating.rating, ratingBest35: rating.best35Contribution, ratingRecent15: rating.recent15Contribution, lastGameScore: account.profile.ratingScores.at(-1)?.score, unlockedNameplateIds: [...account.profile.unlockedNameplateIds], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
+  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(level + 1), rating: rating.rating, ratingBest35: rating.best35Contribution, ratingRecent15: rating.recent15Contribution, lastGameScore: account.profile.ratingScores.at(-1)?.score, unlockedNameplateIds: [...ALL_NAMEPLATE_IDS], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
 }
 function hashPassword(password: string, salt: string): string { return scryptSync(password, salt, 64).toString('hex'); }
 function passwordMatches(password: string, salt: string, expected: string): boolean { const actual = Buffer.from(hashPassword(password, salt), 'hex'); const stored = Buffer.from(expected, 'hex'); return actual.length === stored.length && timingSafeEqual(actual, stored); }

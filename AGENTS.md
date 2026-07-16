@@ -13,6 +13,9 @@ interfaces, directory responsibilities, or architecture invariants change.
   `PlayerProfileBanner` is the shared renderer for editable, room-detail, and
   character-drawer profile summaries. Nameplate art uses a fixed `720 / 116`
   aspect ratio with a bounded width; do not stretch it to fill arbitrary panels.
+  Reserve the rightmost 350 source pixels for nameplate artwork and keep every
+  profile overlay inside the left 370 pixels. Imported nameplates are all
+  selectable during the current testing period, including for existing accounts.
 - `client/src/content/gameGuide.ts` owns the short, structured presentation
   layer for the in-game help center: reading order, role summaries, strategy
   hints, and glossary entries. Reference characters and actions by stable ID;

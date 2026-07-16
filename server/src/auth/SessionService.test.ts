@@ -1,3 +1,4 @@
+import { PROFILE_NAMEPLATES } from '@energy-duel/shared';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -32,6 +33,9 @@ describe('SessionService password accounts', () => {
     const service = createService(); const session = service.register('ProfileOne', 'password1'); const identity = service.validateToken(session.token)!;
     expect(service.getProfile(identity)).toMatchObject({ nickname: 'ProfileOne', level: 1, rating: 0, rankId: 'unranked', nameplateId: 'standard', titleId: 'novice' });
     expect(service.updateProfile(identity, { nickname: '新昵称' }).nickname).toBe('新昵称');
+    const testNameplate = PROFILE_NAMEPLATES.find((item) => item.assetUrl)!;
+    expect(service.getProfile(identity).unlockedNameplateIds).toContain(testNameplate.id);
+    expect(service.updateProfile(identity, { nameplateId: testNameplate.id }).nameplateId).toBe(testNameplate.id);
     expect(() => service.updateProfile(identity, { titleId: 'survivor' })).toThrow(/尚未解锁/);
     expect(service.getProfileByAccountId(session.accountId).username).toBe('ProfileOne');
   });
