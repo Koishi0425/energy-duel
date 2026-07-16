@@ -227,7 +227,10 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     if (effect === 'aoao_divine') removeBuff(actor, 'ao_mastery');
     if (effect === 'sovereign_blade') removeBuff(actor, 'sovereign_blade_active');
     if (actor.characterId === 'mudrock' && effect === 'fist') setBuff(actor, 'mud_fist_level', buffStacks(actor, 'mud_fist_level') + 1);
-    if (actor.characterId === 'nightmare' && effect !== 'shadow_blade' && actor.buffs?.has('shadow_blade_cooldown')) { const next = buffStacks(actor, 'shadow_blade_cooldown') - 1; if (next > 0) setBuff(actor, 'shadow_blade_cooldown', next); else removeBuff(actor, 'shadow_blade_cooldown'); }
+    if (definition.cooldownReduction && actor.buffs?.has(definition.cooldownReduction.buffId)) {
+      const next = buffStacks(actor, definition.cooldownReduction.buffId) - definition.cooldownReduction.stacks;
+      if (next > 0) setBuff(actor, definition.cooldownReduction.buffId, next); else removeBuff(actor, definition.cooldownReduction.buffId);
+    }
     processed.add(actor.id);
   }
 
@@ -273,9 +276,17 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   if (attacker.buffs?.has('dream_path') && dreamPathContains(attacker, attacker.gridIndex ?? 0, boardCellCount)) attackerLevel += 0.5;
   if (target.buffs?.has('mud_barrier')) { const before = target.currentHp; removeBuff(target, 'mud_barrier'); target.currentHp = Math.min(target.maxHp, target.currentHp + 1); performance[target.id].successfulDefenses += 1; performance[target.id].recoveryStates += target.currentHp - before; summary.push(`${target.nickname} 的屏障抵消攻击并使其进入${healthStateName(target)}。`); return 'none'; }
   const targetAction = actions.get(target.id); const block = blockers.get(target.id); let targetLevel = actionLevelAgainst(target, targetAction, attacker.id, players);
+  if (targetAction && requireAction(targetAction.actionId).category === 'defense' && !block) targetLevel = 0;
   if (primaryEffect(targetAction) === 'dark_shelter') targetLevel = 0;
   if (block && attackerLevel < targetLevel) { performance[target.id].successfulDefenses += 1; summary.push(`${target.nickname} 的${block.name}挡住了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
-  if (block?.effects[0]?.handler === 'axe_defend') target.resources.energy = resourceValue(target, 'energy') + 1;
+  if (block?.defenseBreak && targetLevel > 0 && attackerLevel >= targetLevel) {
+    blockers.delete(target.id);
+    if (block.defenseBreak.mode === 'persistent') setBuff(target, block.defenseBreak.brokenBuffId!);
+    if (block.effects[0]?.handler === 'axe_defend') target.resources.energy = resourceValue(target, 'energy') + 1;
+    summary.push(block.defenseBreak.mode === 'persistent'
+      ? `${target.nickname} 的${block.name}被击碎，之后防御等级降为 0。`
+      : `${target.nickname} 的${block.name}被击碎，本次生成的防御等级降为 0。`);
+  }
   const hpBefore = target.currentHp;
   const outcome = damagePlayer(target, attackerLevel, targetLevel, fragile.has(target.id), eliminated, false, attackerLevel < 3, targetAction);
   if (outcome === 'none') performance[target.id].successfulDefenses += 1;
@@ -385,6 +396,7 @@ function forge(player: CombatPlayer, amount: number): number { const previous = 
 
 function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | undefined): number {
   if (!action || player.buffs?.has('fear_action_canceled')) return 0; const definition = requireAction(action.actionId); let level = definition.variable && action.power !== undefined ? definition.variable.levelPerPower * action.power : definition.level;
+  if (definition.defenseBreak?.mode === 'persistent' && player.buffs?.has(definition.defenseBreak.brokenBuffId!)) return 0;
   if (definition.id === 'slash' && player.buffs?.has('axe_raised')) level += 0.5;
   if (definition.id === 'slash' && player.characterId === 'mudrock') level += buffStacks(player, 'mud_awakened');
   if (definition.id === 'fist' && player.characterId === 'mudrock') level += buffStacks(player, 'mud_fist_level') * 0.5;
@@ -408,4 +420,9 @@ function actionSpeed(playerId: string, action: SubmittedAction, player: CombatPl
 function formatLevel(value: number): string { if (Math.abs(value - 1 / 3) < 1e-6) return '1/3'; return Number.isInteger(value) ? String(value) : value.toFixed(1); }
 function healthStateName(player: CombatPlayer): string { if (!player.alive || player.currentHp <= 0) return '死亡状态'; if (player.maxHp > 1 && player.currentHp === 1) return '濒死状态'; return '健康状态'; }
 function resolutionActor(playerId: string, action: SubmittedAction) { const definition = requireAction(action.actionId); return { playerId, actionId: action.actionId, targetIds: actionTargets(action), poseId: definition.vfxId || undefined, transformCharacterId: action.transformCharacterId, power: action.power, targetGridIndex: action.targetGridIndex }; }
-function describeSubmittedAction(player: CombatPlayer, action: SubmittedAction | undefined, players: ReadonlyMap<string, CombatPlayer>): string { if (!action) return `${player.nickname}：未提交`; const definition = requireAction(action.actionId); if (action.actionId === 'transform') return `${player.nickname}：变身为${characterById.get(action.transformCharacterId ?? '')?.name ?? action.transformCharacterId ?? '未知角色'}`; const targets = actionTargets(action).map((id) => players.get(id)?.nickname ?? id); return `${player.nickname}：${definition.name}${action.power === undefined ? '' : `（n=${action.power}）`}${targets.length ? ` → ${targets.join('、')}` : ''}`; }
+function describeSubmittedAction(player: CombatPlayer, action: SubmittedAction | undefined, players: ReadonlyMap<string, CombatPlayer>): string { if (!action) return `${player.nickname}：未提交`; const definition = requireAction(action.actionId); if (action.actionId === 'transform') return `${player.nickname}：变身为${characterById.get(action.transformCharacterId ?? '')?.name ?? action.transformCharacterId ?? '未知角色'}`; const targets = summarizeTargets(actionTargets(action), players); return `${player.nickname}：${definition.name}${action.power === undefined ? '' : `（n=${action.power}）`}${targets ? ` → ${targets}` : ''}`; }
+function summarizeTargets(targetIds: string[], players: ReadonlyMap<string, CombatPlayer>): string {
+  const counts = new Map<string, number>();
+  for (const targetId of targetIds) counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
+  return Array.from(counts, ([targetId, count]) => `${players.get(targetId)?.nickname ?? targetId}${count > 1 ? ` ×${count}` : ''}`).join('、');
+}

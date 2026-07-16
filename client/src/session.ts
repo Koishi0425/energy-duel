@@ -42,6 +42,10 @@ export async function fetchProfile(session: SessionResponse): Promise<PlayerProf
   return profileRequest(session, '/api/profile');
 }
 
+export async function fetchPlayerProfile(session: SessionResponse, accountId: string): Promise<PlayerProfile> {
+  return profileRequest(session, `/api/profiles/${encodeURIComponent(accountId)}`);
+}
+
 export async function updateProfile(session: SessionResponse, update: ProfileUpdateRequest): Promise<PlayerProfile> {
   return profileRequest(session, '/api/profile', { method: 'PATCH', body: JSON.stringify(update) });
 }

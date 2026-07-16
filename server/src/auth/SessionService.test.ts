@@ -33,6 +33,7 @@ describe('SessionService password accounts', () => {
     expect(service.getProfile(identity)).toMatchObject({ nickname: 'ProfileOne', level: 1, rating: 0, rankId: 'unranked', nameplateId: 'standard', titleId: 'novice' });
     expect(service.updateProfile(identity, { nickname: '新昵称' }).nickname).toBe('新昵称');
     expect(() => service.updateProfile(identity, { titleId: 'survivor' })).toThrow(/尚未解锁/);
+    expect(service.getProfileByAccountId(session.accountId).username).toBe('ProfileOne');
   });
 
   it('rejects unknown and expired tokens', () => {

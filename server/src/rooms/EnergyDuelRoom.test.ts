@@ -1,6 +1,23 @@
 import { MapSchema } from '@colyseus/schema';
-import { describe, expect, it } from 'vitest';
-import { BuffState, EnergyDuelRoom, PlayerState } from './EnergyDuelRoom.js';
+import { describe, expect, it, vi } from 'vitest';
+import { BuffState, EnergyDuelRoom, PlayerState, normalizeInitialTargetIds } from './EnergyDuelRoom.js';
+
+describe('EnergyDuelRoom submitted targets', () => {
+  it('keeps an empty initial target list pending for deferred actions', () => {
+    expect(normalizeInitialTargetIds([])).toBeUndefined();
+    expect(normalizeInitialTargetIds(['target'])).toEqual(['target']);
+  });
+
+  it('prompts the controller for a dynamically deferred actor', () => {
+    const room = new EnergyDuelRoom() as any;
+    const actor = new PlayerState(); actor.playerId = 'dummy'; actor.accountId = 'dummy'; actor.controllerPlayerId = 'host'; actor.characterId = 'ao';
+    const mastery = new BuffState(); mastery.instanceId = 'dummy:ao_mastery'; mastery.buffId = 'ao_mastery'; mastery.stacks = 2; mastery.sourcePlayerId = 'dummy';
+    actor.buffs.set(mastery.instanceId, mastery); room.state.players.set(actor.playerId, actor);
+    room.actions.submit(actor.playerId, { actionId: 'steal' });
+    const send = vi.fn(); room.sendDeferredPrompt({ sessionId: 'host', send });
+    expect(send).toHaveBeenCalledWith('deferred_action_required', expect.objectContaining({ actorPlayerId: 'dummy', actionId: 'steal' }));
+  });
+});
 
 describe('EnergyDuelRoom character-scoped buffs', () => {
   it('hides a Gonggang buff after switching away and restores it after switching back', () => {

@@ -4,7 +4,7 @@ import { gameConfig, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(8);
+    expect(gameConfig.version).toBe(12);
     expect(gameConfig.actions).toHaveLength(43);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock']);
@@ -13,7 +13,13 @@ describe('game configuration', () => {
     expect(gameConfig.characters.slice(1).every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
     expect(gameConfig.characters.every((character) => Object.keys(character.transformationCost).length === 0)).toBe(true);
     expect(gameConfig.buffs.map((buff) => buff.id)).toEqual(expect.arrayContaining(['axe_raised', 'fragile']));
+    expect(gameConfig.actions.find((action) => action.id === 'defend')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'defend_broken' });
+    expect(gameConfig.actions.find((action) => action.id === 'particle_wall')?.defenseBreak).toEqual({ mode: 'recreated' });
+    expect(gameConfig.actions.find((action) => action.id === 'collect_light')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'collect_light_broken' });
+    expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
+    expect(gameConfig.assets.every((asset) => asset.url.endsWith('.webp') && asset.previewUrl?.endsWith('.webp'))).toBe(true);
+    expect(gameConfig.characters.slice(4).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
   });
 
   it('keeps every base skill after transformation and only appends character skills', () => {
@@ -46,6 +52,8 @@ describe('game configuration', () => {
       (config: any) => { config.actions[0].target.mode = 'friend'; },
       (config: any) => { config.actions[0].effects = [{ handler: 'eval' }]; },
       (config: any) => { config.actions[0].unlockRequirements = { allBuffs: ['missing'], description: 'test' }; },
+      (config: any) => { config.actions[0].defenseBreak = { mode: 'persistent', brokenBuffId: 'missing' }; },
+      (config: any) => { config.actions[0].cooldownReduction = { buffId: 'missing', stacks: 1 }; },
     ]) {
       const invalid = structuredClone(gameConfig) as any;
       mutate(invalid);

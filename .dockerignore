@@ -11,5 +11,6 @@ server/data
 *.tsbuildinfo
 coverage
 .playwright-cli
+art-source
 .vite
 ~$*

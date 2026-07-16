@@ -1,16 +1,21 @@
-import { buffById, characterById, isResourceVisibleForCharacter, passiveById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
+import { buffById, characterById, isResourceVisibleForCharacter, passiveById, resourceById, type PlayerProfile, type SyncedPlayer } from '@energy-duel/shared';
 import { Button, Progress, Tag } from 'antd';
+import { resolvePortraitUrl } from '../game/visualResolver';
+import PlayerProfileBanner from './PlayerProfileBanner';
 
-export default function PlayerDetails({ player, onOpenGuide }: { player: SyncedPlayer; onOpenGuide?: (characterId: string) => void }) {
+export default function PlayerDetails({ player, profile, onOpenGuide, showPortrait = false }: { player: SyncedPlayer; profile?: PlayerProfile; onOpenGuide?: (characterId: string) => void; showPortrait?: boolean }) {
   const character = characterById.get(player.characterId);
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
   return (
     <div className="player-details">
-      <div className="player-details-heading">
+      {profile && <PlayerProfileBanner profile={profile} />}
+      {!profile && <div className="player-details-heading">
         <span className="details-color" style={{ background: `#${player.color.toString(16).padStart(6, '0')}` }} />
         <div><strong>{player.nickname}</strong></div>
         <Tag color={player.alive ? 'success' : 'error'}>{player.alive ? '存活' : '已淘汰'}</Tag>
-      </div>
+      </div>}
+      {profile && <div className="player-details-heading character-status-heading"><span className="details-color" style={{ background: `#${player.color.toString(16).padStart(6, '0')}` }} /><div><strong>本局角色状态</strong><small>{player.alive ? '存活' : '已淘汰'} · 本局昵称 {player.nickname}</small></div></div>}
+      {showPortrait && <img className="player-detail-portrait" src={resolvePortraitUrl(player.characterId, player.currentFormId)} alt={`${character?.name ?? player.characterId}立绘`} loading="lazy" decoding="async" />}
       <p className="form-line">{character?.name ?? player.characterId} · {form?.name ?? player.currentFormId}</p>
       {character?.description && <p className="muted">{character.description}</p>}
       {onOpenGuide && <Button size="small" onClick={() => onOpenGuide(player.characterId)}>查看{character?.name ?? '角色'}教程</Button>}

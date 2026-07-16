@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
-import { PROFILE_NAMEPLATES, PROFILE_TITLES, type PlayerProfile, type RankId, type SessionResponse } from '@energy-duel/shared';
-import { fetchProfile, getServerUrl, updateProfile, uploadAvatar } from './session';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { PROFILE_NAMEPLATES, PROFILE_TITLES, type PlayerProfile, type SessionResponse } from '@energy-duel/shared';
+import { fetchProfile, updateProfile, uploadAvatar } from './session';
+import PlayerProfileBanner, { rankNames } from './components/PlayerProfileBanner';
 
 interface Props { session: SessionResponse; onBack: () => void; onProfileChange: (profile: PlayerProfile) => void }
 type Section = 'overview' | 'career' | 'achievements' | 'history';
-const rankNames: Record<RankId, string> = { unranked: '无段位', iron: '坚韧黑铁', bronze: '英勇黄铜', silver: '不屈白银', gold: '荣耀黄金', platinum: '华贵铂金', emerald: '流光翡翠', diamond: '璀璨钻石', master: '超凡大师', grandmaster: '傲世宗师', challenger: '最强王者' };
 
 export default function ProfilePage({ session, onBack, onProfileChange }: Props) {
   const [profile, setProfile] = useState<PlayerProfile>();
@@ -30,16 +30,7 @@ export default function ProfilePage({ session, onBack, onProfileChange }: Props)
 
   return <main className="profile-page">
     <header className="profile-topbar"><button className="secondary-button compact-button" onClick={onBack}>← 返回大厅</button><div><span className="status-dot" />{session.username}</div></header>
-    <section
-      className={`player-banner nameplate-${profile.nameplateId}`}
-      style={{ '--nameplate-image': `url("/assets/profiles/nameplates/${profile.nameplateId}/frame.webp")` } as CSSProperties}
-    >
-      <button className="profile-avatar" type="button" onClick={() => setCropOpen(true)} aria-label="更换头像">{profile.avatarUrl ? <img src={`${getServerUrl()}${profile.avatarUrl}`} alt="玩家头像" /> : <span>{profile.nickname.slice(0, 1).toUpperCase()}</span>}<small>更换</small></button>
-      <div className="rating-block"><small>RATING</small><strong>{profile.rating.toString().padStart(5, '0')}</strong></div>
-      <div className="banner-identity"><strong>{profile.nickname}</strong><span>{rankNames[profile.rankId]}</span></div>
-      <div className="banner-title-line">{PROFILE_TITLES.find((item) => item.id === profile.titleId)?.name ?? profile.titleId}</div>
-      <div className="level-orb"><small>LV</small><strong>{profile.level}</strong></div>
-    </section>
+    <PlayerProfileBanner profile={profile} onAvatarClick={() => setCropOpen(true)} />
 
     <nav className="profile-tabs">{([['overview', '资料设置'], ['career', '生涯统计'], ['achievements', '成就'], ['history', '对局历史']] as Array<[Section, string]>).map(([id, label]) => <button key={id} className={section === id ? 'active' : ''} onClick={() => setSection(id)}>{label}</button>)}</nav>
     <div className="profile-content">

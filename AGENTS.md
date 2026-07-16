@@ -10,6 +10,9 @@ interfaces, directory responsibilities, or architecture invariants change.
   for project announcements. Keep announcement IDs stable because the latest
   read ID is a localStorage cursor; the announcement dialog stays lazy-loaded
   so it does not add its full UI to the login bundle.
+  `PlayerProfileBanner` is the shared renderer for editable, room-detail, and
+  character-drawer profile summaries. Nameplate art uses a fixed `720 / 116`
+  aspect ratio with a bounded width; do not stretch it to fill arbitrary panels.
 - `client/src/content/gameGuide.ts` owns the short, structured presentation
   layer for the in-game help center: reading order, role summaries, strategy
   hints, and glossary entries. Reference characters and actions by stable ID;
@@ -24,6 +27,9 @@ interfaces, directory responsibilities, or architecture invariants change.
   geometry helpers, validated gameplay JSON, and configuration lookups used by
   both the client and server. Build it before either consuming workspace.
 - Runtime account data is stored under `server/data/` and must not be committed.
+  Authenticated clients may read another account's display profile through
+  `GET /api/profiles/:accountId`; profile updates remain owner-only under
+  `/api/profile` and `/api/profile/avatar`.
   Passwords are salted and hashed with Node.js scrypt. Uploaded avatars live
   under `server/data/avatars/` as validated WebP files and are user data, not
   client assets.
@@ -55,6 +61,8 @@ Run commands from the repository root:
 - `npm run dev` builds shared configuration, then starts the Vite client and
   Colyseus server together.
 - `npm run build` builds both workspaces.
+- `npm run assets:optimize` rebuilds deployable, content-hashed WebP assets and
+  `client/public/assets/manifests/assets.json` from `art-source/runtime-imports/`.
 - `npm run typecheck` type-checks both workspaces without emitting files.
 - `npm test` runs all Vitest suites.
 - `npm run docker:build`, `npm run docker:up`, `npm run docker:logs`, and
@@ -136,11 +144,14 @@ Run commands from the repository root:
   player-scoped Cut action for the rest of that game.
 - Player combat state carries character/form IDs, HP, a general resource map,
   and a buff map. Do not reintroduce top-level resource fields such as `energy`.
-- Room state synchronizes asset IDs only. Portrait files belong under
-  `client/public/assets/`; resolve pose, form, character, then placeholder
-  fallbacks on the client. Never synchronize URLs or Base64 image data. Current
-  placeholder portraits are alpha-trimmed and downscaled in the client on first
-  load; keep originals non-destructive until production art replaces them.
+- Room state synchronizes asset IDs only. Original imported art belongs under
+  `art-source/runtime-imports/` and is excluded from the Docker context; only
+  optimized, content-hashed WebP files and their manifest belong under
+  `client/public/assets/`. Resolve pose, form, character, then placeholder
+  fallbacks on the client. Never synchronize URLs or Base64 image data. The
+  board loads 384px portrait previews with a concurrency cap of three; full
+  1024px portraits are reserved for detail views. Hashed art and Vite bundles
+  use immutable caching, while `index.html` and asset manifests must revalidate.
 - Players explicitly create or join rooms by room ID. Rooms support at most 20
   players. Waiting rooms require every player to be ready and only the host may start.
   `/api/rooms` exposes only non-empty, unlocked, non-private rooms with public
@@ -186,6 +197,15 @@ Run commands from the repository root:
   characters have healthy/near-death/dead states and gain one energy on entering
   near-death. Legacy wave/hangup definitions remain configuration-only adapters
   and are not unlocked by the current character trees.
+  A configured breakable defense breaks after comparing an incoming attack whose
+  level is at least its current level. Persistent defenses then remain at level
+  zero through their configured broken buff; generated defenses remain broken
+  only for that use. Super Defense and Dark Shelter do not use this rule.
+  Defend, Axe Defend, and Collect Light are persistent breakable defenses;
+  Particle Wall, Iridescence, and Forge Wall are recreated defenses.
+  Cooldown progress is action-configured through `cooldownReduction`; do not
+  infer it from the actor's current character. Shadow Blade progresses only from
+  Nightmare-specific actions listed in gameplay configuration.
 - The login/lobby shell must stay independent of Ant Design and PixiJS. Battle
   UI and the in-app tutorial are lazy-loaded. Use `?perf=1` to display local FPS,
   slow-frame, long-task, RTT, and optional heap metrics while profiling.

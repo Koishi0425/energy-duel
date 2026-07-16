@@ -41,7 +41,7 @@ export interface PassiveDefinition {
   description: string;
 }
 
-export interface AssetDefinition { id: string; url: string }
+export interface AssetDefinition { id: string; url: string; previewUrl?: string }
 export interface EffectDefinition { handler: EffectHandlerId }
 export interface TargetDefinition {
   mode: TargetMode;
@@ -57,6 +57,16 @@ export interface VariableActionDefinition {
   levelPerPower: number;
   minPower: number;
   maxPower?: number;
+}
+
+export interface DefenseBreakDefinition {
+  mode: 'persistent' | 'recreated';
+  brokenBuffId?: string;
+}
+
+export interface CooldownReductionDefinition {
+  buffId: string;
+  stacks: number;
 }
 
 export interface ActionDefinition {
@@ -76,6 +86,8 @@ export interface ActionDefinition {
   anyResourceCost?: number;
   targetsGridCell?: boolean;
   canSkipDeferred?: boolean;
+  defenseBreak?: DefenseBreakDefinition;
+  cooldownReduction?: CooldownReductionDefinition;
   unlockRequirements?: {
     allBuffs?: string[];
     noneBuffs?: string[];
@@ -137,6 +149,11 @@ export function validateGameConfig(input: unknown): GameConfig {
   const assetIds = new Set(config.assets.map((item) => item.id));
   const actionIds = new Set(config.actions.map((item) => item.id));
   const passiveIds = new Set(config.passives.map((item) => item.id));
+  for (const asset of config.assets) {
+    if (typeof asset.url !== 'string' || !asset.url.startsWith('/') || (asset.previewUrl !== undefined && (typeof asset.previewUrl !== 'string' || !asset.previewUrl.startsWith('/')))) {
+      throw new Error(`Asset ${asset.id} has an invalid URL.`);
+    }
+  }
   for (const resource of config.resources) {
     if (resource.alwaysVisible !== undefined && typeof resource.alwaysVisible !== 'boolean') throw new Error(`Resource ${resource.id} has invalid visibility.`);
     if (resource.characterIds?.some((characterId) => !characterIds.has(characterId))) throw new Error(`Resource ${resource.id} references a missing character.`);
@@ -150,6 +167,18 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
     if (action.damageType && !['generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
     if (action.anyResourceCost !== undefined && (!Number.isInteger(action.anyResourceCost) || action.anyResourceCost < 1)) throw new Error(`Action ${action.id} has an invalid flexible cost.`);
+    if (action.defenseBreak) {
+      const { mode, brokenBuffId } = action.defenseBreak;
+      if (action.category !== 'defense' || !['persistent', 'recreated'].includes(mode)
+        || (mode === 'persistent' && (!brokenBuffId || !buffIds.has(brokenBuffId)))
+        || (mode === 'recreated' && brokenBuffId !== undefined)) {
+        throw new Error(`Action ${action.id} has an invalid defense break rule.`);
+      }
+    }
+    if (action.cooldownReduction && (!buffIds.has(action.cooldownReduction.buffId)
+      || !Number.isInteger(action.cooldownReduction.stacks) || action.cooldownReduction.stacks < 1)) {
+      throw new Error(`Action ${action.id} has an invalid cooldown reduction.`);
+    }
     if (!targetModes.has(action.target?.mode)) throw new Error(`Action ${action.id} has an invalid target mode.`);
     if (action.target.selectionTiming && !['planned', 'deferred'].includes(action.target.selectionTiming)) {
       throw new Error(`Action ${action.id} has an invalid target selection timing.`);

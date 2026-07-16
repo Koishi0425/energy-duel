@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import { assetById, characterById, isResourceVisibleForCharacter, resourceById, type ResolutionStep, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
-import { FALLBACK_PORTRAIT_URL, resolvePortraitUrl } from '../game/visualResolver';
+import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 
 interface ScreenPoint { x: number; y: number }
 interface Props {
@@ -87,11 +87,12 @@ export default function GameCanvas(props: Props) {
     });
     void Promise.all([app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(async () => {
       propsRef.current.onLoadProgress?.(55, '正在准备角色资源');
-      const portraitUrls = Array.from(new Set(propsRef.current.players.map((player) => resolvePortraitUrl(player.characterId, player.currentFormId)).filter((url) => url !== FALLBACK_PORTRAIT_URL)));
-      for (let index = 0; index < portraitUrls.length; index += 1) {
-        await Assets.load(portraitUrls[index]).catch(() => undefined);
-        propsRef.current.onLoadProgress?.(55 + Math.round(((index + 1) / Math.max(1, portraitUrls.length)) * 38), `正在加载角色资源 ${index + 1}/${portraitUrls.length}`);
-      }
+      const portraitUrls = Array.from(new Set(propsRef.current.players.map((player) => resolvePortraitPreviewUrl(player.characterId, player.currentFormId)).filter((url) => url !== FALLBACK_PORTRAIT_URL)));
+      let loadedPortraits = 0;
+      await loadWithConcurrency(portraitUrls, 3, async (url) => {
+        await loadTrimmedTexture(url).catch(() => undefined); loadedPortraits += 1;
+        propsRef.current.onLoadProgress?.(55 + Math.round((loadedPortraits / Math.max(1, portraitUrls.length)) * 38), `正在加载角色预览 ${loadedPortraits}/${portraitUrls.length}`);
+      });
       initialized = true;
       if (cancelled) { app.destroy(true); return; }
       host.appendChild(app.canvas); appRef.current = app;
@@ -152,7 +153,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
   const portraitHeight = playerCount > 12 ? 44 : playerCount > 8 ? 54 : 76;
   view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
-  const assetUrl = resolvePortraitUrl(player.characterId, player.currentFormId);
+  const assetUrl = resolvePortraitPreviewUrl(player.characterId, player.currentFormId);
   if (assetUrl !== view.assetUrl) {
     view.assetUrl = assetUrl;
     void loadTrimmedTexture(assetUrl).then((texture) => { if (view.assetUrl === assetUrl) view.portrait.texture = texture; }).catch(() => { view.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
@@ -230,7 +231,7 @@ function animateResolutionStep(app: Application, layer: Container, step: Resolut
       impact.anchor.set(0.5); impact.position.set(target.x, target.y - 28); impact.alpha = 0; impact.scale.set(0.2); layer.addChild(impact); impacts.push(impact);
     }
     if (actor.transformCharacterId) {
-      const view = views.get(actor.playerId); const character = characterById.get(actor.transformCharacterId); const assetId = character?.forms[0]?.defaultAssetId; const url = assetId ? assetById.get(assetId)?.url : undefined;
+      const view = views.get(actor.playerId); const character = characterById.get(actor.transformCharacterId); const assetId = character?.forms[0]?.defaultAssetId; const asset = assetId ? assetById.get(assetId) : undefined; const url = asset?.previewUrl ?? asset?.url;
       if (view && url) void loadTrimmedTexture(url).then((texture) => { view.portrait.texture = texture; view.assetUrl = url; });
     }
   }
@@ -256,4 +257,10 @@ function effectEmoji(actionId: string): string {
   if (actionId === 'fist') return '👊'; if (actionId === 'slash' || actionId === 'chop') return '⚔️'; if (['defend', 'axe_defend', 'super_defend'].includes(actionId)) return '🛡️'; if (actionId === 'transform') return '✨'; if (actionId === 'atomic_breath') return '☄️'; if (actionId === 'heal') return '💚'; if (actionId === 'charge' || actionId === 'gain_charge') return '⚡'; return '💥';
 }
 function truncate(value: string, maxLength: number): string { return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value; }
+async function loadWithConcurrency<T>(items: readonly T[], concurrency: number, task: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) { const index = next; next += 1; await task(items[index]); }
+  }));
+}
 function formatResource(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }

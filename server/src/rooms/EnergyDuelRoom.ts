@@ -22,6 +22,10 @@ const DEFAULT_CHARACTER_ID = 'default_character';
 const DEFAULT_FORM_ID = 'base';
 const PLAYER_BUFF_SCOPE = '*';
 
+export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
+}
+
 interface StoredBuff {
   buffId: string;
   stacks: number;
@@ -248,7 +252,7 @@ export class EnergyDuelRoom extends Room {
     const action: SubmittedAction = {
       actionId: payload.actionId,
       targetId: typeof payload.targetId === 'string' ? payload.targetId : undefined,
-      targetIds: Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : undefined,
+      targetIds: normalizeInitialTargetIds(payload.targetIds),
       transformCharacterId: typeof payload.transformCharacterId === 'string' ? payload.transformCharacterId : undefined,
       power: typeof payload.power === 'number' ? payload.power : undefined,
       targetGridIndex: typeof payload.targetGridIndex === 'number' ? payload.targetGridIndex : undefined,
@@ -291,12 +295,13 @@ export class EnergyDuelRoom extends Room {
   private sendDeferredPrompt(client: Client, requestedActorId?: string): void {
     const actorId = requestedActorId ?? Array.from(this.actions.asReadonlyMap().keys()).find((playerId) => {
       const actor = this.state.players.get(playerId); const action = this.actions.get(playerId); const definition = action && actionById.get(action.actionId);
-      return actor?.controllerPlayerId === client.sessionId && definition?.target.selectionTiming === 'deferred' && !(action?.targetIds?.length);
+      return actor?.controllerPlayerId === client.sessionId && action !== undefined && definition !== undefined
+        && this.isDeferredAction(playerId, action) && action.targetIds === undefined && action.targetId === undefined;
     });
     if (!actorId) return;
     const action = this.actions.get(actorId);
     const definition = action && actionById.get(action.actionId);
-    if (!action || !definition || !this.isDeferredAction(client.sessionId, action) || action.targetIds !== undefined || action.targetId !== undefined) return;
+    if (!action || !definition || !this.isDeferredAction(actorId, action) || action.targetIds !== undefined || action.targetId !== undefined) return;
     client.send('deferred_action_required', {
       actorPlayerId: actorId,
       actionId: action.actionId,
@@ -315,7 +320,7 @@ export class EnergyDuelRoom extends Room {
     const player = this.authorizedActor(client, payload?.actorPlayerId);
     const action = player && this.actions.get(player.playerId);
     const definition = action && actionById.get(action.actionId);
-    if (!player?.alive || !action || !definition || !this.isDeferredAction(client.sessionId, action) || action.targetIds !== undefined || action.targetId !== undefined) {
+    if (!player?.alive || !action || !definition || !this.isDeferredAction(player.playerId, action) || action.targetIds !== undefined || action.targetId !== undefined) {
       return this.sendError(client, '没有可提交的后发目标', requestId, 'submit_deferred_targets');
     }
     const targetIds = Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : [];

@@ -9,6 +9,7 @@ import {
   type CommandResultMessage,
   type DeferredActionRequiredMessage,
   type GameRatingResultMessage,
+  type PlayerProfile,
   type ResolutionStep,
   type RoundResolutionMessage,
   type SessionResponse,
@@ -22,11 +23,13 @@ import 'antd/dist/reset.css';
 import type { DemoRoomState } from './App';
 import ActionPanel from './components/ActionPanel';
 import PlayerDetails from './components/PlayerDetails';
+import PublicProfileDetails from './components/PublicProfileDetails';
 import { PerformancePanel } from './components/PerformancePanel';
 import FloatingWindow from './components/FloatingWindow';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
 import type { GuidePageId } from './content/gameGuide';
 import { readSyncedPlayers } from './roomState';
+import { fetchPlayerProfile } from './session';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
 const Tutorial = lazy(() => import('./components/Tutorial'));
@@ -56,6 +59,9 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
+  const [profileViewer, setProfileViewer] = useState<SyncedPlayer>();
+  const [profileCache, setProfileCache] = useState<Record<string, PlayerProfile>>({});
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [hovered, setHovered] = useState<{ player: SyncedPlayer; x: number; y: number }>();
   const [resetViewKey, setResetViewKey] = useState(0);
   const [networkState, setNetworkState] = useState<'online' | 'reconnecting' | 'offline'>('online');
@@ -70,6 +76,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     try { return JSON.parse(localStorage.getItem('energy-duel-panel-position') ?? 'null'); } catch { return null; }
   });
   const mounted = useRef(true);
+  const profileRequests = useRef(new Set<string>());
 
   useEffect(() => {
     mounted.current = true;
@@ -132,7 +139,10 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => query.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); setDeferredRequest(undefined); setParameterAction(undefined); setFlexibleAction(undefined); setPendingSpend(undefined); setGridAction(undefined);
+    if (gameState.phase !== 'deferred') {
+      setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined);
+    }
+    setSubmittedLabel(undefined); setParameterAction(undefined); setFlexibleAction(undefined); setPendingSpend(undefined); setGridAction(undefined);
     if (gameState.phase === 'choosing' && gameState.round === 1) setRatingResult(undefined);
   }, [gameState.phase, gameState.round]);
   useEffect(() => {
@@ -173,7 +183,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       actorPlayerId: activeActor?.playerId,
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
-      targetIds: action.target.mode === 'multiple_enemies' ? targetIds : undefined,
+      targetIds: action.target.mode === 'multiple_enemies' && targetIds.length > 0 ? targetIds : undefined,
       transformCharacterId, power, targetGridIndex, resourceSpend: spend,
     });
     void api.info({ content: label, duration: 1.6 });
@@ -203,12 +213,10 @@ function RoomContent({ room, session, onLeave }: Props) {
 
   const chooseTarget = (player: SyncedPlayer) => {
     if (deferredRequest) {
+      if (selectedTargetIds.length >= deferredRequest.allocationCount) { void api.info({ content: '分配次数已满，请确认提交或撤销后重选', duration: 1.2 }); return; }
       const next = [...selectedTargetIds, player.playerId];
       setSelectedTargetIds(next);
-      if (next.length >= deferredRequest.allocationCount) {
-        room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: next });
-        setDeferredRequest(undefined); setSubmittedLabel(`后发目标已分配：${next.map((id) => players.find((candidate) => candidate.playerId === id)?.nickname ?? id).join('、')}`);
-      } else void api.info({ content: `已分配 ${next.length}/${deferredRequest.allocationCount} 个 0.5 级攻击`, duration: 1.1 });
+      void api.info({ content: `已分配 ${next.length}/${deferredRequest.allocationCount}${next.length === deferredRequest.allocationCount ? '，请确认提交' : ''}`, duration: 1.1 });
       return;
     }
     if (!selectedAction) return;
@@ -223,6 +231,13 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (!parameterAction) return;
     submit(parameterAction, [], undefined, variablePower);
     setParameterAction(undefined);
+  };
+
+  const confirmDeferredTargets = () => {
+    if (!deferredRequest || selectedTargetIds.length !== deferredRequest.allocationCount) return;
+    room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: selectedTargetIds });
+    setSubmittedLabel(`后发目标已分配：${formatTargetAllocation(selectedTargetIds, players)}`);
+    setDeferredRequest(undefined); setSelectedTargetIds([]);
   };
 
   const flexibleRequired = flexibleAction?.anyResourceCost
@@ -256,6 +271,18 @@ function RoomContent({ room, session, onLeave }: Props) {
     room.send('set_ready', { requestId: requestId(), ready: !me?.ready });
   };
   const leave = async () => { await room.leave(); onLeave(); };
+  const requestPlayerProfile = (player: SyncedPlayer) => {
+    if (player.isTrainingDummy || profileCache[player.accountId] || profileRequests.current.has(player.accountId)) return;
+    profileRequests.current.add(player.accountId);
+    setProfileErrors((current) => ({ ...current, [player.accountId]: '' }));
+    void fetchPlayerProfile(session, player.accountId).then((profile) => {
+      if (mounted.current) setProfileCache((current) => ({ ...current, [player.accountId]: profile }));
+    }).catch((reason) => {
+      if (mounted.current) setProfileErrors((current) => ({ ...current, [player.accountId]: reason instanceof Error ? reason.message : '无法读取玩家资料' }));
+    }).finally(() => profileRequests.current.delete(player.accountId));
+  };
+  const inspectPlayer = (player: SyncedPlayer) => { setInspectedPlayer(player); requestPlayerProfile(player); };
+  const viewPlayerProfile = (player: SyncedPlayer) => { if (player.isTrainingDummy) return inspectPlayer(player); setProfileViewer(player); requestPlayerProfile(player); };
   const beginPanelDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (window.matchMedia('(max-width: 900px)').matches) return;
     const panel = event.currentTarget.parentElement;
@@ -266,9 +293,11 @@ function RoomContent({ room, session, onLeave }: Props) {
     const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); event.preventDefault();
   };
-  const roster = <Roster players={players} gameState={gameState} viewer={activeActor} />;
+  const roster = <Roster players={players} gameState={gameState} viewer={activeActor} onInspect={viewPlayerProfile} />;
   const targetHint = deferredRequest
-    ? `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
+    ? selectedTargetIds.length === deferredRequest.allocationCount
+      ? `后发分配完成 ${selectedTargetIds.length}/${deferredRequest.allocationCount}，请在面板确认提交`
+      : `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
     : gridAction ? '点击地图上绿色高亮的编号地块'
       : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
 
@@ -284,7 +313,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={adjacentDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={adjacentDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
@@ -301,13 +330,14 @@ function RoomContent({ room, session, onLeave }: Props) {
       {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
       {gameState.roomMode === 'training' && gameState.phase === 'choosing' && <div className="actor-switcher"><span>当前操控</span>{controlledActors.map((actor) => <Button key={actor.playerId} size="small" type={actor.playerId === activeActor?.playerId ? 'primary' : 'default'} disabled={!actor.alive} onClick={() => { setActiveActorId(actor.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }}>{actor.nickname}{actor.submitted ? ' ✓' : ''}</Button>)}</div>}
       {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }} />}
-      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div>{deferredRequest.allowSkip && <Button onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div>}
+      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}，完成后确认提交。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div><p className="deferred-allocation-summary">当前分配：{selectedTargetIds.length ? formatTargetAllocation(selectedTargetIds, players) : '尚未选择'}（{selectedTargetIds.length}/{deferredRequest.allocationCount}）</p><div className="deferred-selection-actions"><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds((current) => current.slice(0, -1))}>撤销上一次</Button><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds([])}>清空重选</Button><Button type="primary" disabled={selectedTargetIds.length !== deferredRequest.allocationCount} onClick={confirmDeferredTargets}>确认提交</Button>{deferredRequest.allowSkip && <Button disabled={selectedTargetIds.length > 0} onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div></div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
       {gameState.phase === 'choosing' && me && !me.alive && <p className="eliminated-notice">你已淘汰，正在观战</p>}
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
     </section>
-    <Drawer title="角色详情" placement="bottom" height="min(72dvh, 520px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />}</Drawer>
+    <Drawer title="角色详情" placement="bottom" height="min(82dvh, 720px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <><PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} profile={profileCache[inspectedPlayer.accountId]} showPortrait onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />{!inspectedPlayer.isTrainingDummy && !profileCache[inspectedPlayer.accountId] && <p className={profileErrors[inspectedPlayer.accountId] ? 'error' : 'muted'}>{profileErrors[inspectedPlayer.accountId] || '正在读取基础个人资料…'}</p>}</>}</Drawer>
+    <Modal className="public-profile-modal" title="玩家详细资料" width="min(960px, calc(100vw - 24px))" footer={null} open={Boolean(profileViewer)} onCancel={() => setProfileViewer(undefined)} destroyOnHidden>{profileViewer && (profileCache[profileViewer.accountId] ? <PublicProfileDetails profile={profileCache[profileViewer.accountId]} /> : <div className={profileErrors[profileViewer.accountId] ? 'profile-load-error error' : 'profile-loading'}>{profileErrors[profileViewer.accountId] || '正在读取玩家资料…'}</div>)}</Modal>
     {compactLayout ? <Drawer title="战斗日志" placement="right" width="min(440px, 92vw)" open={logOpen} onClose={() => setLogOpen(false)}><BattleLog groups={battleLogGroups} /></Drawer> : logOpen && <FloatingWindow storageId="battle-log" title="战斗日志" initialPosition={{ x: Math.max(20, window.innerWidth - 500), y: 92 }} initialSize={{ width: 440, height: 520 }} onClose={() => setLogOpen(false)} className="battle-log-window"><BattleLog groups={battleLogGroups} /></FloatingWindow>}
     <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>{ratingResult && <div className="rating-result"><header><span>本局表现分</span><strong>{ratingResult.breakdown.totalScore}</strong></header><div><span>结果 {ratingResult.breakdown.resultScore}</span><span>生存 {ratingResult.breakdown.survivalScore}</span><span>进攻 {ratingResult.breakdown.offenseScore}</span><span>防守恢复 {ratingResult.breakdown.defenseScore}</span><span>参与 {ratingResult.breakdown.participationScore}</span></div><footer><span>Rating</span><strong>{ratingResult.previousRating} → {ratingResult.rating}</strong><small>BEST 35：{ratingResult.best35Contribution} · RECENT 15：{ratingResult.recent15Contribution}</small></footer></div>}<p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
     <Modal title={parameterAction ? `${parameterAction.name} · 选择 n` : '选择技能参数'} open={Boolean(parameterAction)} okText="确认行动" cancelText="取消" onCancel={() => { setParameterAction(undefined); setSelectedActionId(undefined); }} onOk={confirmVariableAction} okButtonProps={{ disabled: !parameterAction || variableMax < (parameterAction.variable?.minPower ?? 1) }}>
@@ -335,11 +365,11 @@ function TrainingSetup({ actors, room }: { actors: SyncedPlayer[]; room: Room<De
   </div>;
 }
 
-function Roster({ players, gameState, viewer }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer }) {
+function Roster({ players, gameState, viewer, onInspect }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer; onInspect: (player: SyncedPlayer) => void }) {
   return <div className="roster-list">{players.map((player) => {
     const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
     const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
-    return <button className="roster-player" key={player.accountId} type="button"><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
+    return <button className="roster-player" key={player.accountId} type="button" disabled={Boolean(obscured)} title={obscured ? '黑暗中无法查看资料' : player.isTrainingDummy ? '查看角色详情' : '查看玩家详细资料'} onClick={() => onInspect(player)}><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
   })}</div>;
 }
 
@@ -370,3 +400,8 @@ function phaseTitle(state: SyncedGameState): string {
 function requestId(): string { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
 function formatNumber(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
+function formatTargetAllocation(targetIds: string[], players: SyncedPlayer[]): string {
+  const counts = new Map<string, number>();
+  for (const targetId of targetIds) counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
+  return Array.from(counts, ([targetId, count]) => `${players.find((player) => player.playerId === targetId)?.nickname ?? targetId}${count > 1 ? ` ×${count}` : ''}`).join('、');
+}

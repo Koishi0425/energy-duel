@@ -75,6 +75,10 @@ export class SessionService {
     const account = this.findAccount(identity.accountId); return toPublicProfile(account);
   }
 
+  getProfileByAccountId(accountId: string): PlayerProfile {
+    return toPublicProfile(this.findAccount(accountId));
+  }
+
   updateProfile(identity: SessionIdentity, update: ProfileUpdateRequest): PlayerProfile {
     const database = this.readDatabase(); const account = database.accounts.find((candidate) => candidate.accountId === identity.accountId);
     if (!account) throw new Error('账号不存在');

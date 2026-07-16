@@ -8,6 +8,7 @@
     "server"
   ],
   "scripts": {
+    "assets:optimize": "node scripts/optimize-assets.mjs",
     "dev": "npm run build -w shared && concurrently -n client,server -c cyan,magenta \"npm run dev -w client\" \"npm run dev -w server\"",
     "serve": "npm run build && npm run start -w server",
     "tunnel": "ngrok http 2567",

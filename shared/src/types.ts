@@ -65,6 +65,8 @@ export interface ProfileCosmeticDefinition {
   id: string;
   name: string;
   description: string;
+  assetUrl?: string;
+  previewUrl?: string;
 }
 
 export const PROFILE_NAMEPLATES: readonly ProfileCosmeticDefinition[] = [

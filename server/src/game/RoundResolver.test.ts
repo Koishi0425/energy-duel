@@ -136,6 +136,51 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.alive).toBe(true);
     expect(target.currentHp).toBe(1);
     expect(target.resources.energy).toBe(2);
+    expect(target.buffs?.has('axe_defend_broken')).toBe(true);
+  });
+
+  it('keeps a persistent defense broken at level zero', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.resources.stars = 4;
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
+      ['b', { actionId: 'defend' }],
+    ));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('defend_broken')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.currentHp).toBe(1);
+  });
+
+  it('recreates a generated defense on its next use', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.resources.stars = 4;
+    players.get('b')!.resources.stars = 4;
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
+      ['b', { actionId: 'particle_wall', power: 1 }],
+    ));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('defend_broken')).not.toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'particle_wall', power: 1 }]));
+    expect(target.currentHp).toBe(2);
+  });
+
+  it('uses level zero after a defense breaks within the same round', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    players.get('a')!.resources.stars = 4;
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
+      ['b', { actionId: 'defend' }],
+      ['c', { actionId: 'fist', targetId: 'b' }],
+    ));
+    expect(target.currentHp).toBe(1);
   });
 
   it('cancels equal-level attacks and applies only the positive level difference', () => {
@@ -219,6 +264,21 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')!.resources.stars).toBe(2);
   });
 
+  it('keeps Collect Light broken at level zero after an equal attack', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.resources.stars = 4;
+    const target = players.get('b')!; target.characterId = 'regent'; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
+      ['b', { actionId: 'collect_light' }],
+    ));
+    expect(target.currentHp).toBe(2);
+    expect(target.resources.stars).toBe(1);
+    expect(target.buffs?.has('collect_light_broken')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'collect_light' }]));
+    expect(target.currentHp).toBe(1);
+  });
+
   it('uses afterglow as a minimum next-round action level', () => {
     const players = roster(['a', 1], ['b', 1]);
     for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
@@ -257,10 +317,11 @@ describe('RoundResolver JSON-driven actions', () => {
     for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
     const stardust = { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'c', 'c'] };
     expect(() => validateAction(players.get('a')!, stardust, players)).not.toThrow();
-    resolveRound(players, actions(['a', stardust], ['b', { actionId: 'charge' }], ['c', { actionId: 'defend' }]));
+    const result = resolveRound(players, actions(['a', stardust], ['b', { actionId: 'charge' }], ['c', { actionId: 'defend' }]));
     expect(players.get('a')!.resources.stars).toBe(0);
     expect(players.get('b')!.currentHp).toBe(1);
     expect(players.get('c')!.currentHp).toBe(2);
+    expect(result.summary[0]).toContain('B ×2、C ×2');
   });
 
   it('requires Stardust to spend every currently held Star', () => {
@@ -325,6 +386,19 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.buffs?.has('nightmare_dash_ready')).toBe(true);
     expect(actor.buffs?.has('darkness')).toBe(false);
     expect(players.get('b')!.buffs?.has('darkness')).toBe(true);
+  });
+
+  it('reduces Shadow Blade cooldown only after Nightmare-specific actions', () => {
+    const players = roster(['a', 10], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'nightmare'; actor.buffs = new Set(['shadow_blade_cooldown']); actor.buffStacks = { shadow_blade_cooldown: 4 };
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.shadow_blade_cooldown).toBe(4);
+    for (const remaining of [3, 2, 1]) {
+      resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+      expect(actor.buffStacks?.shadow_blade_cooldown).toBe(remaining);
+    }
+    resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('shadow_blade_cooldown')).toBe(false);
   });
 
   it('uses Silent Fear level only for control and deals no damage', () => {

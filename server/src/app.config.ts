@@ -6,6 +6,7 @@ import express from 'express';
 import { EnergyDuelRoom } from './rooms/EnergyDuelRoom.js';
 import { summarizeJoinableRooms } from './rooms/roomDirectory.js';
 import { sessionService } from './services.js';
+import { staticCacheControlForPath } from './staticAssets.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(directory, '../../client/dist');
@@ -21,7 +22,7 @@ const server = defineServer({
     app.use((_request, response, next) => {
       response.setHeader('Access-Control-Allow-Origin', '*');
       response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, OPTIONS');
       if (_request.method === 'OPTIONS') return response.sendStatus(204);
       next();
     });
@@ -72,6 +73,15 @@ const server = defineServer({
       catch (reason) { response.status(404).json({ error: reason instanceof Error ? reason.message : '资料不存在' }); }
     });
 
+    app.get('/api/profiles/:accountId', (request, response) => {
+      const identity = authenticatedIdentity(request.headers.authorization);
+      if (!identity) return response.status(401).json({ error: '会话无效或已过期' });
+      const accountId = typeof request.params.accountId === 'string' && /^[0-9a-f-]{36}$/i.test(request.params.accountId) ? request.params.accountId : '';
+      if (!accountId) return response.status(400).json({ error: '账号标识无效' });
+      try { response.json(sessionService.getProfileByAccountId(accountId)); }
+      catch (reason) { response.status(404).json({ error: reason instanceof Error ? reason.message : '资料不存在' }); }
+    });
+
     app.patch('/api/profile', (request, response) => {
       const identity = authenticatedIdentity(request.headers.authorization);
       if (!identity) return response.status(401).json({ error: '会话无效或已过期' });
@@ -102,7 +112,9 @@ const server = defineServer({
     });
 
     if (existsSync(clientDist)) {
-      app.use(express.static(clientDist));
+      app.use(express.static(clientDist, {
+        setHeaders: (response, filePath) => response.setHeader('Cache-Control', staticCacheControlForPath(filePath)),
+      }));
       app.get('/', (_request, response) => response.sendFile(path.join(clientDist, 'index.html')));
     }
   },

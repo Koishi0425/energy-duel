@@ -9,11 +9,10 @@ describe('announcements', () => {
     );
   });
 
-  it('publishes the current release first', () => {
+  it('publishes the latest follow-up announcement first without changing the release version', () => {
     expect(announcements[0]).toMatchObject({
-      id: '2026-07-16-profile-training-and-rule-fixes',
+      id: '2026-07-16-v030-followup-fixes',
       version: 'v0.3.0',
-      pinned: true,
     });
   });
 
