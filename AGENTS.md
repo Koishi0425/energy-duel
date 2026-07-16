@@ -24,6 +24,9 @@ interfaces, directory responsibilities, or architecture invariants change.
   geometry helpers, validated gameplay JSON, and configuration lookups used by
   both the client and server. Build it before either consuming workspace.
 - Runtime account data is stored under `server/data/` and must not be committed.
+  Passwords are salted and hashed with Node.js scrypt. Uploaded avatars live
+  under `server/data/avatars/` as validated WebP files and are user data, not
+  client assets.
 - `Dockerfile` and `compose.yaml` define the supported single-instance
   production deployment. The container serves the built client, HTTP API, and
   Colyseus WebSocket endpoint on one port. Persist `/app/server/data` through
@@ -79,8 +82,10 @@ Run commands from the repository root:
   authoritative speed/ID order; later movers stay in place. Spatial attacks read
   positions when their effect resolves, not when actions are submitted.
 - Usernames are trimmed, case-insensitively unique, and contain 3-16 Chinese
-  characters, ASCII letters, digits, or underscores. They are identifiers, not
-  secure credentials: anyone who knows a username can enter that account.
+  characters, ASCII letters, digits, or underscores. Registration requires a
+  password of at least 7 characters; never store plaintext passwords. Profiles
+  reference nameplates and titles by stable IDs, and the server validates that
+  a cosmetic is unlocked before accepting it.
 - Room nicknames are display labels and may differ from usernames.
 - Gameplay definitions live in `shared/config/game.json`. Metadata, costs,
   targets, assets, and effect handler IDs are JSON-driven and validated. Effect
@@ -107,18 +112,24 @@ Run commands from the repository root:
   character buffs remain server-side and finite durations keep ticking; only
   explicitly player-scoped buffs follow across forms.
   Regent unlocks the persistent `stars` resource and receives three Stars only
-  on the first transformation each game. Sovereign Blade forge level is capped
+  on the first transformation each game. Stardust always spends every Star the
+  actor currently holds; its authoritative power equals that full amount.
+  Sovereign Blade forge level is capped
   at three, supports half-point stacks, and its forge/active/locked state is
   character-scoped and restored when switching back. Summon Forth can create the
-  Blade from zero forge or reactivate it while locked. Variable actions choose an
-  integer power at submission; their dynamic costs are validated and paid by
-  the server.
+  Blade from zero forge or reactivate it while locked. Variable actions normally
+  choose an integer power at submission; all-in variables derive and validate
+  that integer from the authoritative current resource balance.
   Character passives are first-class JSON definitions referenced by character
   IDs, displayed by the client, and enforced by registered server handlers.
   Buff definitions may grant actions outside the current form tree; client and
   server derive those actions from the same `grantedActionIds`. Resource values
   may be fractional, and flexible-cost actions submit an explicit serializable
-  resource-spend map whose total and balances are validated server-side.
+  resource-spend map whose integer amounts, total, and balances are validated
+  server-side; fractional balances created by Li Chungang's slash cannot be
+  selected as flexible-payment units. Resource
+  definitions declare whether they are always visible or belong to characters;
+  unrelated special resources are hidden only while their value is zero.
   Pikachu's quick-move waiver, Ao mastery, Nightmare cooldown/path/darkness,
   and Mudrock counters/sleep are character-scoped unless their definitions
   explicitly use player scope. Transforming into Ao grants every player the
@@ -146,17 +157,29 @@ Run commands from the repository root:
   final living player submits; the final submission resolves synchronously.
   Finished games remain in the result phase until every remaining player
   acknowledges the result, then reset to the waiting/ready phase for another game.
+  Starting and post-result resets must restore authoritative grid positions to
+  `2 * playerIndex`; movement can never leak into the next game.
   Append authoritative outcomes for every submitted action, including no-effect
   outcomes, to the synchronized, bounded combat log. Player-facing log text uses
   explicit healthy/near-death/dead state names and the client groups entries by round.
+  A normally completed standard-room game awards 100 base EXP, plus 100 for a
+  win or 50 for a draw, and updates career totals. Training rooms and games
+  terminated by departure do not update career data. Rating v1 scores each
+  completed standard game from 0–330 using result, survival, damage/eliminations,
+  effective defense/recovery, and participation. Profile Rating is the sum of
+  the best 35 scores and the latest 15 scores; one game may belong to both sets.
+  Persist the formula version with each score and never silently recalculate
+  historical scores after a formula change.
 - The room creator is the permanent host. A permanent host departure destroys
   the room. Only active matches reserve an unexpectedly disconnected seat for
   30 seconds; lobby and result-screen disconnects are immediate departures. A
   reconnect timeout becomes a permanent departure. A non-host departure during
   play ends the current game and leaves remaining clients on the result screen.
 - Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
-  while damage compares the incoming attack level with the target's own selected
-  action level (attack, defense, or otherwise). A difference below 0.5 cancels,
+  while damage compares the incoming attack level with the target's selected
+  action level only when that action applies to the attacker. Defense and
+  targetless actions apply generally; targeted/spatial actions apply only when
+  the attacker is one of their actual targets. A difference below 0.5 cancels,
   0.5 to below 1 shifts health left once, and 1 or more kills directly; attacks
   below level 3 can shift at most once. All final effects remain server authoritative.
   Base characters have no near-death state; transformed

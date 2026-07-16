@@ -56,3 +56,15 @@ describe('EnergyDuelRoom training actors', () => {
     expect(room.authorizedActor({ sessionId: 'intruder' }, 'dummy')).toBeUndefined();
   });
 });
+
+describe('EnergyDuelRoom game reset', () => {
+  it('restores circular starting cells after a finished game', () => {
+    const room = new EnergyDuelRoom() as any;
+    for (const [id, gridIndex] of [['a', 1], ['b', 3], ['c', 5]] as const) {
+      const player = new PlayerState(); player.playerId = id; player.accountId = id; player.controllerPlayerId = id; player.gridIndex = gridIndex;
+      room.state.players.set(id, player);
+    }
+    room.resetToWaiting();
+    expect(Array.from(room.state.players.values(), (player: PlayerState) => player.gridIndex)).toEqual([0, 2, 4]);
+  });
+});

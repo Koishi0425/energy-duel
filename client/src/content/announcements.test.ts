@@ -9,6 +9,14 @@ describe('announcements', () => {
     );
   });
 
+  it('publishes the current release first', () => {
+    expect(announcements[0]).toMatchObject({
+      id: '2026-07-16-profile-training-and-rule-fixes',
+      version: 'v0.3.0',
+      pinned: true,
+    });
+  });
+
   it('counts announcements newer than the read cursor', () => {
     expect(unreadAnnouncementCount(null)).toBe(announcements.length);
     expect(unreadAnnouncementCount(announcements[0].id)).toBe(0);

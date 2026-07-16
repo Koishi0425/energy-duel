@@ -27,10 +27,31 @@ export interface PlayerProfile {
   experience: number;
   experienceForNextLevel: number;
   rating: number;
+  ratingBest35: number;
+  ratingRecent15: number;
+  lastGameScore?: number;
   unlockedNameplateIds: string[];
   unlockedTitleIds: string[];
   stats: CareerStats;
   createdAt: string;
+}
+
+export interface GameScoreBreakdown {
+  formulaVersion: number;
+  resultScore: number;
+  survivalScore: number;
+  offenseScore: number;
+  defenseScore: number;
+  participationScore: number;
+  totalScore: number;
+}
+
+export interface GameRatingResultMessage {
+  breakdown: GameScoreBreakdown;
+  previousRating: number;
+  rating: number;
+  best35Contribution: number;
+  recent15Contribution: number;
 }
 
 export interface ProfileUpdateRequest {

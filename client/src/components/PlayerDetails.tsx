@@ -1,4 +1,4 @@
-import { buffById, characterById, passiveById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
+import { buffById, characterById, isResourceVisibleForCharacter, passiveById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
 import { Button, Progress, Tag } from 'antd';
 
 export default function PlayerDetails({ player, onOpenGuide }: { player: SyncedPlayer; onOpenGuide?: (characterId: string) => void }) {
@@ -20,7 +20,7 @@ export default function PlayerDetails({ player, onOpenGuide }: { player: SyncedP
         <Progress percent={player.maxHp > 0 ? Math.round(player.currentHp / player.maxHp * 100) : 0} showInfo={false} status={player.alive ? 'active' : 'exception'} />
       </div>
       <div className="resource-list">
-        {Object.values(player.resources).map((resource) => {
+        {Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).map((resource) => {
           const definition = resourceById.get(resource.resourceId);
           return <Tag key={resource.resourceId} color={definition?.color}>{definition?.name ?? resource.resourceId}：{formatResource(resource.current)}{resource.max > 0 ? `/${formatResource(resource.max)}` : ''}</Tag>;
         })}

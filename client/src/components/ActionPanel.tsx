@@ -157,13 +157,16 @@ function meetsUnlockRequirements(player: SyncedPlayer, action: ActionDefinition)
   const requirements = action.unlockRequirements;
   return (requirements?.allBuffs ?? []).every((buffId) => buffs.has(buffId))
     && (requirements?.noneBuffs ?? []).every((buffId) => !buffs.has(buffId))
-    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (buffs.get(buffId) ?? 0) >= stacks);
+    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (buffs.get(buffId) ?? 0) >= stacks)
+    && Object.entries(requirements?.minResources ?? {}).every(([resourceId, amount]) => (player.resources[resourceId]?.current ?? 0) + 1e-6 >= amount);
 }
 function formatCost(action: ActionDefinition, player: SyncedPlayer): string {
   const cost = action.id === 'slash' && player.characterId === 'li_chungang' ? { ...action.cost, energy: 1 / 3 }
     : action.id === 'ten_volt' && player.buffs.some((buff) => buff.buffId === 'quick_attack_ready') ? { ...action.cost, charge: 0 } : action.cost;
   const entries = Object.entries(cost).filter(([, amount]) => amount > 0).map(([id, amount]) => `${formatAmount(amount)} ${resourceById.get(id)?.shortName ?? id}`);
-  if (action.variable) entries.push(`${action.variable.costPerPower}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`);
+  if (action.variable) entries.push(action.usesAllVariableResource
+    ? `全部 ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`
+    : `${action.variable.costPerPower}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`);
   if (action.anyResourceCost) entries.push(`${action.anyResourceCost}-n 任意资源`);
   return entries.length === 0 ? '无消耗' : entries.join('、');
 }

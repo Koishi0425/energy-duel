@@ -8,9 +8,11 @@ import {
   type SubmitDeferredTargetsMessage,
   type SubmitActionMessage,
 } from '@energy-duel/shared';
+import { randomUUID } from 'node:crypto';
 import { ArraySchema, MapSchema, Schema, type } from '@colyseus/schema';
 import { Client, Room, ServerError, matchMaker } from '@colyseus/core';
 import { resolveRound, validateAction, type CombatPlayer, type RoundResult, type SubmittedAction } from '../game/RoundResolver.js';
+import { calculateGameScore, type GamePerformanceInput } from '../game/RatingCalculator.js';
 import { ActionSubmissionStore } from '../game/ActionSubmissionStore.js';
 import { sessionService } from '../services.js';
 import { assertAccountAvailable, assignGridIndices, claimRoomCode, colorForAccount, isActionUnlocked, normalizeRoomCode, releaseRoomCode, tickScopedBuffs } from './roomSupport.js';
@@ -26,6 +28,8 @@ interface StoredBuff {
   remainingTurns: number;
   sourcePlayerId: string;
 }
+
+type GamePerformance = Omit<GamePerformanceInput, 'outcome' | 'totalRounds'>;
 
 export class ResourceState extends Schema {
   @type('string') resourceId = '';
@@ -89,6 +93,8 @@ export class EnergyDuelRoom extends Room {
   private claimedRoomCode = '';
   private readonly storedBuffs = new Map<string, Map<string, Map<string, StoredBuff>>>();
   private nextDummyId = 1;
+  private readonly gamePerformance = new Map<string, GamePerformance>();
+  private currentGameId = '';
 
   static async onAuth(token: string | undefined): Promise<SessionIdentity> {
     const identity = sessionService.validateToken(token);
@@ -209,12 +215,16 @@ export class EnergyDuelRoom extends Room {
       return this.sendError(client, '所有玩家准备后才能开始', requestId, 'start_game');
     }
     this.actions.clear();
+    this.gamePerformance.clear();
+    this.currentGameId = randomUUID();
     void this.lock();
     this.state.round = 1;
     this.state.gameNumber += 1;
     this.state.phase = 'choosing';
     this.state.lastResult = '游戏开始，请选择本回合行动。';
+    assignGridIndices(this.state.players.values());
     for (const player of this.state.players.values()) {
+      this.gamePerformance.set(player.playerId, { roundsParticipated: 0, actionsCompleted: 0, damageStatesDealt: 0, eliminations: 0, successfulDefenses: 0, recoveryStates: 0 });
       player.alive = true;
       player.currentHp = player.maxHp;
       player.submitted = false;
@@ -350,6 +360,11 @@ export class EnergyDuelRoom extends Room {
   }
 
   private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, result: RoundResult): void {
+    for (const [playerId, delta] of Object.entries(result.performance)) {
+      const totals = this.gamePerformance.get(playerId); const synced = this.state.players.get(playerId); if (!totals) continue;
+      if (synced?.alive) { totals.roundsParticipated += 1; totals.actionsCompleted += 1; }
+      totals.damageStatesDealt += delta.damageStatesDealt; totals.eliminations += delta.eliminations; totals.successfulDefenses += delta.successfulDefenses; totals.recoveryStates += delta.recoveryStates;
+    }
     for (const [playerId, combatPlayer] of combatPlayers) {
       const synced = this.state.players.get(playerId);
       if (!synced) continue;
@@ -393,6 +408,17 @@ export class EnergyDuelRoom extends Room {
     if (survivors.length > 1) return false;
     this.state.phase = 'finished';
     this.state.lastResult += survivors.length === 1 ? `\n${survivors[0].nickname} 获胜！` : '\n无人存活，本局平局。';
+    if (this.state.roomMode === 'standard') {
+      const winnerId = survivors.length === 1 ? survivors[0].playerId : undefined;
+      const updates = sessionService.recordGameResults(Array.from(this.state.players.values(), (player) => {
+        const outcome = winnerId ? (player.playerId === winnerId ? 'win' as const : 'loss' as const) : 'draw' as const;
+        const performance = this.gamePerformance.get(player.playerId) ?? { roundsParticipated: 0, actionsCompleted: 0, damageStatesDealt: 0, eliminations: 0, successfulDefenses: 0, recoveryStates: 0 };
+        return { accountId: player.accountId, outcome, gameId: this.currentGameId, breakdown: calculateGameScore({ ...performance, outcome, totalRounds: this.state.round }) };
+      }));
+      for (const player of this.state.players.values()) {
+        const update = updates.get(player.accountId); const client = this.clients.find((candidate) => candidate.sessionId === player.playerId); if (update && client) client.send('game_rating_result', update);
+      }
+    }
     for (const player of this.state.players.values()) player.resultConfirmed = false;
     return true;
   }
@@ -425,6 +451,7 @@ export class EnergyDuelRoom extends Room {
     this.state.phase = 'waiting';
     this.state.round = 0;
     this.state.lastResult = '上一局已结束，可以重新准备。';
+    assignGridIndices(this.state.players.values());
     for (const player of this.state.players.values()) {
       player.ready = false;
       player.resultConfirmed = false;
@@ -503,7 +530,13 @@ export class EnergyDuelRoom extends Room {
   }
 
   private isActionUnlocked(player: PlayerState, actionId: string): boolean {
-    return isActionUnlocked(player.characterId, player.currentFormId, actionId, Array.from(player.buffs.values(), (buff) => ({ buffId: buff.buffId, stacks: buff.stacks })));
+    return isActionUnlocked(
+      player.characterId,
+      player.currentFormId,
+      actionId,
+      Array.from(player.buffs.values(), (buff) => ({ buffId: buff.buffId, stacks: buff.stacks })),
+      Object.fromEntries(Array.from(player.resources.entries(), ([resourceId, resource]) => [resourceId, resource.current])),
+    );
   }
 
   private combatPlayers(): Map<string, CombatPlayer> {

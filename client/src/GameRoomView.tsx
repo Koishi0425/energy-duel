@@ -3,10 +3,12 @@ import {
   actionById,
   characterById,
   gameConfig,
+  isResourceVisibleForCharacter,
   resourceById,
   type ActionDefinition,
   type CommandResultMessage,
   type DeferredActionRequiredMessage,
+  type GameRatingResultMessage,
   type ResolutionStep,
   type RoundResolutionMessage,
   type SessionResponse,
@@ -60,6 +62,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [rtt, setRtt] = useState<number>();
   const [activeStep, setActiveStep] = useState<ResolutionStep>();
   const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
+  const [ratingResult, setRatingResult] = useState<GameRatingResultMessage>();
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   const [tutorialRequest, setTutorialRequest] = useState<{ page: GuidePageId; characterId?: string }>();
@@ -92,6 +95,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       setDeferredRequest(payload); setActiveActorId(payload.actorPlayerId); setSelectedActionId(payload.actionId); setSelectedTargetIds([]);
       void api.info({ content: `行动已公开：请为「${actionById.get(payload.actionId)?.name ?? payload.actionId}」后发分配目标`, duration: 2 });
     });
+    const removeRatingResult = room.onMessage('game_rating_result', (payload: GameRatingResultMessage) => setRatingResult(payload));
     const handleDrop = () => setNetworkState('reconnecting');
     const handleReconnect = () => { setNetworkState('online'); void api.success({ content: '已重新连接', duration: 1 }); };
     const handleLeave = () => { setNetworkState('offline'); onLeave(); };
@@ -100,7 +104,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     room.send('ping', { sentAt: performance.now() });
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
-      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred();
+      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
 
@@ -129,7 +133,8 @@ function RoomContent({ room, session, onLeave }: Props) {
   }, []);
   useEffect(() => {
     setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); setDeferredRequest(undefined); setParameterAction(undefined); setFlexibleAction(undefined); setPendingSpend(undefined); setGridAction(undefined);
-  }, [gameState.round]);
+    if (gameState.phase === 'choosing' && gameState.round === 1) setRatingResult(undefined);
+  }, [gameState.phase, gameState.round]);
   useEffect(() => {
     if (panelPosition) localStorage.setItem('energy-duel-panel-position', JSON.stringify(panelPosition));
   }, [panelPosition]);
@@ -146,7 +151,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const variableMax = parameterAction?.variable
     ? Math.max(parameterAction.variable.minPower, Math.min(
       parameterAction.variable.maxPower ?? Number.MAX_SAFE_INTEGER,
-      Math.floor((activeActor?.resources[parameterAction.variable.resourceId]?.current ?? 0) / parameterAction.variable.costPerPower),
+      Math.floor(((activeActor?.resources[parameterAction.variable.resourceId]?.current ?? 0) + 1e-6) / parameterAction.variable.costPerPower),
     ))
     : 1;
 
@@ -178,13 +183,18 @@ function RoomContent({ room, session, onLeave }: Props) {
     setSelectedActionId(action.id); setSelectedTargetIds([]);
     const deferred = action.target.selectionTiming === 'deferred'
       || (['steal', 'absorb_charge'].includes(action.id) && activeActor?.characterId === 'ao' && (activeActor.buffs.find((buff) => buff.buffId === 'ao_mastery')?.stacks ?? 0) >= 2);
-    if (deferred) { submit(action); return; }
     if (action.anyResourceCost) { setResourceSpend({}); setFlexibleAction(action); return; }
     if (action.variable) {
+      if (action.usesAllVariableResource) {
+        const current = activeActor?.resources[action.variable.resourceId]?.current ?? 0;
+        submit(action, [], undefined, Math.floor((current + 1e-6) / action.variable.costPerPower));
+        return;
+      }
       setVariablePower(action.variable.minPower);
       setParameterAction(action);
       return;
     }
+    if (deferred) { submit(action); return; }
     if (action.targetsGridCell) { setGridAction({ action, targetIds: [] }); return; }
     if (action.target.mode === 'single_enemy' || action.target.mode === 'multiple_enemies') {
       void api.open({ type: 'info', content: action.target.mode === 'multiple_enemies' ? `请选择 ${action.target.maxTargets} 次目标` : '请在战场上选择目标', duration: 1.5 });
@@ -259,7 +269,8 @@ function RoomContent({ room, session, onLeave }: Props) {
   const roster = <Roster players={players} gameState={gameState} viewer={activeActor} />;
   const targetHint = deferredRequest
     ? `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
-    : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
+    : gridAction ? '点击地图上绿色高亮的编号地块'
+      : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
 
   return <main className="game-shell">
     {contextHolder}
@@ -273,11 +284,12 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={adjacentDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
       {targetHint && <div className="targeting-hint">{targetHint}</div>}
+      {gridAction?.action.id === 'dream_path' && <Button className="skip-grid-move" size="small" onClick={() => chooseGridDestination(undefined)}>留在原地</Button>}
     </section>
     <aside className="roster desktop-roster">{roster}</aside>
     <Collapse className="mobile-roster" items={[{ key: 'players', label: `玩家列表（${players.length}）`, children: roster }]} />
@@ -297,17 +309,13 @@ function RoomContent({ room, session, onLeave }: Props) {
     </section>
     <Drawer title="角色详情" placement="bottom" height="min(72dvh, 520px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />}</Drawer>
     {compactLayout ? <Drawer title="战斗日志" placement="right" width="min(440px, 92vw)" open={logOpen} onClose={() => setLogOpen(false)}><BattleLog groups={battleLogGroups} /></Drawer> : logOpen && <FloatingWindow storageId="battle-log" title="战斗日志" initialPosition={{ x: Math.max(20, window.innerWidth - 500), y: 92 }} initialSize={{ width: 440, height: 520 }} onClose={() => setLogOpen(false)} className="battle-log-window"><BattleLog groups={battleLogGroups} /></FloatingWindow>}
-    <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div><p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
+    <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>{ratingResult && <div className="rating-result"><header><span>本局表现分</span><strong>{ratingResult.breakdown.totalScore}</strong></header><div><span>结果 {ratingResult.breakdown.resultScore}</span><span>生存 {ratingResult.breakdown.survivalScore}</span><span>进攻 {ratingResult.breakdown.offenseScore}</span><span>防守恢复 {ratingResult.breakdown.defenseScore}</span><span>参与 {ratingResult.breakdown.participationScore}</span></div><footer><span>Rating</span><strong>{ratingResult.previousRating} → {ratingResult.rating}</strong><small>BEST 35：{ratingResult.best35Contribution} · RECENT 15：{ratingResult.recent15Contribution}</small></footer></div>}<p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
     <Modal title={parameterAction ? `${parameterAction.name} · 选择 n` : '选择技能参数'} open={Boolean(parameterAction)} okText="确认行动" cancelText="取消" onCancel={() => { setParameterAction(undefined); setSelectedActionId(undefined); }} onOk={confirmVariableAction} okButtonProps={{ disabled: !parameterAction || variableMax < (parameterAction.variable?.minPower ?? 1) }}>
-      {parameterAction?.variable && <><p>{parameterAction.description}</p><InputNumber min={parameterAction.variable.minPower} max={variableMax} value={variablePower} precision={0} onChange={(value) => setVariablePower(value ?? parameterAction.variable!.minPower)} /><p className="muted">将消耗 {parameterAction.variable.costPerPower * variablePower} {resourceById.get(parameterAction.variable.resourceId)?.name ?? parameterAction.variable.resourceId}，技能等级为 {parameterAction.variable.levelPerPower * variablePower}。</p></>}
+      {parameterAction?.variable && <><p>{parameterAction.description}</p><InputNumber min={parameterAction.variable.minPower} max={variableMax} value={variablePower} precision={0} onChange={(value) => setVariablePower(Math.trunc(value ?? parameterAction.variable!.minPower))} /><p className="muted">将消耗 {formatNumber(parameterAction.variable.costPerPower * variablePower)} {resourceById.get(parameterAction.variable.resourceId)?.name ?? parameterAction.variable.resourceId}，技能等级为 {formatNumber(parameterAction.variable.levelPerPower * variablePower)}。</p></>}
     </Modal>
-    <Modal title={flexibleAction ? `${flexibleAction.name} · 任意资源支付` : '任意资源支付'} open={Boolean(flexibleAction)} okText="确认支付" cancelText="取消" onCancel={() => { setFlexibleAction(undefined); setSelectedActionId(undefined); }} onOk={confirmFlexibleAction} okButtonProps={{ disabled: Math.abs(flexibleSelected - flexibleRequired) > 0.001 }}>
-      <p>请选择合计 {flexibleRequired} 点资源（已选 {flexibleSelected}）。</p>
-      {me && Object.values(me.resources).map((resource) => <div className="resource-payment-row" key={resource.resourceId}><span>{resourceById.get(resource.resourceId)?.name ?? resource.resourceId}（持有 {formatNumber(resource.current)}）</span><InputNumber min={0} max={resource.current} step={1 / 3} value={resourceSpend[resource.resourceId] ?? 0} onChange={(value) => setResourceSpend((current) => ({ ...current, [resource.resourceId]: Number(value ?? 0) }))} /></div>)}
-    </Modal>
-    <Modal title={gridAction ? `${gridAction.action.name} · 选择位移` : '选择位移'} open={Boolean(gridAction)} footer={null} onCancel={() => { setGridAction(undefined); setSelectedActionId(undefined); }}>
-      <p>选择一个相邻空格。魇之梦径的回合末位移可以放弃。</p>
-      <div className="grid-choice-buttons">{adjacentDestinations.map((cell) => <Button type="primary" key={cell} onClick={() => chooseGridDestination(cell)}>移动到 {cell} 号地块</Button>)}{gridAction?.action.id === 'dream_path' && <Button onClick={() => chooseGridDestination(undefined)}>留在原地</Button>}</div>
+    <Modal title={flexibleAction ? `${flexibleAction.name} · 任意资源支付` : '任意资源支付'} open={Boolean(flexibleAction)} okText="确认支付" cancelText="取消" onCancel={() => { setFlexibleAction(undefined); setSelectedActionId(undefined); }} onOk={confirmFlexibleAction} okButtonProps={{ disabled: flexibleSelected !== flexibleRequired }}>
+      <p>请选择合计 {flexibleRequired} 点资源（已选 {flexibleSelected}）。任意资源支付只接受整数点数。</p>
+      {activeActor && Object.values(activeActor.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, activeActor.characterId, resource.current)).map((resource) => <div className="resource-payment-row" key={resource.resourceId}><span>{resourceById.get(resource.resourceId)?.name ?? resource.resourceId}（持有 {formatNumber(resource.current)}）</span><InputNumber min={0} max={Math.max(0, Math.floor(resource.current + 1e-6))} step={1} precision={0} value={resourceSpend[resource.resourceId] ?? 0} onChange={(value) => setResourceSpend((current) => ({ ...current, [resource.resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>)}
     </Modal>
     {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
@@ -330,7 +338,7 @@ function TrainingSetup({ actors, room }: { actors: SyncedPlayer[]; room: Room<De
 function Roster({ players, gameState, viewer }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer }) {
   return <div className="roster-list">{players.map((player) => {
     const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
-    const resources = Object.values(player.resources).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
+    const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
     return <button className="roster-player" key={player.accountId} type="button"><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
   })}</div>;
 }

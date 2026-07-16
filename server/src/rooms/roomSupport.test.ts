@@ -53,6 +53,11 @@ describe('room support', () => {
     expect(isActionUnlocked('gonggang', 'base', 'raise_axe', [])).toBe(true);
   });
 
+  it('unlocks Fist only while the player has at least one Energy', () => {
+    expect(isActionUnlocked('jiaosila', 'base', 'fist', [], { energy: 0 })).toBe(false);
+    expect(isActionUnlocked('jiaosila', 'base', 'fist', [], { energy: 1 })).toBe(true);
+  });
+
   it('requires an active forged blade only for the sovereign blade action', () => {
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(false);
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [

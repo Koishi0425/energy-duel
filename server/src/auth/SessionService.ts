@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { experienceRequiredForLevel, PROFILE_NAMEPLATES, PROFILE_TITLES, type PlayerProfile, type ProfileUpdateRequest, type RankId } from '@energy-duel/shared';
+import { experienceRequiredForLevel, PROFILE_NAMEPLATES, PROFILE_TITLES, type GameRatingResultMessage, type GameScoreBreakdown, type PlayerProfile, type ProfileUpdateRequest, type RankId } from '@energy-duel/shared';
+import { calculateRating, retainRatingScores, type StoredRatingScore } from '../game/RatingCalculator.js';
 
 interface StoredProfile {
   nickname: string;
@@ -11,6 +12,7 @@ interface StoredProfile {
   rankId: RankId;
   experience: number;
   rating: number;
+  ratingScores: StoredRatingScore[];
   unlockedNameplateIds: string[];
   unlockedTitleIds: string[];
   stats: PlayerProfile['stats'];
@@ -93,20 +95,41 @@ export class SessionService {
     if (!account) throw new Error('账号不存在'); account.profile.avatarVersion = this.now(); this.writeDatabase(database); return toPublicProfile(account);
   }
 
+  recordGameResults(results: readonly { accountId: string; outcome: 'win' | 'loss' | 'draw'; gameId: string; breakdown: GameScoreBreakdown }[]): Map<string, GameRatingResultMessage> {
+    const database = this.readDatabase();
+    const updates = new Map<string, GameRatingResultMessage>(); const playedAt = new Date(this.now()).toISOString();
+    for (const result of results) {
+      const account = database.accounts.find((candidate) => candidate.accountId === result.accountId); if (!account) continue;
+      if (account.profile.ratingScores.some((score) => score.gameId === result.gameId)) continue;
+      const previousRating = calculateRating(account.profile.ratingScores).rating;
+      account.profile.ratingScores.push({ gameId: result.gameId, score: result.breakdown.totalScore, formulaVersion: result.breakdown.formulaVersion, playedAt });
+      account.profile.ratingScores = retainRatingScores(account.profile.ratingScores);
+      const rating = calculateRating(account.profile.ratingScores); account.profile.rating = rating.rating;
+      const stats = account.profile.stats; stats.totalGames += 1;
+      if (result.outcome === 'win') { stats.wins += 1; stats.currentWinStreak += 1; stats.bestWinStreak = Math.max(stats.bestWinStreak, stats.currentWinStreak); account.profile.experience += 200; }
+      else if (result.outcome === 'draw') { stats.draws += 1; stats.currentWinStreak = 0; account.profile.experience += 150; }
+      else { stats.losses += 1; stats.currentWinStreak = 0; account.profile.experience += 100; }
+      updates.set(result.accountId, { breakdown: result.breakdown, previousRating, rating: rating.rating, best35Contribution: rating.best35Contribution, recent15Contribution: rating.recent15Contribution });
+    }
+    this.writeDatabase(database);
+    return updates;
+  }
+
   private issueSession(account: AccountRecord): SessionResult {
     const token = randomBytes(32).toString('hex'); this.sessions.set(token, { accountId: account.accountId, username: account.username, expiresAt: this.now() + this.ttlMs });
     return { accountId: account.accountId, username: account.username, token };
   }
   private findAccount(accountId: string): AccountRecord { const account = this.readDatabase().accounts.find((candidate) => candidate.accountId === accountId); if (!account) throw new Error('账号不存在'); return account; }
   private ensureDatabase(): void { const directory = path.dirname(this.databasePath); if (!existsSync(directory)) mkdirSync(directory, { recursive: true }); if (!existsSync(this.databasePath)) this.writeDatabase({ version: 2, accounts: [] }); }
-  private readDatabase(): AccountDatabase { const parsed = JSON.parse(readFileSync(this.databasePath, 'utf8')) as Partial<AccountDatabase>; if (parsed.version !== 2 || !Array.isArray(parsed.accounts)) throw new Error('账号数据版本不兼容，请清理旧数据后重启服务'); return parsed as AccountDatabase; }
+  private readDatabase(): AccountDatabase { const parsed = JSON.parse(readFileSync(this.databasePath, 'utf8')) as Partial<AccountDatabase>; if (parsed.version !== 2 || !Array.isArray(parsed.accounts)) throw new Error('账号数据版本不兼容，请清理旧数据后重启服务'); for (const account of parsed.accounts) account.profile.ratingScores ??= []; return parsed as AccountDatabase; }
   private writeDatabase(database: AccountDatabase): void { const temporaryPath = `${this.databasePath}.tmp`; writeFileSync(temporaryPath, `${JSON.stringify(database, null, 2)}\n`, 'utf8'); renameSync(temporaryPath, this.databasePath); }
 }
 
-function createDefaultProfile(username: string): StoredProfile { return { nickname: username, nameplateId: 'standard', titleId: 'novice', rankId: 'unranked', experience: 0, rating: 0, unlockedNameplateIds: ['standard'], unlockedTitleIds: ['novice'], stats: { totalGames: 0, wins: 0, losses: 0, draws: 0, currentWinStreak: 0, bestWinStreak: 0 } }; }
+function createDefaultProfile(username: string): StoredProfile { return { nickname: username, nameplateId: 'standard', titleId: 'novice', rankId: 'unranked', experience: 0, rating: 0, ratingScores: [], unlockedNameplateIds: ['standard'], unlockedTitleIds: ['novice'], stats: { totalGames: 0, wins: 0, losses: 0, draws: 0, currentWinStreak: 0, bestWinStreak: 0 } }; }
 function toPublicProfile(account: AccountRecord): PlayerProfile {
   let level = 1; while (level < 999 && account.profile.experience >= experienceRequiredForLevel(level + 1)) level += 1;
-  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(level + 1), rating: Math.max(0, Math.min(16_500, account.profile.rating)), unlockedNameplateIds: [...account.profile.unlockedNameplateIds], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
+  const rating = calculateRating(account.profile.ratingScores);
+  return { accountId: account.accountId, username: account.username, nickname: account.profile.nickname, avatarUrl: account.profile.avatarVersion ? `/api/avatars/${account.accountId}?v=${account.profile.avatarVersion}` : undefined, nameplateId: account.profile.nameplateId, titleId: account.profile.titleId, rankId: account.profile.rankId, level, experience: account.profile.experience, experienceForNextLevel: experienceRequiredForLevel(level + 1), rating: rating.rating, ratingBest35: rating.best35Contribution, ratingRecent15: rating.recent15Contribution, lastGameScore: account.profile.ratingScores.at(-1)?.score, unlockedNameplateIds: [...account.profile.unlockedNameplateIds], unlockedTitleIds: [...account.profile.unlockedTitleIds], stats: { ...account.profile.stats }, createdAt: account.createdAt };
 }
 function hashPassword(password: string, salt: string): string { return scryptSync(password, salt, 64).toString('hex'); }
 function passwordMatches(password: string, salt: string, expected: string): boolean { const actual = Buffer.from(hashPassword(password, salt), 'hex'); const stored = Buffer.from(expected, 'hex'); return actual.length === stored.length && timingSafeEqual(actual, stored); }

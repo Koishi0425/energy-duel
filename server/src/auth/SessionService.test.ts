@@ -39,4 +39,13 @@ describe('SessionService password accounts', () => {
     let now = 1000; const service = createService(() => now, 100); const session = service.register('Player_2', 'password1');
     expect(service.validateToken('missing')).toBeNull(); expect(service.validateToken(session.token)?.accountId).toBe(session.accountId); now = 1100; expect(service.validateToken(session.token)).toBeNull();
   });
+
+  it('awards experience and career results for completed games', () => {
+    const service = createService(); const winner = service.register('WinnerOne', 'password1'); const loser = service.register('LoserOne', 'password1');
+    const winnerBreakdown = { formulaVersion: 1, resultScore: 180, survivalScore: 40, offenseScore: 12, defenseScore: 0, participationScore: 4, totalScore: 236 };
+    const loserBreakdown = { formulaVersion: 1, resultScore: 60, survivalScore: 20, offenseScore: 0, defenseScore: 6, participationScore: 2, totalScore: 88 };
+    service.recordGameResults([{ accountId: winner.accountId, outcome: 'win', gameId: 'game-1', breakdown: winnerBreakdown }, { accountId: loser.accountId, outcome: 'loss', gameId: 'game-1', breakdown: loserBreakdown }]);
+    expect(service.getProfile(service.validateToken(winner.token)!)).toMatchObject({ experience: 200, rating: 472, ratingBest35: 236, ratingRecent15: 236, lastGameScore: 236, stats: { totalGames: 1, wins: 1, currentWinStreak: 1 } });
+    expect(service.getProfile(service.validateToken(loser.token)!)).toMatchObject({ experience: 100, rating: 176, stats: { totalGames: 1, losses: 1, currentWinStreak: 0 } });
+  });
 });

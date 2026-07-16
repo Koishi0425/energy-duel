@@ -68,7 +68,7 @@ export function colorForAccount(accountId: string, usedColors: Set<number>): num
 
 export interface UnlockBuff { buffId: string; stacks: number }
 
-export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>): boolean {
+export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>, resources: Readonly<Record<string, number>> = {}): boolean {
   const currentBuffs = new Map(Array.from(buffs, (buff) => typeof buff === 'string' ? [buff, 1] : [buff.buffId, buff.stacks]));
   const visibleInTree = characterById.get(characterId)?.forms.find((form) => form.id === formId)?.unlockedActions.includes(actionId) === true;
   const grantedByBuff = Array.from(currentBuffs.keys()).some((buffId) => buffById.get(buffId)?.grantedActionIds?.includes(actionId));
@@ -76,5 +76,6 @@ export function isActionUnlocked(characterId: string, formId: string, actionId: 
   const requirements = actionById.get(actionId)?.unlockRequirements;
   return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId))
     && (requirements?.noneBuffs ?? []).every((buffId) => !currentBuffs.has(buffId))
-    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (currentBuffs.get(buffId) ?? 0) >= stacks);
+    && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (currentBuffs.get(buffId) ?? 0) >= stacks)
+    && Object.entries(requirements?.minResources ?? {}).every(([resourceId, amount]) => (resources[resourceId] ?? 0) + 1e-6 >= amount);
 }

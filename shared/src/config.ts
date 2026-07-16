@@ -21,6 +21,8 @@ export interface ResourceDefinition {
   shortName: string;
   color: string;
   displayOrder: number;
+  alwaysVisible?: boolean;
+  characterIds?: string[];
 }
 
 export interface BuffDefinition {
@@ -69,6 +71,7 @@ export interface ActionDefinition {
   effects: EffectDefinition[];
   vfxId: string;
   variable?: VariableActionDefinition;
+  usesAllVariableResource?: boolean;
   damageType?: 'generic' | 'blunt' | 'slash' | 'magic';
   anyResourceCost?: number;
   targetsGridCell?: boolean;
@@ -77,6 +80,7 @@ export interface ActionDefinition {
     allBuffs?: string[];
     noneBuffs?: string[];
     minBuffStacks?: Record<string, number>;
+    minResources?: Record<string, number>;
     description: string;
   };
 }
@@ -128,10 +132,15 @@ export function validateGameConfig(input: unknown): GameConfig {
   assertUnique(config.characters, 'character');
   assertUnique(config.actions, 'action');
   const resourceIds = new Set(config.resources.map((item) => item.id));
+  const characterIds = new Set(config.characters.map((item) => item.id));
   const buffIds = new Set(config.buffs.map((item) => item.id));
   const assetIds = new Set(config.assets.map((item) => item.id));
   const actionIds = new Set(config.actions.map((item) => item.id));
   const passiveIds = new Set(config.passives.map((item) => item.id));
+  for (const resource of config.resources) {
+    if (resource.alwaysVisible !== undefined && typeof resource.alwaysVisible !== 'boolean') throw new Error(`Resource ${resource.id} has invalid visibility.`);
+    if (resource.characterIds?.some((characterId) => !characterIds.has(characterId))) throw new Error(`Resource ${resource.id} references a missing character.`);
+  }
   for (const buff of config.buffs) {
     if (buff.scope && !['character', 'player'].includes(buff.scope)) throw new Error(`Buff ${buff.id} has an invalid scope.`);
     if (buff.durationTurns !== undefined && (!Number.isInteger(buff.durationTurns) || buff.durationTurns < 1)) throw new Error(`Buff ${buff.id} has an invalid duration.`);
@@ -167,12 +176,15 @@ export function validateGameConfig(input: unknown): GameConfig {
       || (action.variable.maxPower !== undefined && (!Number.isInteger(action.variable.maxPower) || action.variable.maxPower < action.variable.minPower)))) {
       throw new Error(`Action ${action.id} has invalid variable parameters.`);
     }
+    if (action.usesAllVariableResource && !action.variable) throw new Error(`Action ${action.id} must be variable to spend all of a resource.`);
     const requirements = action.unlockRequirements;
     const requiredBuffs = [...(requirements?.allBuffs ?? []), ...(requirements?.noneBuffs ?? []), ...Object.keys(requirements?.minBuffStacks ?? {})];
+    const requiredResources = Object.entries(requirements?.minResources ?? {});
     if (requirements && (typeof requirements.description !== 'string'
       || !requirements.description.trim()
       || requiredBuffs.some((buffId) => !buffIds.has(buffId))
-      || Object.values(requirements.minBuffStacks ?? {}).some((stacks) => !Number.isFinite(stacks) || stacks <= 0))) {
+      || Object.values(requirements.minBuffStacks ?? {}).some((stacks) => !Number.isFinite(stacks) || stacks <= 0)
+      || requiredResources.some(([resourceId, amount]) => !resourceIds.has(resourceId) || !Number.isFinite(amount) || amount <= 0))) {
       throw new Error(`Action ${action.id} has invalid unlock requirements.`);
     }
   }
@@ -218,3 +230,8 @@ export const buffById = new Map(gameConfig.buffs.map((buff) => [buff.id, buff]))
 export const passiveById = new Map(gameConfig.passives.map((passive) => [passive.id, passive]));
 export const characterById = new Map(gameConfig.characters.map((character) => [character.id, character]));
 export const assetById = new Map(gameConfig.assets.map((asset) => [asset.id, asset]));
+
+export function isResourceVisibleForCharacter(resourceId: string, characterId: string, current: number): boolean {
+  const definition = resourceById.get(resourceId);
+  return definition?.alwaysVisible === true || definition?.characterIds?.includes(characterId) === true || Math.abs(current) > 1e-6;
+}

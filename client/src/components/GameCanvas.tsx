@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { assetById, characterById, resourceById, type ResolutionStep, type SyncedPlayer } from '@energy-duel/shared';
+import { assetById, characterById, isResourceVisibleForCharacter, resourceById, type ResolutionStep, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitUrl } from '../game/visualResolver';
 
@@ -10,12 +10,16 @@ interface Props {
   targeting?: boolean;
   targetablePlayerIds?: string[];
   selectedTargetIds?: string[];
+  gridTargeting?: boolean;
+  targetableGridIndices?: number[];
+  selectedGridIndex?: number;
   obscuredPlayerIds?: string[];
   resetViewKey?: number;
   resolutionStep?: ResolutionStep;
   onPlayerSelect?: (player: SyncedPlayer) => void;
   onPlayerInspect?: (player: SyncedPlayer) => void;
   onPlayerHover?: (player: SyncedPlayer | null, point?: ScreenPoint) => void;
+  onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
 interface TokenView { root: Container; portrait: Sprite; ring: Graphics; name: Text; status: Text; assetUrl: string }
@@ -60,6 +64,14 @@ export default function GameCanvas(props: Props) {
     positionViews();
   };
 
+  const syncGridSelection = () => {
+    mapRef.current?.setGridSelection(
+      propsRef.current.gridTargeting ? propsRef.current.targetableGridIndices ?? [] : [],
+      propsRef.current.selectedGridIndex,
+      propsRef.current.gridTargeting ? propsRef.current.onGridSelect : undefined,
+    );
+  };
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -89,7 +101,7 @@ export default function GameCanvas(props: Props) {
       app.stage.eventMode = 'static'; app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
       mapRef.current = map; tokenLayerRef.current = tokenLayer; effectLayerRef.current = effectLayer;
       installRotationGestures(app, map, positionViews);
-      map.resize(host.clientWidth, host.clientHeight); syncViews(); observer.observe(host);
+      map.resize(host.clientWidth, host.clientHeight); syncViews(); syncGridSelection(); observer.observe(host);
       propsRef.current.onLoadProgress?.(100, '战场已就绪');
     });
     return () => {
@@ -101,8 +113,8 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPlayerCount(Math.max(1, props.players.length)); syncViews();
-  }, [props.players, props.targeting, props.selectedTargetIds, props.targetablePlayerIds]);
+    map.setPlayerCount(Math.max(1, props.players.length)); syncViews(); syncGridSelection();
+  }, [props.players, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -116,7 +128,7 @@ export default function GameCanvas(props: Props) {
     return animateResolutionStep(app, layer, props.resolutionStep, props.players, mapRef.current, tokenViewsRef.current);
   }, [props.resolutionStep]);
 
-  return <div className={`game-canvas${props.targeting ? ' is-targeting' : ''}`} ref={hostRef} aria-label="可旋转圆形战棋地图" />;
+  return <div className={`game-canvas${props.targeting || props.gridTargeting ? ' is-targeting' : ''}`} ref={hostRef} aria-label="可旋转圆形战棋地图，地块带有编号" />;
 }
 
 function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {
@@ -152,7 +164,7 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   const ringRadius = portraitHeight * 0.34;
   view.ring.clear().ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32)).fill({ color: player.color, alpha: 0.3 }).stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
   view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
-  const resources = Object.values(player.resources).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
+  const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
   view.status.text = obscured ? '状态未知' : player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
 }
 

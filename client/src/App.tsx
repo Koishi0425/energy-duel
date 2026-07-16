@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import type { PublicRoomSummary, SessionResponse, SyncedGameState, SyncedRoundLogEntry } from '@energy-duel/shared';
 import { Client, type Room } from '@colyseus/sdk';
 import type { RawSyncedPlayer } from './roomState';
-import { authenticate, clearSession, fetchPublicRooms, getServerUrl, loadSession } from './session';
+import { authenticate, clearSession, fetchProfile, fetchPublicRooms, getServerUrl, loadSession } from './session';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
 
 interface PlayerCollection { values(): IterableIterator<RawSyncedPlayer> }
@@ -20,6 +20,7 @@ export interface DemoRoomState {
 
 const GameRoomView = lazy(() => import('./GameRoomView'));
 const Tutorial = lazy(() => import('./components/Tutorial'));
+const ProfilePage = lazy(() => import('./ProfilePage'));
 const USERNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{3,16}$/;
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{1,16}$/;
 const ROOM_CODE_PATTERN = /^[A-Z0-9]{4,10}$/;
@@ -36,12 +37,22 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [publicRooms, setPublicRooms] = useState<PublicRoomSummary[]>([]);
   const [roomListLoading, setRoomListLoading] = useState(false);
   const [roomListError, setRoomListError] = useState('');
   const [roomListUpdatedAt, setRoomListUpdatedAt] = useState<Date>();
 
   useEffect(() => () => { void room?.leave(); }, [room]);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    void fetchProfile(session).then((profile) => { if (!cancelled) setNickname(profile.nickname); }).catch((reason) => {
+      if (!cancelled && /会话无效|过期/.test(errorMessage(reason, ''))) { clearSession(); setSession(null); setError('登录已过期，请重新登录'); }
+    });
+    return () => { cancelled = true; };
+  }, [session]);
 
   const refreshRoomList = useCallback(async (signal?: AbortSignal) => {
     setRoomListLoading(true); setRoomListError('');
@@ -120,10 +131,12 @@ export default function App() {
       {authMode === 'register' && <p className="warning">用户名注册后不可重复使用；密码至少需要 7 个字符。</p>}
     </section></main>{tutorial}</>;
 
+  if (!room && profileOpen) return <Suspense fallback={<main className="shell"><div className="route-loader">正在加载个人资料…</div></main>}><ProfilePage session={session} onBack={() => setProfileOpen(false)} onProfileChange={(profile) => setNickname(profile.nickname)} /></Suspense>;
+
   if (!room) return <>
     <main className="shell lobby-shell"><section className="panel lobby-panel lobby-hub">
       <header className="lobby-header">
-        <div className="identity"><div><span className="status-dot" />账号：{session.username}</div><button className="danger-button compact-button" onClick={() => void logout()}>退出</button></div>
+        <div className="identity"><div><span className="status-dot" />账号：{session.username}</div><div className="identity-actions"><button className="secondary-button compact-button" onClick={() => setProfileOpen(true)}>个人资料</button><button className="danger-button compact-button" onClick={() => void logout()}>退出</button></div></div>
         <div className="lobby-title-row"><div><p className="eyebrow">MATCH LOBBY</p><h1>进入圆形竞技场</h1><p className="muted">输入房间号或从列表选择。默认操作始终是加入房间。</p></div><div className="lobby-support"><AnnouncementLauncher /><button className="text-button" type="button" onClick={() => setTutorialOpen(true)}>规则与教程</button></div></div>
         <label className="nickname-field">本局昵称<input value={nickname} maxLength={16} onChange={(event) => { setNickname(event.target.value); setError(''); }} /></label>
       </header>

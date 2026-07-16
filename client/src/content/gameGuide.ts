@@ -50,10 +50,11 @@ export const ruleSections: GuideSection[] = [
   {
     id: 'combat',
     title: '等级比较与生命状态',
-    summary: '伤害不是直接扣除数值，而是比较攻击等级与目标本回合所选招式的等级。',
+    summary: '伤害不是直接扣除数值，而是比较攻击等级与目标本回合对该攻击者有效的招式等级。',
     points: [
       '等级差小于 0.5 时攻击被抵消；达到 0.5 但小于 1 时生命左移一层；达到 1 时直接死亡。',
       '等级低于 3 的攻击最多令生命左移一层。治疗会令生命右移。',
+      '需要选目标的招式只会对其目标或实际作用范围内的攻击者提供等级，不能用攻击别人的招式抵挡第三人的攻击。',
       '初始角色没有濒死状态；变身角色拥有健康、濒死、死亡三种状态，并在首次进入濒死时获得 1 气。',
       '“脆弱”会令拳或斩在满足条件时直接致死，具体条件以招式与被动说明为准。',
     ],
@@ -84,7 +85,8 @@ export const ruleSections: GuideSection[] = [
     summary: '资源归玩家持有，Buff 默认归产生它的角色持有。',
     points: [
       '气、蓄力等资源可以出现三分之一或二分之一等分数值，界面会以分数形式显示。',
-      '任意资源费用可以组合支付；变量招式会在提交前选择整数强度。',
+      '任意资源费用只接受整数点数组合支付；普通变量招式会选择整数强度，星尘会自动消耗当前全部辉星。',
+      '气和蓄力始终显示；角色专属资源由所属角色常驻显示，其他特殊资源为 0 时自动隐藏。',
       '切换角色不会清除原角色的 Buff，有限持续时间仍会继续倒计时。',
       '只有明确标记为玩家级的 Buff 才会跨角色生效。',
     ],
@@ -103,7 +105,7 @@ export const ruleSections: GuideSection[] = [
 ];
 
 export const glossaryEntries: GlossaryEntry[] = [
-  { id: 'level', term: '等级', definition: '招式用于攻防比较的数值。受到攻击时，以自己本回合实际选择的招式等级参与比较。' },
+  { id: 'level', term: '等级', definition: '招式用于攻防比较的数值。定向招式只有在来袭者属于其目标或实际作用范围时才参与比较。' },
   { id: 'speed', term: '速度', definition: '决定行动在结算时间线中的先后顺序，数值越高越早执行。' },
   { id: 'left-shift', term: '左移', definition: '生命状态向危险方向移动一层，通常由有效伤害造成。' },
   { id: 'right-shift', term: '右移', definition: '生命状态向安全方向移动一层，通常由治疗或角色效果造成。' },
@@ -140,9 +142,10 @@ export const characterGuides: CharacterGuideDefinition[] = [
   {
     characterId: 'regent', role: '长期运营与可变爆发', difficulty: '专家',
     summary: '经营星与锻造等级，在资源优势、防御和君王之剑的可变攻击之间做选择。',
-    gamePlan: ['第一次变身获得的星是整局资源，规划其用途而不是立即花完。', '君王之剑可按资源选择整数强度；征召上前能从零锻造或重新激活被锁定的剑。'],
+    gamePlan: ['第一次变身获得的星是整局资源；使用星尘会一次消耗当前全部辉星，需要先规划储量。', '君王之剑可按资源选择整数强度；征召上前能从零锻造或重新激活被锁定的剑。'],
     keyMechanics: [
       { title: '星资源', description: '首次变身时获得，之后切换回来不会重复领取。' },
+      { title: '星尘全押', description: '提交时自动投入当前全部辉星，再在后发阶段分配等量的 0.5 级攻击。' },
       { title: '锻造状态', description: '等级、激活与锁定状态属于储君，切走后仍会保存。' },
     ],
     featuredActionIds: ['hidden_cache', 'stardust', 'sovereign_blade', 'summon_forth'],
@@ -171,7 +174,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
   {
     characterId: 'nightmare', role: '控制、遮蔽与追击', difficulty: '专家',
     summary: '用梦径、恐惧和黑暗限制对手，再寻找一次决定胜负的锁定冲刺。',
-    gamePlan: ['暗影之刃按释放招式回合缩减冷却，空过回合不会加快它。', '鬼影重重的锁定冲刺在释放时与下一回合内共用一次机会，可以等待但不能攻击两次。'],
+    gamePlan: ['暗影之刃按释放招式回合缩减冷却，空过回合不会加快它。', '无言恐惧的 2 级只用于控制判定、不造成伤害；鬼影重重的黑暗不会致盲梦魇自己。'],
     keyMechanics: [
       { title: '暗影之刃', description: '开局即可使用一次，之后按角色被动说明重新准备。' },
       { title: '鬼影冲刺', description: '目标在行动公开后锁定；击杀与未击杀会落在不同位置。' },
@@ -212,7 +215,7 @@ export function getCharacterActionIds(characterId: string): string[] {
 export function formatGuideActionCost(action: ActionDefinition): string {
   const fixed = Object.entries(action.cost).map(([id, value]) => `${formatNumber(value)} ${resourceById.get(id)?.shortName ?? id}`);
   const variable = action.variable
-    ? [`${formatNumber(action.variable.costPerPower)}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`]
+    ? [action.usesAllVariableResource ? `当前全部 ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}` : `${formatNumber(action.variable.costPerPower)}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`]
     : [];
   const flexible = action.anyResourceCost ? [`${formatNumber(action.anyResourceCost)}−n 任意资源`] : [];
   return [...fixed, ...variable, ...flexible].join(' + ') || '无消耗';

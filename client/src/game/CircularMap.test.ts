@@ -64,6 +64,27 @@ describe('CircularMap', () => {
     expect(point.y).toBeCloseTo(200 + 136 * Math.SQRT1_2);
   });
 
+  it('numbers cells and only emits clicks for highlighted destinations', () => {
+    const map = new CircularMap(2) as any;
+    map.resize(400, 300);
+    const selected: number[] = [];
+    map.setGridSelection([1], undefined, (index: number) => selected.push(index));
+    expect(map.cellLabels.map((label: { text: string }) => label.text)).toEqual(['0', '1', '2', '3']);
+    map.cells[0].emit('pointertap');
+    map.cells[1].emit('pointertap');
+    expect(selected).toEqual([1]);
+  });
+
+  it('places cell numbers outside the board cells so portraits cannot cover them', () => {
+    const map = new CircularMap(4) as any;
+    map.resize(600, 400);
+    for (let index = 0; index < map.gridCount; index += 1) {
+      const cellDistance = Math.hypot(map.cells[index].x, map.cells[index].y);
+      const labelDistance = Math.hypot(map.cellLabels[index].x, map.cellLabels[index].y);
+      expect(labelDistance).toBeGreaterThan(cellDistance + map.cellRadius);
+    }
+  });
+
   it('rejects invalid usage', () => {
     expect(() => new CircularMap(0)).toThrow(RangeError);
     expect(() => new CircularMap(21)).toThrow(RangeError);

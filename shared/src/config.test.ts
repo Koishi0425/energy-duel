@@ -4,7 +4,7 @@ import { gameConfig, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(7);
+    expect(gameConfig.version).toBe(8);
     expect(gameConfig.actions).toHaveLength(43);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock']);
@@ -58,6 +58,12 @@ describe('game configuration', () => {
     const invalid = structuredClone(gameConfig) as any;
     invalid.actions[0].target.selectionTiming = 'late-ish';
     expect(() => validateGameConfig(invalid)).toThrow(/selection timing/);
+  });
+
+  it('marks Stardust as all-in and assigns special-resource visibility', () => {
+    expect(gameConfig.actions.find((action) => action.id === 'stardust')?.usesAllVariableResource).toBe(true);
+    expect(gameConfig.resources.find((resource) => resource.id === 'energy')?.alwaysVisible).toBe(true);
+    expect(gameConfig.resources.find((resource) => resource.id === 'stars')?.characterIds).toEqual(['regent']);
   });
 });
 

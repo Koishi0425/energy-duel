@@ -42,6 +42,20 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(resolveRound(roster(['x', 0], ['y', 0]), actions(['x', { actionId: 'chop' }], ['y', { actionId: 'steal', targetId: 'x' }])).summary[0]).toContain('X：剁');
   });
 
+  it('chop counters both steal variants and always shifts exactly one health state', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    for (const id of ['a', 'b']) { players.get(id)!.currentHp = 2; players.get(id)!.maxHp = 2; }
+    resolveRound(players, actions(
+      ['a', { actionId: 'steal', targetId: 'c' }],
+      ['b', { actionId: 'double_steal', targetIds: ['c', 'c'] }],
+      ['c', { actionId: 'chop' }],
+    ));
+    expect(players.get('a')!.currentHp).toBe(1);
+    expect(players.get('b')!.currentHp).toBe(1);
+    expect(players.get('a')!.alive).toBe(true);
+    expect(players.get('b')!.alive).toBe(true);
+  });
+
   it('defense blocks wave and super defense blocks all attacks', () => {
     const players = roster(['a', 2], ['b', 0], ['c', 1], ['d', 3]);
     resolveRound(players, actions(
@@ -58,6 +72,13 @@ describe('RoundResolver JSON-driven actions', () => {
     resolveRound(players, actions(['a', { actionId: 'hangup' }], ['b', { actionId: 'defend' }]));
     expect(players.get('a')?.resources.energy).toBe(0);
     expect(players.get('b')?.alive).toBe(false);
+  });
+
+  it('emits structured performance metrics without parsing combat text', () => {
+    const attack = resolveRound(roster(['a', 3], ['b', 0]), actions(['a', { actionId: 'hangup' }], ['b', { actionId: 'defend' }]));
+    expect(attack.performance.a).toMatchObject({ damageStatesDealt: 1, eliminations: 1 });
+    const defense = resolveRound(roster(['a', 0], ['b', 0]), actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'super_defend' }]));
+    expect(defense.performance.b.successfulDefenses).toBe(1);
   });
 
   it('validates configuration costs and target modes', () => {
@@ -128,6 +149,17 @@ describe('RoundResolver JSON-driven actions', () => {
     resolveRound(differentPlayers, actions(['a', { actionId: 'slash', targetId: 'b' }], ['b', { actionId: 'wave', targetId: 'a' }]));
     expect(differentPlayers.get('a')?.currentHp).toBe(2);
     expect(differentPlayers.get('b')?.currentHp).toBe(1);
+  });
+
+  it('does not use a targeted action level against an unrelated attacker', () => {
+    const players = roster(['a', 1], ['b', 0], ['c', 0]);
+    players.get('a')!.currentHp = players.get('a')!.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'slash', targetId: 'b' }],
+      ['b', { actionId: 'defend' }],
+      ['c', { actionId: 'fist', targetId: 'a' }],
+    ));
+    expect(players.get('a')!.currentHp).toBe(1);
   });
 
   it('writes explicit health-state names in attack logs', () => {
@@ -231,6 +263,13 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('c')!.currentHp).toBe(2);
   });
 
+  it('requires Stardust to spend every currently held Star', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    players.get('a')!.resources.stars = 3;
+    expect(() => validateAction(players.get('a')!, { actionId: 'stardust', power: 2 }, players)).toThrow(/全部/);
+    expect(() => validateAction(players.get('a')!, { actionId: 'stardust', power: 3 }, players)).not.toThrow();
+  });
+
   it('supports Li Chungang fractional slash costs and deferred sword attacks', () => {
     const players = roster(['a', 1], ['b', 0]);
     players.get('a')!.characterId = 'li_chungang';
@@ -268,12 +307,32 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.resources.energy).toBe(1); expect(actor.resources.charge).toBe(1); expect(actor.buffs?.has('ao_mastery')).toBe(false);
   });
 
-  it('arms one deferred Nightmare dash and applies darkness to every player', () => {
+  it('requires integer mixed resource payment for Aoao Divine Art', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ao'; actor.resources.charge = 2; actor.buffs = new Set(['ao_mastery']); actor.buffStacks = { ao_mastery: 3 };
+    expect(() => validateAction(actor, { actionId: 'aoao_divine', targetId: 'b', resourceSpend: { energy: 1 / 3, charge: 5 / 3 } }, players)).toThrow(/整数/);
+    const divine = { actionId: 'aoao_divine', targetId: 'b', resourceSpend: { energy: 1, charge: 1 } };
+    expect(() => validateAction(actor, divine, players)).not.toThrow();
+    resolveRound(players, actions(['a', divine], ['b', { actionId: 'defend' }]));
+    expect(actor.resources.energy).toBe(1);
+    expect(actor.resources.charge).toBe(1);
+  });
+
+  it('arms one deferred Nightmare dash and blinds only the other players', () => {
     const players = roster(['a', 1], ['b', 0]); const actor = players.get('a')!;
     actor.characterId = 'nightmare'; actor.resources.charge = 3; actor.gridIndex = 0; players.get('b')!.gridIndex = 2;
     resolveRound(players, actions(['a', { actionId: 'haunting_shadows', targetIds: [] }], ['b', { actionId: 'defend' }]));
     expect(actor.buffs?.has('nightmare_dash_ready')).toBe(true);
-    expect(Array.from(players.values()).every((player) => player.buffs?.has('darkness'))).toBe(true);
+    expect(actor.buffs?.has('darkness')).toBe(false);
+    expect(players.get('b')!.buffs?.has('darkness')).toBe(true);
+  });
+
+  it('uses Silent Fear level only for control and deals no damage', () => {
+    const players = roster(['a', 1], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'nightmare'; actor.resources.charge = 1; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'silent_fear', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('fear')).toBe(true);
   });
 
   it('makes sleeping Mudrock untargetable and wakes early with a refund and slash', () => {
