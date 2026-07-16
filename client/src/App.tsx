@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import type { PublicRoomSummary, SessionResponse, SyncedGameState, SyncedRoundLogEntry } from '@energy-duel/shared';
 import { Client, type Room } from '@colyseus/sdk';
 import type { RawSyncedPlayer } from './roomState';
-import { clearSession, createSession, fetchPublicRooms, getServerUrl, loadSession } from './session';
+import { authenticate, clearSession, fetchPublicRooms, getServerUrl, loadSession } from './session';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
 
 interface PlayerCollection { values(): IterableIterator<RawSyncedPlayer> }
@@ -27,6 +27,8 @@ const ROOM_CODE_PATTERN = /^[A-Z0-9]{4,10}$/;
 export default function App() {
   const [session, setSession] = useState<SessionResponse | null>(() => loadSession());
   const [username, setUsername] = useState(() => loadSession()?.username ?? '');
+  const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [nickname, setNickname] = useState(() => loadSession()?.username ?? '');
   const [joinRoomCode, setJoinRoomCode] = useState('');
   const [createRoomCode, setCreateRoomCode] = useState(() => randomRoomCode());
@@ -65,9 +67,10 @@ export default function App() {
   const login = async () => {
     const normalized = username.trim();
     if (!USERNAME_PATTERN.test(normalized)) return setError('用户名需为 3-16 个中文、字母、数字或下划线');
+    if (password.length < 7) return setError('密码至少需要 7 个字符');
     setLoading(true); setError('');
     try {
-      const next = await createSession(normalized);
+      const next = await authenticate(authMode, normalized, password);
       setSession(next); setNickname(next.username);
     } catch (reason) { setError(errorMessage(reason, '无法连接服务器')); }
     finally { setLoading(false); }
@@ -90,12 +93,7 @@ export default function App() {
       };
       let joined: Room<DemoRoomState>;
       try { joined = await connect(session); }
-      catch (reason) {
-        if ((reason as { code?: number }).code !== 401) throw reason;
-        const renewed = await createSession(session.username);
-        setSession(renewed);
-        joined = await connect(renewed);
-      }
+      catch (reason) { if ((reason as { code?: number }).code === 401) { clearSession(); setSession(null); throw new Error('登录已过期，请重新登录'); } throw reason; }
       joined.reconnection.minUptime = 1000;
       setRoom(joined);
       setJoinRoomCode(joined.roomId);
@@ -104,7 +102,7 @@ export default function App() {
   };
 
   const logout = async () => {
-    await room?.leave(); clearSession(); setRoom(null); setSession(null); setUsername(''); setNickname('');
+    await room?.leave(); clearSession(); setRoom(null); setSession(null); setUsername(''); setPassword(''); setNickname('');
   };
 
   const tutorial = tutorialOpen ? <Suspense fallback={null}><Tutorial open onClose={() => setTutorialOpen(false)} /></Suspense> : null;
@@ -112,12 +110,14 @@ export default function App() {
   if (!session) return <>
     <main className="shell auth-shell"><section className="panel auth-panel">
       <p className="eyebrow">JIAOSILA VS GONGGANG</p><h1>娇斯拉大战贡刚</h1>
-      <p className="muted">输入用户名，建立你的无密码玩家身份。</p>
-      <label>用户名<input value={username} maxLength={16} onChange={(event) => setUsername(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void login()} autoFocus /></label>
+      <p className="muted">{authMode === 'login' ? '使用用户名和密码进入游戏。' : '注册一个新的玩家账号。'}</p>
+      <div className="auth-mode-switch"><button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setError(''); }}>登录</button><button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setError(''); }}>注册</button></div>
+      <label>用户名<input value={username} maxLength={16} autoComplete="username" onChange={(event) => setUsername(event.target.value)} autoFocus /></label>
+      <label>密码<input type="password" value={password} maxLength={128} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void login()} /></label>
       {error && <p className="error">{error}</p>}
-      <button className="primary-button" onClick={() => void login()} disabled={loading}>{loading ? '正在进入…' : '进入游戏'}</button>
+      <button className="primary-button" onClick={() => void login()} disabled={loading}>{loading ? '正在处理…' : authMode === 'register' ? '注册并进入' : '登录'}</button>
       <div className="shell-links"><AnnouncementLauncher /><button className="text-button" type="button" onClick={() => setTutorialOpen(true)}>先看看怎么玩</button></div>
-      <p className="warning">无密码模式不提供身份保护：知道用户名的人可以进入同一账号。</p>
+      {authMode === 'register' && <p className="warning">用户名注册后不可重复使用；密码至少需要 7 个字符。</p>}
     </section></main>{tutorial}</>;
 
   if (!room) return <>

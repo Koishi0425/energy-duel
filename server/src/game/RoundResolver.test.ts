@@ -208,11 +208,14 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.buffs?.has('sovereign_blade_active')).toBe(false);
   });
 
-  it('lets Summon Forth create the sovereign blade from zero forge', () => {
+  it('lets Summon Forth create or refresh an already active sovereign blade', () => {
     const players = roster(['a', 1], ['b', 0]);
     const actor = players.get('a')!;
     resolveRound(players, actions(['a', { actionId: 'summon_forth' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.sovereign_blade_forged).toBe(0.5);
+    expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'summon_forth' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.sovereign_blade_forged).toBe(1);
     expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
   });
 
@@ -226,5 +229,60 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')!.resources.stars).toBe(0);
     expect(players.get('b')!.currentHp).toBe(1);
     expect(players.get('c')!.currentHp).toBe(2);
+  });
+
+  it('supports Li Chungang fractional slash costs and deferred sword attacks', () => {
+    const players = roster(['a', 1], ['b', 0]);
+    players.get('a')!.characterId = 'li_chungang';
+    expect(() => validateAction(players.get('a')!, { actionId: 'sword_aura' }, players)).not.toThrow();
+    resolveRound(players, actions(['a', { actionId: 'slash', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.resources.energy).toBeCloseTo(2 / 3);
+  });
+
+  it('moves Quick Attack to an adjacent empty cell and preserves its free Ten Volt', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    players.get('a')!.characterId = 'pikachu'; players.get('a')!.resources.charge = 2;
+    players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4;
+    resolveRound(players, actions(['a', { actionId: 'quick_attack', targetGridIndex: 1 }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
+    expect(players.get('a')!.gridIndex).toBe(1);
+    expect(players.get('a')!.buffs?.has('quick_attack_ready')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'ten_volt' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
+    expect(players.get('a')!.resources.charge).toBe(1);
+    expect(players.get('a')!.buffs?.has('quick_attack_ready')).toBe(false);
+  });
+
+  it('grants Cut globally when Ao transforms and upgrades mastery from resource actions', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'ao' }], ['b', { actionId: 'defend' }]));
+    expect(Array.from(players.values()).every((player) => player.buffs?.has('cut_granted'))).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.buffStacks?.ao_mastery).toBe(1);
+  });
+
+  it('validates mixed-resource payment and resets Ao mastery after the divine art', () => {
+    const players = roster(['a', 3], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ao'; actor.resources.charge = 2; actor.buffs = new Set(['ao_mastery']); actor.buffStacks = { ao_mastery: 2 };
+    const divine = { actionId: 'aoao_divine', targetId: 'b', resourceSpend: { energy: 2, charge: 1 } };
+    expect(() => validateAction(actor, divine, players)).not.toThrow();
+    resolveRound(players, actions(['a', divine], ['b', { actionId: 'defend' }]));
+    expect(actor.resources.energy).toBe(1); expect(actor.resources.charge).toBe(1); expect(actor.buffs?.has('ao_mastery')).toBe(false);
+  });
+
+  it('arms one deferred Nightmare dash and applies darkness to every player', () => {
+    const players = roster(['a', 1], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'nightmare'; actor.resources.charge = 3; actor.gridIndex = 0; players.get('b')!.gridIndex = 2;
+    resolveRound(players, actions(['a', { actionId: 'haunting_shadows', targetIds: [] }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('nightmare_dash_ready')).toBe(true);
+    expect(Array.from(players.values()).every((player) => player.buffs?.has('darkness'))).toBe(true);
+  });
+
+  it('makes sleeping Mudrock untargetable and wakes early with a refund and slash', () => {
+    const players = roster(['a', 3], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'mudrock'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'filthy_bloodline' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('sleeping')).toBe(true);
+    expect(() => validateAction(players.get('b')!, { actionId: 'fist', targetId: 'a' }, players)).toThrow(/可被选中/);
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('sleeping')).toBe(false); expect(actor.buffs?.has('mud_awakened')).toBe(true); expect(actor.resources.energy).toBe(3);
   });
 });

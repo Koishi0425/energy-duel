@@ -23,6 +23,7 @@ import PlayerDetails from './components/PlayerDetails';
 import { PerformancePanel } from './components/PerformancePanel';
 import FloatingWindow from './components/FloatingWindow';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
+import type { GuidePageId } from './content/gameGuide';
 import { readSyncedPlayers } from './roomState';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
@@ -46,6 +47,10 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [parameterAction, setParameterAction] = useState<ActionDefinition>();
   const [variablePower, setVariablePower] = useState(1);
+  const [flexibleAction, setFlexibleAction] = useState<ActionDefinition>();
+  const [resourceSpend, setResourceSpend] = useState<Record<string, number>>({});
+  const [pendingSpend, setPendingSpend] = useState<Record<string, number>>();
+  const [gridAction, setGridAction] = useState<{ action: ActionDefinition; targetIds: string[] }>();
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
@@ -57,7 +62,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialRequest, setTutorialRequest] = useState<{ page: GuidePageId; characterId?: string }>();
   const [panelPosition, setPanelPosition] = useState<{ x: number; y: number } | null>(() => {
     try { return JSON.parse(localStorage.getItem('energy-duel-panel-position') ?? 'null'); } catch { return null; }
   });
@@ -123,7 +128,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => query.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); setDeferredRequest(undefined); setParameterAction(undefined);
+    setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); setDeferredRequest(undefined); setParameterAction(undefined); setFlexibleAction(undefined); setPendingSpend(undefined); setGridAction(undefined);
   }, [gameState.round]);
   useEffect(() => {
     if (panelPosition) localStorage.setItem('energy-duel-panel-position', JSON.stringify(panelPosition));
@@ -135,7 +140,8 @@ function RoomContent({ room, session, onLeave }: Props) {
   const activeActor = controlledActors.find((player) => player.playerId === activeActorId) ?? me;
   const selectedAction = selectedActionId ? actionById.get(selectedActionId) : undefined;
   const targeting = Boolean(deferredRequest || (selectedAction && ['single_enemy', 'multiple_enemies'].includes(selectedAction.target.mode) && !activeActor?.submitted));
-  const validTargets = useMemo(() => players.filter((player) => player.alive && player.playerId !== activeActor?.playerId), [players, activeActor?.playerId]);
+  const validTargets = useMemo(() => players.filter((player) => player.alive && player.playerId !== activeActor?.playerId && !player.buffs.some((buff) => buff.buffId === 'sleeping')), [players, activeActor?.playerId]);
+  const darknessActive = activeActor?.buffs.some((buff) => buff.buffId === 'darkness') === true;
   const battleLogGroups = useMemo(() => groupBattleLog(battleLog), [battleLog]);
   const variableMax = parameterAction?.variable
     ? Math.max(parameterAction.variable.minPower, Math.min(
@@ -152,7 +158,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (next && next.playerId !== activeActorId) { setActiveActorId(next.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }
   }, [activeActorId, controlledActors, gameState.phase, gameState.roomMode]);
 
-  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number) => {
+  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number, targetGridIndex?: number, spend?: Record<string, number>) => {
     const targetNames = targetIds.map((id) => players.find((player) => player.playerId === id)?.nickname ?? id);
     const label = transformCharacterId
       ? `已选择变身：${characterById.get(transformCharacterId)?.name ?? transformCharacterId}`
@@ -163,18 +169,23 @@ function RoomContent({ room, session, onLeave }: Props) {
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
       targetIds: action.target.mode === 'multiple_enemies' ? targetIds : undefined,
-      transformCharacterId, power,
+      transformCharacterId, power, targetGridIndex, resourceSpend: spend,
     });
     void api.info({ content: label, duration: 1.6 });
   };
 
   const chooseAction = (action: ActionDefinition) => {
     setSelectedActionId(action.id); setSelectedTargetIds([]);
+    const deferred = action.target.selectionTiming === 'deferred'
+      || (['steal', 'absorb_charge'].includes(action.id) && activeActor?.characterId === 'ao' && (activeActor.buffs.find((buff) => buff.buffId === 'ao_mastery')?.stacks ?? 0) >= 2);
+    if (deferred) { submit(action); return; }
+    if (action.anyResourceCost) { setResourceSpend({}); setFlexibleAction(action); return; }
     if (action.variable) {
       setVariablePower(action.variable.minPower);
       setParameterAction(action);
       return;
     }
+    if (action.targetsGridCell) { setGridAction({ action, targetIds: [] }); return; }
     if (action.target.mode === 'single_enemy' || action.target.mode === 'multiple_enemies') {
       void api.open({ type: 'info', content: action.target.mode === 'multiple_enemies' ? `请选择 ${action.target.maxTargets} 次目标` : '请在战场上选择目标', duration: 1.5 });
     } else submit(action);
@@ -193,7 +204,8 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (!selectedAction) return;
     const next = [...selectedTargetIds, player.playerId];
     setSelectedTargetIds(next);
-    if (selectedAction.target.mode === 'single_enemy' || next.length >= (selectedAction.target.maxTargets ?? 1)) submit(selectedAction, next);
+    if (selectedAction.id === 'dream_path') { setGridAction({ action: selectedAction, targetIds: next }); return; }
+    if (selectedAction.target.mode === 'single_enemy' || next.length >= (selectedAction.target.maxTargets ?? 1)) { submit(selectedAction, next, undefined, undefined, undefined, pendingSpend); setPendingSpend(undefined); }
     else void api.info({ content: `已选择 ${player.nickname}，还需选择 ${(selectedAction.target.maxTargets ?? 1) - next.length} 次`, duration: 1.2 });
   };
 
@@ -201,6 +213,27 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (!parameterAction) return;
     submit(parameterAction, [], undefined, variablePower);
     setParameterAction(undefined);
+  };
+
+  const flexibleRequired = flexibleAction?.anyResourceCost
+    ? Math.max(1, flexibleAction.anyResourceCost - (activeActor?.buffs.find((buff) => buff.buffId === 'ao_mastery')?.stacks ?? 0)) : 0;
+  const flexibleSelected = Object.values(resourceSpend).reduce((sum, amount) => sum + amount, 0);
+  const confirmFlexibleAction = () => {
+    if (!flexibleAction) return;
+    const spend = Object.fromEntries(Object.entries(resourceSpend).filter(([, amount]) => amount > 0));
+    setFlexibleAction(undefined);
+    if (flexibleAction.target.mode === 'single_enemy') { setPendingSpend(spend); void api.info({ content: '请选择凹凹神功的目标', duration: 1.3 }); }
+    else submit(flexibleAction, [], undefined, undefined, undefined, spend);
+  };
+
+  const adjacentDestinations = activeActor ? [
+    (activeActor.gridIndex - 1 + players.length * 2) % (players.length * 2),
+    (activeActor.gridIndex + 1) % (players.length * 2),
+  ].filter((cell) => !players.some((player) => player.alive && player.playerId !== activeActor.playerId && player.gridIndex === cell)) : [];
+  const chooseGridDestination = (cell: number | undefined) => {
+    if (!gridAction) return;
+    submit(gridAction.action, gridAction.targetIds, undefined, undefined, cell, pendingSpend);
+    setGridAction(undefined); setPendingSpend(undefined);
   };
 
   const chooseTransform = (characterId: string) => {
@@ -223,7 +256,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); event.preventDefault();
   };
-  const roster = <Roster players={players} gameState={gameState} />;
+  const roster = <Roster players={players} gameState={gameState} viewer={activeActor} />;
   const targetHint = deferredRequest
     ? `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
     : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : '点击高亮角色选择目标') : undefined;
@@ -232,7 +265,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     {contextHolder}
     <header className="game-header">
       <div><p className="eyebrow">CIRCULAR GRID</p><h1>{phaseTitle(gameState)}</h1></div>
-      <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialOpen(true)}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
+      <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
     </header>
     {networkState === 'reconnecting' && <div className="reconnecting-banner">连接中断，正在保留席位并自动重连…</div>}
     {submittedLabel && activeActor?.submitted && <div className="selection-toast">{activeActor.nickname}：{submittedLabel}</div>}
@@ -240,7 +273,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
@@ -251,26 +284,34 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="game-control-panel" style={panelPosition ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' } : undefined}>
       <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动技能面板</span>{panelPosition && <Button size="small" type="text" onClick={(event) => { event.stopPropagation(); setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div>
-      <div className="round-result">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
+      <div className="round-result">{darknessActive ? <p>黑暗笼罩战场，无法获知其他地块的状态变化。</p> : gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
       {gameState.roomMode === 'training' && gameState.phase === 'waiting' && <TrainingSetup actors={controlledActors} room={room} />}
       {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
       {gameState.roomMode === 'training' && gameState.phase === 'choosing' && <div className="actor-switcher"><span>当前操控</span>{controlledActors.map((actor) => <Button key={actor.playerId} size="small" type={actor.playerId === activeActor?.playerId ? 'primary' : 'default'} disabled={!actor.alive} onClick={() => { setActiveActorId(actor.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }}>{actor.nickname}{actor.submitted ? ' ✓' : ''}</Button>)}</div>}
       {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }} />}
-      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>星尘后发分配</strong><p>所有行动已经公开。点击战场角色分配 {deferredRequest.allocationCount} 个 0.5 级攻击，可重复点击同一目标。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div></div>}
+      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div>{deferredRequest.allowSkip && <Button onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
       {gameState.phase === 'choosing' && me && !me.alive && <p className="eliminated-notice">你已淘汰，正在观战</p>}
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
     </section>
-    <Drawer title="角色详情" placement="bottom" height="min(72dvh, 520px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} />}</Drawer>
+    <Drawer title="角色详情" placement="bottom" height="min(72dvh, 520px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />}</Drawer>
     {compactLayout ? <Drawer title="战斗日志" placement="right" width="min(440px, 92vw)" open={logOpen} onClose={() => setLogOpen(false)}><BattleLog groups={battleLogGroups} /></Drawer> : logOpen && <FloatingWindow storageId="battle-log" title="战斗日志" initialPosition={{ x: Math.max(20, window.innerWidth - 500), y: 92 }} initialSize={{ width: 440, height: 520 }} onClose={() => setLogOpen(false)} className="battle-log-window"><BattleLog groups={battleLogGroups} /></FloatingWindow>}
     <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div><p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
     <Modal title={parameterAction ? `${parameterAction.name} · 选择 n` : '选择技能参数'} open={Boolean(parameterAction)} okText="确认行动" cancelText="取消" onCancel={() => { setParameterAction(undefined); setSelectedActionId(undefined); }} onOk={confirmVariableAction} okButtonProps={{ disabled: !parameterAction || variableMax < (parameterAction.variable?.minPower ?? 1) }}>
       {parameterAction?.variable && <><p>{parameterAction.description}</p><InputNumber min={parameterAction.variable.minPower} max={variableMax} value={variablePower} precision={0} onChange={(value) => setVariablePower(value ?? parameterAction.variable!.minPower)} /><p className="muted">将消耗 {parameterAction.variable.costPerPower * variablePower} {resourceById.get(parameterAction.variable.resourceId)?.name ?? parameterAction.variable.resourceId}，技能等级为 {parameterAction.variable.levelPerPower * variablePower}。</p></>}
     </Modal>
+    <Modal title={flexibleAction ? `${flexibleAction.name} · 任意资源支付` : '任意资源支付'} open={Boolean(flexibleAction)} okText="确认支付" cancelText="取消" onCancel={() => { setFlexibleAction(undefined); setSelectedActionId(undefined); }} onOk={confirmFlexibleAction} okButtonProps={{ disabled: Math.abs(flexibleSelected - flexibleRequired) > 0.001 }}>
+      <p>请选择合计 {flexibleRequired} 点资源（已选 {flexibleSelected}）。</p>
+      {me && Object.values(me.resources).map((resource) => <div className="resource-payment-row" key={resource.resourceId}><span>{resourceById.get(resource.resourceId)?.name ?? resource.resourceId}（持有 {formatNumber(resource.current)}）</span><InputNumber min={0} max={resource.current} step={1 / 3} value={resourceSpend[resource.resourceId] ?? 0} onChange={(value) => setResourceSpend((current) => ({ ...current, [resource.resourceId]: Number(value ?? 0) }))} /></div>)}
+    </Modal>
+    <Modal title={gridAction ? `${gridAction.action.name} · 选择位移` : '选择位移'} open={Boolean(gridAction)} footer={null} onCancel={() => { setGridAction(undefined); setSelectedActionId(undefined); }}>
+      <p>选择一个相邻空格。魇之梦径的回合末位移可以放弃。</p>
+      <div className="grid-choice-buttons">{adjacentDestinations.map((cell) => <Button type="primary" key={cell} onClick={() => chooseGridDestination(cell)}>移动到 {cell} 号地块</Button>)}{gridAction?.action.id === 'dream_path' && <Button onClick={() => chooseGridDestination(undefined)}>留在原地</Button>}</div>
+    </Modal>
     {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
-    {tutorialOpen && <Suspense fallback={null}><Tutorial open onClose={() => setTutorialOpen(false)} /></Suspense>}
+    {tutorialRequest && <Suspense fallback={null}><Tutorial open initialPage={tutorialRequest.page} initialCharacterId={tutorialRequest.characterId} onClose={() => setTutorialRequest(undefined)} /></Suspense>}
   </main>;
 }
 
@@ -286,10 +327,11 @@ function TrainingSetup({ actors, room }: { actors: SyncedPlayer[]; room: Room<De
   </div>;
 }
 
-function Roster({ players, gameState }: { players: SyncedPlayer[]; gameState: SyncedGameState }) {
+function Roster({ players, gameState, viewer }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer }) {
   return <div className="roster-list">{players.map((player) => {
-    const resources = Object.values(player.resources).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${resource.current}`).join(' · ');
-    return <button className="roster-player" key={player.accountId} type="button"><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{player.nickname}{player.playerId === gameState.hostPlayerId ? ' 👑' : ''}</strong><small>{gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
+    const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
+    const resources = Object.values(player.resources).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
+    return <button className="roster-player" key={player.accountId} type="button"><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
   })}</div>;
 }
 
@@ -319,3 +361,4 @@ function phaseTitle(state: SyncedGameState): string {
 
 function requestId(): string { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
+function formatNumber(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }

@@ -1,7 +1,7 @@
-import { buffById, characterById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
-import { Progress, Tag } from 'antd';
+import { buffById, characterById, passiveById, resourceById, type SyncedPlayer } from '@energy-duel/shared';
+import { Button, Progress, Tag } from 'antd';
 
-export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
+export default function PlayerDetails({ player, onOpenGuide }: { player: SyncedPlayer; onOpenGuide?: (characterId: string) => void }) {
   const character = characterById.get(player.characterId);
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
   return (
@@ -13,6 +13,8 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
       </div>
       <p className="form-line">{character?.name ?? player.characterId} · {form?.name ?? player.currentFormId}</p>
       {character?.description && <p className="muted">{character.description}</p>}
+      {onOpenGuide && <Button size="small" onClick={() => onOpenGuide(player.characterId)}>查看{character?.name ?? '角色'}教程</Button>}
+      {Boolean(character?.passiveIds?.length) && <div className="buff-list"><strong>被动技能</strong>{character?.passiveIds?.map((id) => { const passive = passiveById.get(id); return <div className="buff-detail" key={id}><Tag color="purple">{passive?.name ?? id}</Tag><small>{passive?.description}</small></div>; })}</div>}
       <div className="detail-section">
         <span>生命 {player.currentHp}/{player.maxHp}</span>
         <Progress percent={player.maxHp > 0 ? Math.round(player.currentHp / player.maxHp * 100) : 0} showInfo={false} status={player.alive ? 'active' : 'exception'} />
@@ -20,7 +22,7 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
       <div className="resource-list">
         {Object.values(player.resources).map((resource) => {
           const definition = resourceById.get(resource.resourceId);
-          return <Tag key={resource.resourceId} color={definition?.color}>{definition?.name ?? resource.resourceId}：{resource.current}{resource.max > 0 ? `/${resource.max}` : ''}</Tag>;
+          return <Tag key={resource.resourceId} color={definition?.color}>{definition?.name ?? resource.resourceId}：{formatResource(resource.current)}{resource.max > 0 ? `/${formatResource(resource.max)}` : ''}</Tag>;
         })}
       </div>
       <div className="buff-list">
@@ -36,3 +38,5 @@ export default function PlayerDetails({ player }: { player: SyncedPlayer }) {
     </div>
   );
 }
+
+function formatResource(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }

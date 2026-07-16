@@ -18,6 +18,35 @@ export interface Announcement {
 /** Newest announcements must stay first. IDs are persistent unread cursors. */
 export const announcements: readonly Announcement[] = [
   {
+    id: '2026-07-15-five-characters-and-movement',
+    title: '五名新角色加入，圆形战场开始移动',
+    summary: '皮卡丘、李淳罡、凹、梦魇与泥岩现已可玩，并带来位移、路径、被动、冷却、屏障、沉睡与黑暗。',
+    publishedAt: '2026-07-15',
+    version: 'v0.2.0',
+    pinned: true,
+    tags: ['新角色', '规则更新'],
+    sections: [
+      {
+        heading: '五种全新战斗方式',
+        items: [
+          '皮卡丘以迅雷改变站位，再用十伯伏特或十万伏特向圆盘两侧传导。',
+          '李淳罡以更低消耗使用斩，并在行动公开后释放剑气或一剑开天门。',
+          '凹通过资源行动积累熟练，解锁后发吸取与可自由混付资源的凹凹神功。',
+          '梦魇铺设梦径、制造黑暗，并在两回合窗口中选择一次鬼影冲刺。',
+          '泥岩锤炼拳势、生成屏障，并通过沉睡换取斩与临时攻击加成。',
+        ],
+      },
+      {
+        heading: '底层规则同步升级',
+        items: [
+          '速度现在参与服务端权威结算，较快位移会改变随后范围和传导技能的目标。',
+          '角色被动、状态授予技能、分数资源、任意资源混付和单目标后发选择都进入共享配置与校验。',
+          '黑暗期间客户端会遮蔽其他地块的角色状态和战斗结果。',
+        ],
+      },
+    ],
+  },
+  {
     id: '2026-07-15-room-list-and-regent',
     title: '公开房间列表上线，新角色「储君」加入战场',
     summary: '现在可以直接浏览公开房间；群星王座的继承人也带着辉星与君王之剑登场。',

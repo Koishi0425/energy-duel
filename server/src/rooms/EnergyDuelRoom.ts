@@ -29,8 +29,8 @@ interface StoredBuff {
 
 export class ResourceState extends Schema {
   @type('string') resourceId = '';
-  @type('uint16') current = 0;
-  @type('uint16') max = 0;
+  @type('float32') current = 0;
+  @type('float32') max = 0;
 }
 
 export class BuffState extends Schema {
@@ -241,6 +241,9 @@ export class EnergyDuelRoom extends Room {
       targetIds: Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : undefined,
       transformCharacterId: typeof payload.transformCharacterId === 'string' ? payload.transformCharacterId : undefined,
       power: typeof payload.power === 'number' ? payload.power : undefined,
+      targetGridIndex: typeof payload.targetGridIndex === 'number' ? payload.targetGridIndex : undefined,
+      resourceSpend: payload.resourceSpend && typeof payload.resourceSpend === 'object'
+        && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : undefined,
     };
     if (action.actionId === 'transform') {
       const transformations = characterById.get(player.characterId)?.transformations ?? [];
@@ -262,10 +265,8 @@ export class EnergyDuelRoom extends Room {
   }
 
   private beginDeferredOrResolve(): void {
-    const pending = Array.from(this.actions.asReadonlyMap().entries()).filter(([, action]) => {
-      const definition = actionById.get(action.actionId);
-      return definition?.target.selectionTiming === 'deferred' && !(action.targetIds?.length);
-    });
+    const pending = Array.from(this.actions.asReadonlyMap().entries()).filter(([playerId, action]) => this.isDeferredAction(playerId, action)
+      && action.targetIds === undefined && action.targetId === undefined);
     if (pending.length === 0) return this.resolveCurrentRound();
     this.state.phase = 'deferred';
     this.state.lastResult = '行动已经公开，等待后发技能选择目标。';
@@ -285,12 +286,13 @@ export class EnergyDuelRoom extends Room {
     if (!actorId) return;
     const action = this.actions.get(actorId);
     const definition = action && actionById.get(action.actionId);
-    if (!action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) return;
+    if (!action || !definition || !this.isDeferredAction(client.sessionId, action) || action.targetIds !== undefined || action.targetId !== undefined) return;
     client.send('deferred_action_required', {
       actorPlayerId: actorId,
       actionId: action.actionId,
       power: action.power ?? 1,
-      allocationCount: action.power ?? 1,
+      allocationCount: definition.target.maxTargetsByPower ? action.power ?? 1 : definition.target.maxTargets ?? 1,
+      allowSkip: definition.canSkipDeferred === true,
       revealedActions: Array.from(this.actions.asReadonlyMap(), ([playerId, submitted]) => ({
         playerId, actionId: submitted.actionId, power: submitted.power,
       })),
@@ -303,23 +305,28 @@ export class EnergyDuelRoom extends Room {
     const player = this.authorizedActor(client, payload?.actorPlayerId);
     const action = player && this.actions.get(player.playerId);
     const definition = action && actionById.get(action.actionId);
-    if (!player?.alive || !action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) {
+    if (!player?.alive || !action || !definition || !this.isDeferredAction(client.sessionId, action) || action.targetIds !== undefined || action.targetId !== undefined) {
       return this.sendError(client, '没有可提交的后发目标', requestId, 'submit_deferred_targets');
     }
     const targetIds = Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : [];
-    const expected = definition.target.maxTargetsByPower ? action.power ?? 0 : definition.target.maxTargets ?? 0;
-    if (targetIds.length !== expected) return this.sendError(client, `请选择 ${expected} 次目标`, requestId, 'submit_deferred_targets');
+    const expected = definition.target.maxTargetsByPower ? action.power ?? 0 : definition.target.maxTargets ?? 1;
+    if (targetIds.length !== expected && !(definition.canSkipDeferred && targetIds.length === 0)) return this.sendError(client, `请选择 ${expected} 次目标`, requestId, 'submit_deferred_targets');
     for (const targetId of targetIds) {
       const target = this.state.players.get(targetId);
       if (!target?.alive || target.playerId === player.playerId) return this.sendError(client, '请选择其他存活玩家作为目标', requestId, 'submit_deferred_targets');
     }
     this.actions.setTargets(player.playerId, targetIds);
     this.sendSuccess(client, requestId, 'submit_deferred_targets', '后发目标已提交');
-    const waiting = Array.from(this.actions.asReadonlyMap().values()).some((submitted) => {
-      const candidate = actionById.get(submitted.actionId);
-      return candidate?.target.selectionTiming === 'deferred' && !(submitted.targetIds?.length);
-    });
+    const waiting = Array.from(this.actions.asReadonlyMap().entries()).some(([playerId, submitted]) => this.isDeferredAction(playerId, submitted)
+      && submitted.targetIds === undefined && submitted.targetId === undefined);
     if (!waiting) this.resolveCurrentRound(); else this.sendDeferredPrompt(client);
+  }
+
+  private isDeferredAction(playerId: string, action: SubmittedAction): boolean {
+    if (actionById.get(action.actionId)?.target.selectionTiming === 'deferred') return true;
+    if (!['steal', 'absorb_charge'].includes(action.actionId)) return false;
+    const player = this.state.players.get(playerId);
+    return player?.characterId === 'ao' && Array.from(player.buffs.values()).some((buff) => buff.buffId === 'ao_mastery' && buff.stacks >= 2);
   }
 
   private cancelAction(client: Client, requestId?: string, actorPlayerId?: string): void {
@@ -347,18 +354,20 @@ export class EnergyDuelRoom extends Room {
       const synced = this.state.players.get(playerId);
       if (!synced) continue;
       const previousCharacterId = synced.characterId;
-      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs, combatPlayer.buffStacks);
+      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs, combatPlayer.buffStacks, combatPlayer.buffRemainingTurns);
       this.tickStoredBuffs(playerId);
       synced.currentHp = combatPlayer.currentHp;
       synced.maxHp = combatPlayer.maxHp;
       synced.alive = combatPlayer.alive;
       synced.characterId = combatPlayer.characterId ?? synced.characterId;
       synced.currentFormId = combatPlayer.currentFormId ?? synced.currentFormId;
+      synced.gridIndex = combatPlayer.gridIndex ?? synced.gridIndex;
       synced.submitted = false;
       for (const [resourceId, current] of Object.entries(combatPlayer.resources)) {
         const resource = synced.resources.get(resourceId);
         if (resource) resource.current = Math.max(0, current);
       }
+      if (previousCharacterId !== synced.characterId) this.ensureCharacterEntryState(playerId, synced.characterId);
       this.syncActiveBuffs(playerId, synced.characterId, synced.buffs);
     }
     if (Array.from(combatPlayers.values()).filter((player) => player.alive).length > 1) this.applyNextRoundStartEffects(result);
@@ -513,10 +522,12 @@ export class EnergyDuelRoom extends Room {
       resources: Object.fromEntries(Array.from(player.resources.entries(), ([id, resource]) => [id, resource.current])),
       buffs: new Set(Array.from(player.buffs.values(), (buff) => buff.buffId)),
       buffStacks: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.stacks])),
+      buffRemainingTurns: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.remainingTurns])),
+      gridIndex: player.gridIndex,
     };
   }
 
-  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>, activeBuffStacks: Readonly<Record<string, number>> = {}): void {
+  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>, activeBuffStacks: Readonly<Record<string, number>> = {}, activeRemainingTurns: Readonly<Record<string, number>> = {}): void {
     const scopes = this.storedBuffs.get(playerId) ?? new Map<string, Map<string, StoredBuff>>();
     this.storedBuffs.set(playerId, scopes);
     const priorById = new Map(Array.from(syncedBuffs.values(), (buff) => [buff.buffId, buff]));
@@ -534,6 +545,7 @@ export class EnergyDuelRoom extends Room {
         sourcePlayerId: synced?.sourcePlayerId || playerId,
       };
       stored.stacks = activeBuffStacks[buffId] ?? stored.stacks;
+      if (activeRemainingTurns[buffId] !== undefined) stored.remainingTurns = activeRemainingTurns[buffId];
       (scopeId === PLAYER_BUFF_SCOPE ? nextPlayer : nextCharacter).set(buffId, stored);
     }
     scopes.set(characterId, nextCharacter);
@@ -542,6 +554,15 @@ export class EnergyDuelRoom extends Room {
 
   private tickStoredBuffs(playerId: string): void {
     tickScopedBuffs(this.storedBuffs.get(playerId)?.values() ?? [], (buffId) => buffById.get(buffId)?.durationTurns);
+  }
+
+  private ensureCharacterEntryState(playerId: string, characterId: string): void {
+    if (characterId !== 'mudrock') return;
+    const scopes = this.storedBuffs.get(playerId); if (!scopes) return;
+    const characterBuffs = scopes.get(characterId) ?? new Map<string, StoredBuff>();
+    scopes.set(characterId, characterBuffs);
+    if (characterBuffs.has('mud_round_counter') || characterBuffs.has('mud_barrier')) return;
+    characterBuffs.set('mud_round_counter', { buffId: 'mud_round_counter', stacks: 1, remainingTurns: 0, sourcePlayerId: playerId });
   }
 
   private syncActiveBuffs(playerId: string, characterId: string, target: MapSchema<BuffState>): void {

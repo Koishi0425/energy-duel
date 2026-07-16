@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from 'react';
 import {
   actionById,
+  buffById,
   characterById,
   resourceById,
   type ActionCategory,
@@ -41,7 +42,8 @@ export default function ActionPanel({ player, selectedActionId, submittedLabel, 
 
   const character = characterById.get(player.characterId);
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
-  const unlockedIds = [...(form?.unlockedActions.filter((id) => id !== 'transform') ?? [])];
+  const grantedIds = player.buffs.flatMap((buff) => buffById.get(buff.buffId)?.grantedActionIds ?? []);
+  const unlockedIds = [...new Set([...(form?.unlockedActions.filter((id) => id !== 'transform') ?? []), ...grantedIds])];
   const unlockedActions = unlockedIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => Boolean(action));
   const lockedActionIds = new Set(unlockedActions.filter((action) => !meetsUnlockRequirements(player, action)).map((action) => action.id));
   const normalizedLayout = reconcileLayout(layout, unlockedActions);
@@ -117,7 +119,7 @@ function ActionGrid({ categoryId, categories, actions, player, selectedActionId,
   const acceptDrop = (event: DragEvent, beforeActionId?: string) => { event.preventDefault(); const actionId = event.dataTransfer.getData('text/action-id'); if (actionId) onDropAction(actionId, categoryId, beforeActionId); };
   if (actions.length === 0) return <div className={`empty-action-grid${editing ? ' editing-drop-zone' : ''}`} onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => editing && acceptDrop(event)}><p className="muted compact-copy">{editing ? '拖动技能到这里' : '此分类暂无技能'}</p></div>;
   return <div className="action-grid" onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => editing && acceptDrop(event)}>{actions.map((action, actionIndex) => { const locked = lockedActionIds.has(action.id); return <div className={`action-tile${editing ? ' is-draggable' : ''}${locked ? ' is-locked' : ''}`} key={action.id} draggable={editing} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/action-id', action.id); }} onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => { if (!editing) return; event.stopPropagation(); acceptDrop(event, action.id); }}>
-    <Tooltip title={editing ? '拖动以排序或移动分类' : locked ? action.unlockRequirements?.description ?? '尚未满足解锁条件' : `${action.description} · 速度 ${action.speedPriority} · 等级 ${action.level >= 999 ? '∞' : action.level}`} mouseEnterDelay={0.65} mouseLeaveDelay={0.08}><Button className={`action-button${selectedActionId === action.id ? ' selected' : ''}`} type={selectedActionId === action.id ? 'primary' : 'default'} disabled={!editing && (locked || !canAfford(player, action))} onClick={() => { if (!editing && !locked) onSelect(action); }}><strong>{locked ? '🔒 ' : ''}{action.name}</strong><small>{locked ? action.unlockRequirements?.description ?? '尚未解锁' : `${formatCost(action)} · ${formatTarget(action)}`}</small></Button></Tooltip>
+    <Tooltip title={editing ? '拖动以排序或移动分类' : locked ? action.unlockRequirements?.description ?? '尚未满足解锁条件' : `${action.description} · 速度 ${action.speedPriority} · 等级 ${action.level >= 999 ? '∞' : action.level}`} mouseEnterDelay={0.65} mouseLeaveDelay={0.08}><Button className={`action-button${selectedActionId === action.id ? ' selected' : ''}`} type={selectedActionId === action.id ? 'primary' : 'default'} disabled={!editing && (locked || !canAfford(player, action))} onClick={() => { if (!editing && !locked) onSelect(action); }}><strong>{locked ? '🔒 ' : ''}{action.name}</strong><small>{locked ? action.unlockRequirements?.description ?? '尚未解锁' : `${formatCost(action, player)} · ${formatTarget(action)}`}</small></Button></Tooltip>
     {editing && <Button className="remove-action-tile" type="primary" danger size="small" shape="circle" title="从面板隐藏" onClick={() => onHideAction(action.id)}>×</Button>}
     {editing && <div className="mobile-action-edit-controls"><Button size="small" disabled={actionIndex === 0} onClick={() => onDropAction(action.id, categoryId, actions[actionIndex - 1]?.id)}>↑</Button><Button size="small" disabled={actionIndex === actions.length - 1} onClick={() => onDropAction(action.id, categoryId, actions[actionIndex + 2]?.id)}>↓</Button><select aria-label={`移动${action.name}到分类`} value={categoryId} onChange={(event) => onDropAction(action.id, event.target.value)}>{categories.map((category) => <option value={category.id} key={category.id}>{category.label || '未命名'}</option>)}</select></div>}
   </div>; })}</div>;
@@ -139,7 +141,14 @@ function reconcileLayout(layout: ActionLayout, actions: ActionDefinition[]): Act
 }
 function actionsForCategory(categoryId: string, actions: ActionDefinition[], layout: ActionLayout): ActionDefinition[] { const byId = new Map(actions.map((action) => [action.id, action])); return (layout.actionOrder[categoryId] ?? []).filter((id) => !layout.hiddenActionIds.includes(id)).map((id) => byId.get(id)).filter((action): action is ActionDefinition => Boolean(action)); }
 function canAfford(player: SyncedPlayer, action: ActionDefinition): boolean {
-  if (!Object.entries(action.cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) >= amount)) return false;
+  const cost = action.id === 'slash' && player.characterId === 'li_chungang' ? { ...action.cost, energy: 1 / 3 }
+    : action.id === 'ten_volt' && player.buffs.some((buff) => buff.buffId === 'quick_attack_ready') ? { ...action.cost, charge: 0 } : action.cost;
+  if (!Object.entries(cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) + 1e-6 >= amount)) return false;
+  if (action.anyResourceCost) {
+    const mastery = player.buffs.find((buff) => buff.buffId === 'ao_mastery')?.stacks ?? 0;
+    const required = Math.max(1, action.anyResourceCost - mastery);
+    if (Object.values(player.resources).reduce((sum, resource) => sum + resource.current, 0) + 1e-6 < required) return false;
+  }
   return !action.variable || (player.resources[action.variable.resourceId]?.current ?? 0) >= action.variable.costPerPower * action.variable.minPower;
 }
 function canAffordCost(player: SyncedPlayer, cost: Record<string, number>): boolean { return Object.entries(cost).every(([id, amount]) => (player.resources[id]?.current ?? 0) >= amount); }
@@ -150,10 +159,14 @@ function meetsUnlockRequirements(player: SyncedPlayer, action: ActionDefinition)
     && (requirements?.noneBuffs ?? []).every((buffId) => !buffs.has(buffId))
     && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (buffs.get(buffId) ?? 0) >= stacks);
 }
-function formatCost(action: ActionDefinition): string {
-  const entries = Object.entries(action.cost).map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`);
+function formatCost(action: ActionDefinition, player: SyncedPlayer): string {
+  const cost = action.id === 'slash' && player.characterId === 'li_chungang' ? { ...action.cost, energy: 1 / 3 }
+    : action.id === 'ten_volt' && player.buffs.some((buff) => buff.buffId === 'quick_attack_ready') ? { ...action.cost, charge: 0 } : action.cost;
+  const entries = Object.entries(cost).filter(([, amount]) => amount > 0).map(([id, amount]) => `${formatAmount(amount)} ${resourceById.get(id)?.shortName ?? id}`);
   if (action.variable) entries.push(`${action.variable.costPerPower}n ${resourceById.get(action.variable.resourceId)?.shortName ?? action.variable.resourceId}`);
+  if (action.anyResourceCost) entries.push(`${action.anyResourceCost}-n 任意资源`);
   return entries.length === 0 ? '无消耗' : entries.join('、');
 }
+function formatAmount(value: number): string { return Math.abs(value - 1 / 3) < 0.001 ? '1/3' : String(value); }
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
 function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.maxTargetsByPower) return '后发分配 n 次'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }
