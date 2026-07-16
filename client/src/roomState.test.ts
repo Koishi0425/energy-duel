@@ -17,5 +17,7 @@ describe('readSyncedPlayers', () => {
     const result = readSyncedPlayers([player]);
     expect(result[0].resources.energy.current).toBe(2);
     expect(result[0].buffs[0].buffId).toBe('frozen');
+    expect(result[0].controllerPlayerId).toBe('player-1');
+    expect(result[0].isTrainingDummy).toBe(false);
   });
 });

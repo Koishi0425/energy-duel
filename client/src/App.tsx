@@ -14,6 +14,7 @@ export interface DemoRoomState {
   gameNumber?: number;
   hostPlayerId?: string;
   lastResult?: string;
+  roomMode?: SyncedGameState['roomMode'];
   roundLog?: RoundLogCollection;
 }
 
@@ -72,10 +73,10 @@ export default function App() {
     finally { setLoading(false); }
   };
 
-  const enterRoom = async (mode: 'create' | 'join', requestedCode?: string) => {
+  const enterRoom = async (mode: 'create' | 'join' | 'training', requestedCode?: string) => {
     if (!session) return;
     const displayName = nickname.trim();
-    const code = (requestedCode ?? (mode === 'join' ? joinRoomCode : createRoomCode)).trim().toUpperCase();
+    const code = (requestedCode ?? (mode === 'join' ? joinRoomCode : mode === 'training' ? `DOJO${randomRoomCode().slice(0, 5)}` : createRoomCode)).trim().toUpperCase();
     if (!NICKNAME_PATTERN.test(displayName)) return setError('昵称需为 1-16 个中文、字母、数字或下划线');
     if (!ROOM_CODE_PATTERN.test(code)) return setError('房间号需为 4-10 位字母或数字');
     setLoading(true); setError('');
@@ -83,8 +84,8 @@ export default function App() {
       const connect = async (identity: SessionResponse) => {
         const client = new Client(getServerUrl());
         client.auth.token = identity.token;
-        return mode === 'create'
-          ? client.create<DemoRoomState>('energy_duel_demo', { nickname: displayName, roomCode: code })
+        return mode !== 'join'
+          ? client.create<DemoRoomState>('energy_duel_demo', { nickname: displayName, roomCode: code, roomMode: mode === 'training' ? 'training' : 'standard' })
           : client.joinById<DemoRoomState>(code, { nickname: displayName });
       };
       let joined: Room<DemoRoomState>;
@@ -98,7 +99,7 @@ export default function App() {
       joined.reconnection.minUptime = 1000;
       setRoom(joined);
       setJoinRoomCode(joined.roomId);
-    } catch (reason) { setError(errorMessage(reason, mode === 'create' ? '创建房间失败，房间号可能已被使用' : '加入房间失败')); }
+    } catch (reason) { setError(errorMessage(reason, mode === 'join' ? '加入房间失败' : '创建房间失败，房间号可能已被使用')); }
     finally { setLoading(false); }
   };
 
@@ -154,11 +155,17 @@ export default function App() {
           <button className="secondary-button" type="submit" disabled={loading || !createRoomCode}>{loading ? '正在创建…' : '确认创建新房间'}</button>
         </form>
       </details>
+      <section className="training-room-card">
+        <div><p className="eyebrow">TRAINING ROOM</p><h2>练功房</h2><p className="muted">创建不公开的私人房间，自定义练习角色，并由你操控所有角色完成回合。</p></div>
+        <button className="secondary-button" type="button" disabled={loading} onClick={() => void enterRoom('training')}>{loading ? '正在创建…' : '进入练功房'}</button>
+      </section>
     </section></main>{tutorial}</>;
 
-  return <Suspense fallback={<main className="shell"><div className="route-loader">正在加载战场资源…</div></main>}>
-    <GameRoomView room={room} session={session} onLeave={() => { setRoom(null); setJoinRoomCode(''); setCreateRoomCode(randomRoomCode()); }} />
-  </Suspense>;
+  return <Suspense fallback={<BattlefieldLoader />}><GameRoomView room={room} session={session} onLeave={() => { setRoom(null); setJoinRoomCode(''); setCreateRoomCode(randomRoomCode()); }} /></Suspense>;
+}
+
+function BattlefieldLoader() {
+  return <main className="shell battlefield-loader"><div className="loader-card"><p className="eyebrow">PREPARING ARENA</p><h2>正在加载战场</h2><div className="loading-track"><span /></div><p className="muted">正在加载战斗界面与绘图引擎…</p></div></main>;
 }
 
 function randomRoomCode(): string {

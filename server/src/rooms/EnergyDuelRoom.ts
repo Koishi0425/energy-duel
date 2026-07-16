@@ -4,6 +4,7 @@ import {
   characterById,
   gameConfig,
   type SessionIdentity,
+  type ConfigureTrainingActorMessage,
   type SubmitDeferredTargetsMessage,
   type SubmitActionMessage,
 } from '@energy-duel/shared';
@@ -58,6 +59,8 @@ export class PlayerState extends Schema {
   @type('boolean') submitted = false;
   @type('boolean') connected = true;
   @type('boolean') resultConfirmed = false;
+  @type('string') controllerPlayerId = '';
+  @type('boolean') isTrainingDummy = false;
 }
 
 export class RoundLogEntryState extends Schema {
@@ -74,6 +77,7 @@ export class DemoRoomState extends Schema {
   @type('uint16') gameNumber = 0;
   @type('string') hostPlayerId = '';
   @type('string') lastResult = '等待玩家准备。';
+  @type('string') roomMode: 'standard' | 'training' = 'standard';
   @type([RoundLogEntryState]) roundLog = new ArraySchema<RoundLogEntryState>();
 }
 
@@ -84,6 +88,7 @@ export class EnergyDuelRoom extends Room {
   private destroying = false;
   private claimedRoomCode = '';
   private readonly storedBuffs = new Map<string, Map<string, Map<string, StoredBuff>>>();
+  private nextDummyId = 1;
 
   static async onAuth(token: string | undefined): Promise<SessionIdentity> {
     const identity = sessionService.validateToken(token);
@@ -91,7 +96,7 @@ export class EnergyDuelRoom extends Room {
     return identity;
   }
 
-  async onCreate(options: { roomCode?: unknown }): Promise<void> {
+  async onCreate(options: { roomCode?: unknown; roomMode?: unknown }): Promise<void> {
     let roomCode: string;
     try { roomCode = normalizeRoomCode(options.roomCode); }
     catch (reason) { throw new ServerError(400, reason instanceof Error ? reason.message : '房间号无效'); }
@@ -99,7 +104,9 @@ export class EnergyDuelRoom extends Room {
     catch (reason) { throw new ServerError(409, reason instanceof Error ? reason.message : '房间号已被使用'); }
     this.claimedRoomCode = roomCode;
     this.roomId = roomCode;
-    await this.setMetadata({ roomCode, hostNickname: '' });
+    this.state.roomMode = options.roomMode === 'training' ? 'training' : 'standard';
+    if (this.state.roomMode === 'training') await this.setPrivate(true);
+    await this.setMetadata({ roomCode, hostNickname: '', roomMode: this.state.roomMode });
 
     this.onMessage('set_ready', (client, payload: { ready?: unknown; requestId?: string }) => {
       const player = this.state.players.get(client.sessionId);
@@ -110,9 +117,12 @@ export class EnergyDuelRoom extends Room {
     this.onMessage('start_game', (client, payload: { requestId?: string }) => this.startGame(client, payload?.requestId));
     this.onMessage('submit_action', (client, payload: SubmitActionMessage) => this.submitAction(client, payload));
     this.onMessage('submit_deferred_targets', (client, payload: SubmitDeferredTargetsMessage) => this.submitDeferredTargets(client, payload));
-    this.onMessage('cancel_action', (client, payload: { requestId?: string }) => this.cancelAction(client, payload?.requestId));
+    this.onMessage('cancel_action', (client, payload: { actorPlayerId?: string; requestId?: string }) => this.cancelAction(client, payload?.requestId, payload?.actorPlayerId));
     this.onMessage('acknowledge_result', (client, payload: { requestId?: string }) => this.acknowledgeResult(client, payload?.requestId));
     this.onMessage('ping', (client, payload: { sentAt?: number }) => client.send('pong', { sentAt: payload?.sentAt, serverAt: Date.now() }));
+    this.onMessage('add_training_dummy', (client, payload: { requestId?: string }) => this.addTrainingDummy(client, payload?.requestId));
+    this.onMessage('remove_training_dummy', (client, payload: { actorPlayerId?: string; requestId?: string }) => this.removeTrainingDummy(client, payload));
+    this.onMessage('configure_training_actor', (client, payload: ConfigureTrainingActorMessage) => this.configureTrainingActor(client, payload));
   }
 
   onDispose(): void {
@@ -121,6 +131,7 @@ export class EnergyDuelRoom extends Room {
 
   onJoin(client: Client, options: { nickname?: unknown }, identity: SessionIdentity): void {
     if (this.state.phase !== 'waiting') throw new ServerError(409, '游戏已经开始');
+    if (this.state.roomMode === 'training' && this.state.hostPlayerId) throw new ServerError(403, '练功房仅供创建者使用');
     try {
       assertAccountAvailable(this.state.players.values(), identity.accountId);
     } catch (reason) {
@@ -134,6 +145,7 @@ export class EnergyDuelRoom extends Room {
     player.accountId = identity.accountId;
     player.username = identity.username;
     player.nickname = nickname;
+    player.controllerPlayerId = client.sessionId;
     player.color = colorForAccount(identity.accountId, new Set(Array.from(this.state.players.values(), (value) => value.color)));
     for (const definition of gameConfig.resources) {
       const resource = new ResourceState();
@@ -145,6 +157,7 @@ export class EnergyDuelRoom extends Room {
     if (!this.state.hostPlayerId) {
       this.state.hostPlayerId = client.sessionId;
       void this.setMetadata({ hostNickname: nickname });
+      if (this.state.roomMode === 'training') this.createTrainingDummy(client.sessionId);
     }
     assignGridIndices(this.state.players.values());
   }
@@ -192,7 +205,7 @@ export class EnergyDuelRoom extends Room {
     if (client.sessionId !== this.state.hostPlayerId) return this.sendError(client, '只有房主可以开始游戏', requestId, 'start_game');
     if (this.state.phase !== 'waiting') return this.sendError(client, '游戏已经开始', requestId, 'start_game');
     if (this.state.players.size < 2) return this.sendError(client, '至少需要两名玩家', requestId, 'start_game');
-    if (Array.from(this.state.players.values()).some((player) => !player.ready || !player.connected)) {
+    if (this.state.roomMode === 'standard' && Array.from(this.state.players.values()).some((player) => !player.ready || !player.connected)) {
       return this.sendError(client, '所有玩家准备后才能开始', requestId, 'start_game');
     }
     this.actions.clear();
@@ -208,7 +221,7 @@ export class EnergyDuelRoom extends Room {
       player.resultConfirmed = false;
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
-      for (const resource of player.resources.values()) resource.current = 0;
+      if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
     }
     this.sendSuccess(client, requestId, 'start_game', '游戏开始');
   }
@@ -216,7 +229,7 @@ export class EnergyDuelRoom extends Room {
   private submitAction(client: Client, payload: SubmitActionMessage): void {
     const requestId = payload?.requestId;
     if (this.state.phase !== 'choosing') return this.sendError(client, '当前不能出招', requestId, 'submit_action');
-    const player = this.state.players.get(client.sessionId);
+    const player = this.authorizedActor(client, payload?.actorPlayerId);
     if (!player?.alive) return this.sendError(client, '已淘汰玩家不能出招', requestId, 'submit_action');
     if (player.submitted) return this.sendError(client, '请先撤销已经提交的行动', requestId, 'submit_action');
     if (typeof payload?.actionId !== 'string' || !this.isActionUnlocked(player, payload.actionId)) {
@@ -241,7 +254,7 @@ export class EnergyDuelRoom extends Room {
     }
     try { validateAction(this.toCombatPlayer(player), action, this.combatPlayers()); }
     catch (reason) { return this.sendError(client, reason instanceof Error ? reason.message : '行动无效', requestId, 'submit_action'); }
-    if (!this.actions.submit(client.sessionId, action)) return this.sendError(client, '请先撤销已经提交的行动', requestId, 'submit_action');
+    if (!this.actions.submit(player.playerId, action)) return this.sendError(client, '请先撤销已经提交的行动', requestId, 'submit_action');
     player.submitted = true;
     this.sendSuccess(client, requestId, 'submit_action', '行动已提交，可在结算前撤销');
     const aliveIds = Array.from(this.state.players.values()).filter((candidate) => candidate.alive).map((candidate) => candidate.playerId);
@@ -256,17 +269,25 @@ export class EnergyDuelRoom extends Room {
     if (pending.length === 0) return this.resolveCurrentRound();
     this.state.phase = 'deferred';
     this.state.lastResult = '行动已经公开，等待后发技能选择目标。';
+    const promptedControllers = new Set<string>();
     for (const [playerId] of pending) {
-      const client = this.clients.find((candidate) => candidate.sessionId === playerId);
-      if (client) this.sendDeferredPrompt(client);
+      const actor = this.state.players.get(playerId);
+      const client = actor && this.clients.find((candidate) => candidate.sessionId === actor.controllerPlayerId);
+      if (client && !promptedControllers.has(client.sessionId)) { promptedControllers.add(client.sessionId); this.sendDeferredPrompt(client); }
     }
   }
 
-  private sendDeferredPrompt(client: Client): void {
-    const action = this.actions.get(client.sessionId);
+  private sendDeferredPrompt(client: Client, requestedActorId?: string): void {
+    const actorId = requestedActorId ?? Array.from(this.actions.asReadonlyMap().keys()).find((playerId) => {
+      const actor = this.state.players.get(playerId); const action = this.actions.get(playerId); const definition = action && actionById.get(action.actionId);
+      return actor?.controllerPlayerId === client.sessionId && definition?.target.selectionTiming === 'deferred' && !(action?.targetIds?.length);
+    });
+    if (!actorId) return;
+    const action = this.actions.get(actorId);
     const definition = action && actionById.get(action.actionId);
     if (!action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) return;
     client.send('deferred_action_required', {
+      actorPlayerId: actorId,
       actionId: action.actionId,
       power: action.power ?? 1,
       allocationCount: action.power ?? 1,
@@ -279,8 +300,8 @@ export class EnergyDuelRoom extends Room {
   private submitDeferredTargets(client: Client, payload: SubmitDeferredTargetsMessage): void {
     const requestId = payload?.requestId;
     if (this.state.phase !== 'deferred') return this.sendError(client, '当前没有待选择的后发目标', requestId, 'submit_deferred_targets');
-    const player = this.state.players.get(client.sessionId);
-    const action = this.actions.get(client.sessionId);
+    const player = this.authorizedActor(client, payload?.actorPlayerId);
+    const action = player && this.actions.get(player.playerId);
     const definition = action && actionById.get(action.actionId);
     if (!player?.alive || !action || definition?.target.selectionTiming !== 'deferred' || action.targetIds?.length) {
       return this.sendError(client, '没有可提交的后发目标', requestId, 'submit_deferred_targets');
@@ -292,22 +313,22 @@ export class EnergyDuelRoom extends Room {
       const target = this.state.players.get(targetId);
       if (!target?.alive || target.playerId === player.playerId) return this.sendError(client, '请选择其他存活玩家作为目标', requestId, 'submit_deferred_targets');
     }
-    this.actions.setTargets(client.sessionId, targetIds);
+    this.actions.setTargets(player.playerId, targetIds);
     this.sendSuccess(client, requestId, 'submit_deferred_targets', '后发目标已提交');
     const waiting = Array.from(this.actions.asReadonlyMap().values()).some((submitted) => {
       const candidate = actionById.get(submitted.actionId);
       return candidate?.target.selectionTiming === 'deferred' && !(submitted.targetIds?.length);
     });
-    if (!waiting) this.resolveCurrentRound();
+    if (!waiting) this.resolveCurrentRound(); else this.sendDeferredPrompt(client);
   }
 
-  private cancelAction(client: Client, requestId?: string): void {
+  private cancelAction(client: Client, requestId?: string, actorPlayerId?: string): void {
     if (this.state.phase !== 'choosing') return this.sendError(client, '结算已经开始，不能撤销', requestId, 'cancel_action');
-    const player = this.state.players.get(client.sessionId);
-    if (!player?.alive || !player.submitted || !this.actions.has(client.sessionId)) {
+    const player = this.authorizedActor(client, actorPlayerId);
+    if (!player?.alive || !player.submitted || !this.actions.has(player.playerId)) {
       return this.sendError(client, '没有可撤销的行动', requestId, 'cancel_action');
     }
-    this.actions.cancel(client.sessionId);
+    this.actions.cancel(player.playerId);
     player.submitted = false;
     this.sendSuccess(client, requestId, 'cancel_action', '已撤销，可以重新选择');
   }
@@ -384,6 +405,7 @@ export class EnergyDuelRoom extends Room {
     const player = this.state.players.get(client.sessionId);
     if (!player) return this.sendError(client, '玩家不在房间中', requestId, 'acknowledge_result');
     player.resultConfirmed = true;
+    if (this.state.roomMode === 'training') for (const actor of this.state.players.values()) if (actor.controllerPlayerId === client.sessionId) actor.resultConfirmed = true;
     this.sendSuccess(client, requestId, 'acknowledge_result', '已确认结算');
     if (Array.from(this.state.players.values()).every((candidate) => candidate.resultConfirmed)) this.resetToWaiting();
   }
@@ -399,14 +421,76 @@ export class EnergyDuelRoom extends Room {
       player.resultConfirmed = false;
       player.submitted = false;
       player.alive = true;
-      player.characterId = DEFAULT_CHARACTER_ID;
-      player.currentFormId = DEFAULT_FORM_ID;
-      player.maxHp = 1;
-      player.currentHp = 1;
+      if (this.state.roomMode === 'standard') {
+        player.characterId = DEFAULT_CHARACTER_ID;
+        player.currentFormId = DEFAULT_FORM_ID;
+      }
+      player.maxHp = player.characterId === DEFAULT_CHARACTER_ID ? 1 : 2;
+      player.currentHp = player.maxHp;
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
-      for (const resource of player.resources.values()) resource.current = 0;
+      if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
     }
+  }
+
+  private authorizedActor(client: Client, requestedActorId?: string): PlayerState | undefined {
+    const actorId = this.state.roomMode === 'training' && typeof requestedActorId === 'string' ? requestedActorId : client.sessionId;
+    const actor = this.state.players.get(actorId);
+    return actor?.controllerPlayerId === client.sessionId ? actor : undefined;
+  }
+
+  private createTrainingDummy(controllerPlayerId: string): PlayerState {
+    const player = new PlayerState();
+    player.playerId = `training-dummy-${this.nextDummyId++}`;
+    player.accountId = player.playerId;
+    player.username = 'training_dummy';
+    player.nickname = `假人 ${this.nextDummyId - 1}`;
+    player.controllerPlayerId = controllerPlayerId;
+    player.isTrainingDummy = true;
+    player.color = colorForAccount(player.accountId, new Set(Array.from(this.state.players.values(), (value) => value.color)));
+    for (const definition of gameConfig.resources) {
+      const resource = new ResourceState(); resource.resourceId = definition.id; player.resources.set(definition.id, resource);
+    }
+    this.state.players.set(player.playerId, player);
+    this.storedBuffs.set(player.playerId, new Map());
+    assignGridIndices(this.state.players.values());
+    return player;
+  }
+
+  private addTrainingDummy(client: Client, requestId?: string): void {
+    if (this.state.roomMode !== 'training' || client.sessionId !== this.state.hostPlayerId || this.state.phase !== 'waiting') return this.sendError(client, '当前不能添加练习角色', requestId, 'add_training_dummy');
+    if (this.state.players.size >= this.maxClients) return this.sendError(client, '练习角色数量已达上限', requestId, 'add_training_dummy');
+    const player = this.createTrainingDummy(client.sessionId);
+    this.sendSuccess(client, requestId, 'add_training_dummy', `已添加${player.nickname}`);
+  }
+
+  private removeTrainingDummy(client: Client, payload: { actorPlayerId?: string; requestId?: string }): void {
+    const player = typeof payload?.actorPlayerId === 'string' ? this.state.players.get(payload.actorPlayerId) : undefined;
+    if (this.state.roomMode !== 'training' || client.sessionId !== this.state.hostPlayerId || this.state.phase !== 'waiting' || !player?.isTrainingDummy) return this.sendError(client, '当前不能移除该练习角色', payload?.requestId, 'remove_training_dummy');
+    if (this.state.players.size <= 2) return this.sendError(client, '练功房至少保留两个角色', payload?.requestId, 'remove_training_dummy');
+    this.state.players.delete(player.playerId); this.storedBuffs.delete(player.playerId); assignGridIndices(this.state.players.values());
+    this.sendSuccess(client, payload?.requestId, 'remove_training_dummy', `已移除${player.nickname}`);
+  }
+
+  private configureTrainingActor(client: Client, payload: ConfigureTrainingActorMessage): void {
+    const player = this.authorizedActor(client, payload?.actorPlayerId);
+    if (this.state.roomMode !== 'training' || this.state.phase !== 'waiting' || !player) return this.sendError(client, '当前不能配置练习角色', payload?.requestId, 'configure_training_actor');
+    if (payload.nickname !== undefined) {
+      const nickname = typeof payload.nickname === 'string' ? payload.nickname.trim() : '';
+      if (!NICKNAME_PATTERN.test(nickname)) return this.sendError(client, '昵称格式无效', payload.requestId, 'configure_training_actor');
+      player.nickname = nickname;
+    }
+    if (payload.characterId !== undefined) {
+      const character = characterById.get(payload.characterId);
+      if (!character) return this.sendError(client, '角色不存在', payload.requestId, 'configure_training_actor');
+      player.characterId = character.id; player.currentFormId = character.forms[0]?.id ?? DEFAULT_FORM_ID;
+      player.maxHp = character.id === DEFAULT_CHARACTER_ID ? 1 : 2; player.currentHp = player.maxHp; player.buffs.clear(); this.storedBuffs.set(player.playerId, new Map());
+    }
+    if (payload.resources && typeof payload.resources === 'object') for (const [resourceId, amount] of Object.entries(payload.resources)) {
+      const resource = player.resources.get(resourceId);
+      if (resource && Number.isInteger(amount)) resource.current = Math.max(0, Math.min(65_535, amount));
+    }
+    this.sendSuccess(client, payload.requestId, 'configure_training_actor', `已更新${player.nickname}`);
   }
 
   private isActionUnlocked(player: PlayerState, actionId: string): boolean {

@@ -1,6 +1,6 @@
-import type { PublicRoomListResponse, SessionResponse } from '@energy-duel/shared';
+import type { PlayerProfile, ProfileUpdateRequest, PublicRoomListResponse, SessionResponse } from '@energy-duel/shared';
 
-const STORAGE_KEY = 'energy-duel-session';
+const STORAGE_KEY = 'energy-duel-session-v2';
 
 export function loadSession(): SessionResponse | null {
   try {
@@ -17,6 +17,7 @@ export function saveSession(session: SessionResponse): void {
 
 export function clearSession(): void {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('energy-duel-session');
 }
 
 export function getServerUrl(): string {
@@ -25,15 +26,34 @@ export function getServerUrl(): string {
   return window.location.origin;
 }
 
-export async function createSession(username: string): Promise<SessionResponse> {
-  const response = await fetch(`${getServerUrl()}/api/session`, {
+export async function authenticate(mode: 'login' | 'register', username: string, password: string): Promise<SessionResponse> {
+  const response = await fetch(`${getServerUrl()}/api/auth/${mode}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, password }),
   });
   const body = await response.json() as SessionResponse & { error?: string };
-  if (!response.ok) throw new Error(body.error || '无法创建会话');
+  if (!response.ok) throw new Error(body.error || (mode === 'register' ? '注册失败' : '登录失败'));
   saveSession(body);
+  return body;
+}
+
+export async function fetchProfile(session: SessionResponse): Promise<PlayerProfile> {
+  return profileRequest(session, '/api/profile');
+}
+
+export async function updateProfile(session: SessionResponse, update: ProfileUpdateRequest): Promise<PlayerProfile> {
+  return profileRequest(session, '/api/profile', { method: 'PATCH', body: JSON.stringify(update) });
+}
+
+export async function uploadAvatar(session: SessionResponse, avatarDataUrl: string): Promise<PlayerProfile> {
+  return profileRequest(session, '/api/profile/avatar', { method: 'PUT', body: JSON.stringify({ avatarDataUrl }) });
+}
+
+async function profileRequest(session: SessionResponse, pathname: string, init: RequestInit = {}): Promise<PlayerProfile> {
+  const response = await fetch(`${getServerUrl()}${pathname}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}`, ...init.headers } });
+  const body = await response.json() as PlayerProfile & { error?: string };
+  if (!response.ok) throw new Error(body.error || '无法读取个人资料');
   return body;
 }
 

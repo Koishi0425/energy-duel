@@ -115,6 +115,11 @@ Run commands from the repository root:
   room ID, host nickname, occupancy, and creation time. The lobby is join-first:
   its primary room-code form and Enter key always join, while creation stays in
   a separate, explicitly expanded section.
+  The lobby also creates private single-client training rooms. A training room
+  synchronizes server-owned dummy actors with an explicit controller player ID;
+  the host may add/remove and configure actors while waiting, then submit each
+  actor's actions through the same authoritative validation and resolution path.
+  Training-only initial character/resource overrides must never leak into standard rooms.
   Actions remain private on the server until every living player submits. A
   submitted player may send `cancel_action` and replace their choice before the
   final living player submits; the final submission resolves synchronously.
@@ -140,6 +145,8 @@ Run commands from the repository root:
 - The login/lobby shell must stay independent of Ant Design and PixiJS. Battle
   UI and the in-app tutorial are lazy-loaded. Use `?perf=1` to display local FPS,
   slow-frame, long-task, RTT, and optional heap metrics while profiling.
+  Keep battle loading feedback inside that lazy boundary: show code-chunk loading
+  first, then report Pixi initialization and current portrait preloading progress.
 - Desktop action and combat-log windows use root-level portals so parent overflow
   never clips them. Their drag/resize geometry is local-only and persisted. Action
   layout editing is WYSIWYG on the live tabs and skill grid, not a separate modal.

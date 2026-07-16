@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent
 import {
   actionById,
   characterById,
+  gameConfig,
   resourceById,
   type ActionDefinition,
   type CommandResultMessage,
@@ -14,11 +15,10 @@ import {
   type SyncedRoundLogEntry,
 } from '@energy-duel/shared';
 import type { Room } from '@colyseus/sdk';
-import { Button, Card, Collapse, ConfigProvider, Drawer, InputNumber, Modal, Tag, message, theme } from 'antd';
+import { Button, Card, Collapse, ConfigProvider, Drawer, Input, InputNumber, Modal, Select, Tag, message, theme } from 'antd';
 import 'antd/dist/reset.css';
 import type { DemoRoomState } from './App';
 import ActionPanel from './components/ActionPanel';
-import GameCanvas from './components/GameCanvas';
 import PlayerDetails from './components/PlayerDetails';
 import { PerformancePanel } from './components/PerformancePanel';
 import FloatingWindow from './components/FloatingWindow';
@@ -27,6 +27,7 @@ import { readSyncedPlayers } from './roomState';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
 const Tutorial = lazy(() => import('./components/Tutorial'));
+const GameCanvas = lazy(() => import('./components/GameCanvas'));
 
 export default function GameRoomView(props: Props) {
   return <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: '#7b89ff', borderRadius: 10 } }}>
@@ -37,7 +38,8 @@ export default function GameRoomView(props: Props) {
 function RoomContent({ room, session, onLeave }: Props) {
   const [api, contextHolder] = message.useMessage();
   const [players, setPlayers] = useState<SyncedPlayer[]>([]);
-  const [gameState, setGameState] = useState<SyncedGameState>({ phase: 'waiting', round: 0, gameNumber: 0, hostPlayerId: '', lastResult: '等待玩家准备。' });
+  const [gameState, setGameState] = useState<SyncedGameState>({ phase: 'waiting', round: 0, gameNumber: 0, hostPlayerId: '', lastResult: '等待玩家准备。', roomMode: 'standard' });
+  const [activeActorId, setActiveActorId] = useState<string>();
   const [battleLog, setBattleLog] = useState<SyncedRoundLogEntry[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string>();
@@ -52,6 +54,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [networkState, setNetworkState] = useState<'online' | 'reconnecting' | 'offline'>('online');
   const [rtt, setRtt] = useState<number>();
   const [activeStep, setActiveStep] = useState<ResolutionStep>();
+  const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   const [tutorialOpen, setTutorialOpen] = useState(false);
@@ -65,7 +68,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     const handleState = (state: DemoRoomState | undefined) => {
       if (!state) return;
       setPlayers(readSyncedPlayers(state.players?.values()));
-      setGameState({ phase: state.phase ?? 'waiting', round: state.round ?? 0, gameNumber: state.gameNumber ?? 0, hostPlayerId: state.hostPlayerId ?? '', lastResult: state.lastResult ?? '' });
+      setGameState({ phase: state.phase ?? 'waiting', round: state.round ?? 0, gameNumber: state.gameNumber ?? 0, hostPlayerId: state.hostPlayerId ?? '', lastResult: state.lastResult ?? '', roomMode: state.roomMode ?? 'standard' });
       setBattleLog(Array.from(state.roundLog?.values() ?? [], (entry) => ({ gameNumber: entry.gameNumber, round: entry.round, time: entry.time, text: entry.text })));
     };
     room.onStateChange(handleState);
@@ -81,7 +84,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     });
     const removeResolution = room.onMessage('round_resolution', (payload: RoundResolutionMessage) => void playTimeline(payload));
     const removeDeferred = room.onMessage('deferred_action_required', (payload: DeferredActionRequiredMessage) => {
-      setDeferredRequest(payload); setSelectedActionId(payload.actionId); setSelectedTargetIds([]);
+      setDeferredRequest(payload); setActiveActorId(payload.actorPlayerId); setSelectedActionId(payload.actionId); setSelectedTargetIds([]);
       void api.info({ content: `行动已公开：请为「${actionById.get(payload.actionId)?.name ?? payload.actionId}」后发分配目标`, duration: 2 });
     });
     const handleDrop = () => setNetworkState('reconnecting');
@@ -128,16 +131,26 @@ function RoomContent({ room, session, onLeave }: Props) {
 
   const me = players.find((player) => player.accountId === session.accountId);
   const isHost = me?.playerId === gameState.hostPlayerId;
+  const controlledActors = useMemo(() => gameState.roomMode === 'training' && me ? players.filter((player) => player.controllerPlayerId === me.playerId) : me ? [me] : [], [gameState.roomMode, me, players]);
+  const activeActor = controlledActors.find((player) => player.playerId === activeActorId) ?? me;
   const selectedAction = selectedActionId ? actionById.get(selectedActionId) : undefined;
-  const targeting = Boolean(deferredRequest || (selectedAction && ['single_enemy', 'multiple_enemies'].includes(selectedAction.target.mode) && !me?.submitted));
-  const validTargets = useMemo(() => players.filter((player) => player.alive && player.playerId !== me?.playerId), [players, me?.playerId]);
+  const targeting = Boolean(deferredRequest || (selectedAction && ['single_enemy', 'multiple_enemies'].includes(selectedAction.target.mode) && !activeActor?.submitted));
+  const validTargets = useMemo(() => players.filter((player) => player.alive && player.playerId !== activeActor?.playerId), [players, activeActor?.playerId]);
   const battleLogGroups = useMemo(() => groupBattleLog(battleLog), [battleLog]);
   const variableMax = parameterAction?.variable
     ? Math.max(parameterAction.variable.minPower, Math.min(
       parameterAction.variable.maxPower ?? Number.MAX_SAFE_INTEGER,
-      Math.floor((me?.resources[parameterAction.variable.resourceId]?.current ?? 0) / parameterAction.variable.costPerPower),
+      Math.floor((activeActor?.resources[parameterAction.variable.resourceId]?.current ?? 0) / parameterAction.variable.costPerPower),
     ))
     : 1;
+
+  useEffect(() => {
+    if (gameState.roomMode !== 'training' || gameState.phase !== 'choosing') return;
+    const current = controlledActors.find((actor) => actor.playerId === activeActorId);
+    if (current?.alive && !current.submitted) return;
+    const next = controlledActors.find((actor) => actor.alive && !actor.submitted);
+    if (next && next.playerId !== activeActorId) { setActiveActorId(next.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }
+  }, [activeActorId, controlledActors, gameState.phase, gameState.roomMode]);
 
   const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number) => {
     const targetNames = targetIds.map((id) => players.find((player) => player.playerId === id)?.nickname ?? id);
@@ -146,6 +159,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       : `已选择「${action.name}」${power === undefined ? '' : `（n=${power}）`}${targetNames.length ? ` → ${targetNames.join('、')}` : ''}`;
     setSubmittedLabel(label);
     room.send('submit_action', {
+      actorPlayerId: activeActor?.playerId,
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
       targetIds: action.target.mode === 'multiple_enemies' ? targetIds : undefined,
@@ -171,7 +185,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       const next = [...selectedTargetIds, player.playerId];
       setSelectedTargetIds(next);
       if (next.length >= deferredRequest.allocationCount) {
-        room.send('submit_deferred_targets', { requestId: requestId(), targetIds: next });
+        room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: next });
         setDeferredRequest(undefined); setSubmittedLabel(`后发目标已分配：${next.map((id) => players.find((candidate) => candidate.playerId === id)?.nickname ?? id).join('、')}`);
       } else void api.info({ content: `已分配 ${next.length}/${deferredRequest.allocationCount} 个 0.5 级攻击`, duration: 1.1 });
       return;
@@ -221,11 +235,14 @@ function RoomContent({ room, session, onLeave }: Props) {
       <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialOpen(true)}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
     </header>
     {networkState === 'reconnecting' && <div className="reconnecting-banner">连接中断，正在保留席位并自动重连…</div>}
-    {submittedLabel && me?.submitted && <div className="selection-toast">{submittedLabel}</div>}
+    {submittedLabel && activeActor?.submitted && <div className="selection-toast">{activeActor.nickname}：{submittedLabel}</div>}
     {activeStep && <div className="timeline-chip">动作 {activeStep.sequence + 1} · 速度 {activeStep.speedPriority} · {activeStep.actors.map((actor) => actionById.get(actor.actionId)?.name ?? actor.actionId).join(' + ')}</div>}
 
     <section className="battlefield-region">
-      <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} resetViewKey={resetViewKey} resolutionStep={activeStep} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+      <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
+        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={setInspectedPlayer} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+      </Suspense>
+      {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
       {targetHint && <div className="targeting-hint">{targetHint}</div>}
     </section>
@@ -235,8 +252,10 @@ function RoomContent({ room, session, onLeave }: Props) {
     <section className="game-control-panel" style={panelPosition ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' } : undefined}>
       <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动技能面板</span>{panelPosition && <Button size="small" type="text" onClick={(event) => { event.stopPropagation(); setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div>
       <div className="round-result">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
-      {gameState.phase === 'waiting' && <div className="ready-controls"><Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || players.some((player) => !player.ready || !player.connected)}>开始游戏</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
-      {gameState.phase === 'choosing' && me?.alive && <ActionPanel player={me} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId() }); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }} />}
+      {gameState.roomMode === 'training' && gameState.phase === 'waiting' && <TrainingSetup actors={controlledActors} room={room} />}
+      {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
+      {gameState.roomMode === 'training' && gameState.phase === 'choosing' && <div className="actor-switcher"><span>当前操控</span>{controlledActors.map((actor) => <Button key={actor.playerId} size="small" type={actor.playerId === activeActor?.playerId ? 'primary' : 'default'} disabled={!actor.alive} onClick={() => { setActiveActorId(actor.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }}>{actor.nickname}{actor.submitted ? ' ✓' : ''}</Button>)}</div>}
+      {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }} />}
       {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>星尘后发分配</strong><p>所有行动已经公开。点击战场角色分配 {deferredRequest.allocationCount} 个 0.5 级攻击，可重复点击同一目标。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div></div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
@@ -253,6 +272,18 @@ function RoomContent({ room, session, onLeave }: Props) {
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
     {tutorialOpen && <Suspense fallback={null}><Tutorial open onClose={() => setTutorialOpen(false)} /></Suspense>}
   </main>;
+}
+
+function TrainingSetup({ actors, room }: { actors: SyncedPlayer[]; room: Room<DemoRoomState> }) {
+  const sendConfig = (actorPlayerId: string, patch: { nickname?: string; characterId?: string; resources?: Record<string, number> }) => room.send('configure_training_actor', { requestId: requestId(), actorPlayerId, ...patch });
+  return <div className="training-setup">
+    <header><div><strong>练习角色配置</strong><small>可直接选择初始角色和资源；开局后你将依次操控所有角色。</small></div><Button size="small" onClick={() => room.send('add_training_dummy', { requestId: requestId() })} disabled={actors.length >= 20}>添加假人</Button></header>
+    <div className="training-actor-list">{actors.map((actor) => <article key={actor.playerId}>
+      <div className="training-actor-heading"><Input defaultValue={actor.nickname} maxLength={16} aria-label="练习角色昵称" onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== actor.nickname) sendConfig(actor.playerId, { nickname: value }); }} /><Select value={actor.characterId} options={gameConfig.characters.map((character) => ({ value: character.id, label: character.name }))} onChange={(characterId) => sendConfig(actor.playerId, { characterId })} /></div>
+      <div className="training-resources">{gameConfig.resources.map((resource) => <label key={resource.id}><span>{resource.shortName}</span><InputNumber min={0} max={65_535} precision={0} value={actor.resources[resource.id]?.current ?? 0} onChange={(value) => sendConfig(actor.playerId, { resources: { [resource.id]: value ?? 0 } })} /></label>)}</div>
+      {actor.isTrainingDummy && <Button size="small" danger disabled={actors.length <= 2} onClick={() => room.send('remove_training_dummy', { requestId: requestId(), actorPlayerId: actor.playerId })}>移除</Button>}
+    </article>)}</div>
+  </div>;
 }
 
 function Roster({ players, gameState }: { players: SyncedPlayer[]; gameState: SyncedGameState }) {

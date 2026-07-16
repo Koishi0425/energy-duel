@@ -4,6 +4,64 @@ export interface SessionResponse {
   token: string;
 }
 
+export type RankId = 'unranked' | 'iron' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'emerald' | 'diamond' | 'master' | 'grandmaster' | 'challenger';
+
+export interface CareerStats {
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  currentWinStreak: number;
+  bestWinStreak: number;
+}
+
+export interface PlayerProfile {
+  accountId: string;
+  username: string;
+  nickname: string;
+  avatarUrl?: string;
+  nameplateId: string;
+  titleId: string;
+  rankId: RankId;
+  level: number;
+  experience: number;
+  experienceForNextLevel: number;
+  rating: number;
+  unlockedNameplateIds: string[];
+  unlockedTitleIds: string[];
+  stats: CareerStats;
+  createdAt: string;
+}
+
+export interface ProfileUpdateRequest {
+  nickname?: string;
+  nameplateId?: string;
+  titleId?: string;
+  avatarDataUrl?: string;
+}
+
+export interface ProfileCosmeticDefinition {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export const PROFILE_NAMEPLATES: readonly ProfileCosmeticDefinition[] = [
+  { id: 'standard', name: '标准竞技框', description: '所有玩家默认拥有。' },
+  { id: 'veteran', name: '久经沙场', description: '成就奖励，尚未开放。' },
+];
+
+export const PROFILE_TITLES: readonly ProfileCosmeticDefinition[] = [
+  { id: 'novice', name: '初心者', description: '所有玩家默认拥有。' },
+  { id: 'survivor', name: '绝境生还', description: '通过濒死翻盘成就解锁。' },
+];
+
+export function experienceRequiredForLevel(level: number): number {
+  const normalized = Math.max(1, Math.floor(level));
+  const n = normalized - 1;
+  return 100 * n * n + 300 * n;
+}
+
 export interface SessionIdentity {
   accountId: string;
   username: string;
@@ -54,9 +112,12 @@ export interface SyncedPlayer {
   submitted: boolean;
   connected: boolean;
   resultConfirmed: boolean;
+  controllerPlayerId: string;
+  isTrainingDummy: boolean;
 }
 
 export type GamePhase = 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished';
+export type RoomMode = 'standard' | 'training';
 export type ActionCategory = 'base' | 'attack' | 'defense' | 'resource' | 'special';
 export type TargetMode = 'none' | 'single_enemy' | 'multiple_enemies' | 'all_enemies';
 export type ActionId = string;
@@ -67,6 +128,7 @@ export interface SyncedGameState {
   gameNumber: number;
   hostPlayerId: string;
   lastResult: string;
+  roomMode: RoomMode;
 }
 
 export interface SyncedRoundLogEntry {
@@ -77,6 +139,7 @@ export interface SyncedRoundLogEntry {
 }
 
 export interface SubmitActionMessage {
+  actorPlayerId?: string;
   actionId: ActionId;
   targetId?: string;
   targetIds?: string[];
@@ -86,6 +149,7 @@ export interface SubmitActionMessage {
 }
 
 export interface SubmitDeferredTargetsMessage {
+  actorPlayerId?: string;
   targetIds: string[];
   requestId?: string;
 }
@@ -97,10 +161,19 @@ export interface RevealedAction {
 }
 
 export interface DeferredActionRequiredMessage {
+  actorPlayerId: string;
   actionId: string;
   power: number;
   allocationCount: number;
   revealedActions: RevealedAction[];
+}
+
+export interface ConfigureTrainingActorMessage {
+  actorPlayerId: string;
+  nickname?: string;
+  characterId?: string;
+  resources?: Record<string, number>;
+  requestId?: string;
 }
 
 export interface ResolutionActor {

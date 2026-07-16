@@ -1,6 +1,6 @@
 import { MapSchema } from '@colyseus/schema';
 import { describe, expect, it } from 'vitest';
-import { BuffState, EnergyDuelRoom } from './EnergyDuelRoom.js';
+import { BuffState, EnergyDuelRoom, PlayerState } from './EnergyDuelRoom.js';
 
 describe('EnergyDuelRoom character-scoped buffs', () => {
   it('hides a Gonggang buff after switching away and restores it after switching back', () => {
@@ -33,5 +33,26 @@ describe('EnergyDuelRoom character-scoped buffs', () => {
     const restored = new MapSchema<BuffState>();
     room.syncActiveBuffs('p', 'regent', restored);
     expect(restored.get('p:sovereign_blade_forged')?.stacks).toBe(2.5);
+  });
+});
+
+describe('EnergyDuelRoom training actors', () => {
+  it('creates a server-owned dummy controlled by the room host', () => {
+    const room = new EnergyDuelRoom() as any;
+    const host = new PlayerState(); host.playerId = 'host'; host.controllerPlayerId = 'host'; host.accountId = 'account';
+    room.state.players.set(host.playerId, host);
+    const dummy = room.createTrainingDummy('host') as PlayerState;
+    expect(dummy.isTrainingDummy).toBe(true);
+    expect(dummy.controllerPlayerId).toBe('host');
+    expect(dummy.playerId).not.toBe(host.playerId);
+    expect(dummy.resources.size).toBeGreaterThan(0);
+    expect(Array.from(room.state.players.values(), (player: PlayerState) => player.gridIndex)).toEqual([0, 2]);
+  });
+
+  it('authorizes only the synchronized controller to act for a dummy', () => {
+    const room = new EnergyDuelRoom() as any; room.state.roomMode = 'training';
+    const dummy = new PlayerState(); dummy.playerId = 'dummy'; dummy.controllerPlayerId = 'host'; room.state.players.set(dummy.playerId, dummy);
+    expect(room.authorizedActor({ sessionId: 'host' }, 'dummy')).toBe(dummy);
+    expect(room.authorizedActor({ sessionId: 'intruder' }, 'dummy')).toBeUndefined();
   });
 });

@@ -15,6 +15,7 @@ interface Props {
   onPlayerSelect?: (player: SyncedPlayer) => void;
   onPlayerInspect?: (player: SyncedPlayer) => void;
   onPlayerHover?: (player: SyncedPlayer | null, point?: ScreenPoint) => void;
+  onLoadProgress?: (progress: number, label: string) => void;
 }
 interface TokenView { root: Container; portrait: Sprite; ring: Graphics; name: Text; status: Text; assetUrl: string }
 
@@ -63,6 +64,7 @@ export default function GameCanvas(props: Props) {
     if (!host) return;
     let cancelled = false; let initialized = false;
     const app = new Application();
+    propsRef.current.onLoadProgress?.(8, '正在初始化绘图引擎');
     const observer = new ResizeObserver(() => {
       const map = mapRef.current;
       if (!map || host.clientWidth <= 0 || host.clientHeight <= 0) return;
@@ -70,7 +72,13 @@ export default function GameCanvas(props: Props) {
       app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
       positionViews();
     });
-    void Promise.all([app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(() => {
+    void Promise.all([app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(async () => {
+      propsRef.current.onLoadProgress?.(55, '正在准备角色资源');
+      const portraitUrls = Array.from(new Set(propsRef.current.players.map((player) => resolvePortraitUrl(player.characterId, player.currentFormId)).filter((url) => url !== FALLBACK_PORTRAIT_URL)));
+      for (let index = 0; index < portraitUrls.length; index += 1) {
+        await Assets.load(portraitUrls[index]).catch(() => undefined);
+        propsRef.current.onLoadProgress?.(55 + Math.round(((index + 1) / Math.max(1, portraitUrls.length)) * 38), `正在加载角色资源 ${index + 1}/${portraitUrls.length}`);
+      }
       initialized = true;
       if (cancelled) { app.destroy(true); return; }
       host.appendChild(app.canvas); appRef.current = app;
@@ -81,6 +89,7 @@ export default function GameCanvas(props: Props) {
       mapRef.current = map; tokenLayerRef.current = tokenLayer; effectLayerRef.current = effectLayer;
       installRotationGestures(app, map, positionViews);
       map.resize(host.clientWidth, host.clientHeight); syncViews(); observer.observe(host);
+      propsRef.current.onLoadProgress?.(100, '战场已就绪');
     });
     return () => {
       cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; tokenLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear();
