@@ -36,7 +36,7 @@ export default function PlayerDetails({ player, profile, onOpenGuide, showPortra
           ? <span className="muted">暂无状态效果</span>
           : player.buffs.map((buff) => {
             const definition = buffById.get(buff.buffId);
-            const duration = buff.remainingTurns > 0 ? `剩余 ${buff.remainingTurns} 回合` : '持续状态';
+            const duration = buff.permanent ? '持续状态' : `剩余 ${buff.remainingTurns} 回合`;
             return <div className="buff-detail" key={buff.instanceId}><Tag color={definition?.color}>{definition?.name ?? buff.buffId} ×{buff.stacks} · {duration}</Tag><small>{definition?.description ?? '暂无详细说明'}</small></div>;
           })}
       </div>

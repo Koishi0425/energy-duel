@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { circularDistance } from './geometry.js';
-import { gameConfig, napoleonStrategyModes, validateGameConfig } from './config.js';
+import { canExecuteNapoleonStrategy, gameConfig, napoleonStrategyFromCommand, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(14);
+    expect(gameConfig.version).toBe(15);
     expect(gameConfig.actions).toHaveLength(87);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku']);
@@ -72,17 +72,19 @@ describe('game configuration', () => {
     expect(() => validateGameConfig(invalid)).toThrow(/selection timing/);
   });
 
-  it('derives explicit Napoleon execution modes from the ordered buffer', () => {
-    expect(napoleonStrategyModes('A', 'AA')).toEqual(['append']);
-    expect(napoleonStrategyModes('AA', 'AA')).toEqual(['execute', 'append']);
-    expect(napoleonStrategyModes('DTD', 'DT')).toEqual(['execute', 'append']);
-    expect(napoleonStrategyModes('', 'AA')).toEqual([]);
+  it('separates buffered Napoleon strategies from command-triggered strategies', () => {
+    expect(canExecuteNapoleonStrategy('AA', 'AA')).toBe(true);
+    expect(canExecuteNapoleonStrategy('A', 'AA')).toBe(false);
+    expect(napoleonStrategyFromCommand('A', 'A')?.napoleonSequence).toBe('AA');
+    expect(napoleonStrategyFromCommand('TTTT', 'T')?.napoleonSequence).toBe('TTTTT');
+    expect(napoleonStrategyFromCommand('TAD', 'D')?.napoleonSequence).toBe('DD');
   });
 
   it('marks Stardust as all-in and assigns special-resource visibility', () => {
     expect(gameConfig.actions.find((action) => action.id === 'stardust')?.usesAllVariableResource).toBe(true);
     expect(gameConfig.resources.find((resource) => resource.id === 'energy')?.alwaysVisible).toBe(true);
     expect(gameConfig.resources.find((resource) => resource.id === 'stars')?.characterIds).toEqual(['regent']);
+    expect(gameConfig.buffs.find((buff) => buff.id === 'tactical_advantage')?.durationTurns).toBeUndefined();
   });
 });
 

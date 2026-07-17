@@ -175,6 +175,7 @@ export interface SyncedBuff {
   buffId: string;
   stacks: number;
   remainingTurns: number;
+  permanent: boolean;
   sourcePlayerId: string;
 }
 
@@ -233,7 +234,8 @@ export interface SubmitActionMessage {
   targetGridIndex?: number;
   resourceSpend?: Record<string, number>;
   resourceChoice?: 'energy' | 'charge';
-  strategySequence?: string;
+  napoleonStrategySource?: 'buffer' | 'command';
+  napoleonCommand?: 'A' | 'D' | 'T';
   requestId?: string;
 }
 

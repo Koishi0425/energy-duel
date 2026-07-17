@@ -4,7 +4,9 @@ import {
   buffById,
   characterById,
   resourceById,
-  napoleonStrategyModes,
+  canExecuteNapoleonStrategy,
+  napoleonStrategyFromCommand,
+  type NapoleonCommand,
   type ActionCategory,
   type ActionDefinition,
   type SyncedPlayer,
@@ -46,7 +48,8 @@ export default function ActionPanel({ player, selectedActionId, submittedLabel, 
   const grantedIds = player.buffs.flatMap((buff) => buffById.get(buff.buffId)?.grantedActionIds ?? []);
   const unlockedIds = [...new Set([...(form?.unlockedActions.filter((id) => id !== 'transform') ?? []), ...grantedIds])];
   const unlockedActions = unlockedIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => Boolean(action))
-    .filter((action) => !action.napoleonSequence || napoleonStrategyModes(player.commandBuffer, action.napoleonSequence).length > 0);
+    .filter((action) => !action.napoleonSequence || canExecuteNapoleonStrategy(player.commandBuffer, action.napoleonSequence)
+      || napoleonStrategyFromCommand(player.commandBuffer, action.napoleonSequence.at(-1) as NapoleonCommand)?.id === action.id);
   const lockedActionIds = new Set(unlockedActions.filter((action) => !meetsUnlockRequirements(player, action)).map((action) => action.id));
   const normalizedLayout = reconcileLayout(layout, unlockedActions);
   const detachedIds = new Set(normalizedLayout.detachedCategoryIds);
@@ -121,7 +124,7 @@ function ActionGrid({ categoryId, categories, actions, player, selectedActionId,
   const acceptDrop = (event: DragEvent, beforeActionId?: string) => { event.preventDefault(); const actionId = event.dataTransfer.getData('text/action-id'); if (actionId) onDropAction(actionId, categoryId, beforeActionId); };
   if (actions.length === 0) return <div className={`empty-action-grid${editing ? ' editing-drop-zone' : ''}`} onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => editing && acceptDrop(event)}><p className="muted compact-copy">{editing ? '拖动技能到这里' : '此分类暂无技能'}</p></div>;
   return <div className="action-grid" onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => editing && acceptDrop(event)}>{actions.map((action, actionIndex) => { const locked = lockedActionIds.has(action.id); return <div className={`action-tile${editing ? ' is-draggable' : ''}${locked ? ' is-locked' : ''}`} key={action.id} draggable={editing} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/action-id', action.id); }} onDragOver={(event) => editing && event.preventDefault()} onDrop={(event) => { if (!editing) return; event.stopPropagation(); acceptDrop(event, action.id); }}>
-    <Tooltip title={editing ? '拖动以排序或移动分类' : locked ? action.unlockRequirements?.description ?? '尚未满足解锁条件' : `${action.description} · 速度 ${action.speedPriority} · 等级 ${formatActionLevel(action, player)}`} mouseEnterDelay={0.65} mouseLeaveDelay={0.08}><Button className={`action-button${selectedActionId === action.id ? ' selected' : ''}`} type={selectedActionId === action.id ? 'primary' : 'default'} disabled={!editing && (locked || !canAfford(player, action))} onClick={() => { if (!editing && !locked) onSelect(action); }}><strong>{locked ? '🔒 ' : ''}{action.name}</strong><small>{locked ? action.unlockRequirements?.description ?? '尚未解锁' : `${formatCost(action, player)} · ${formatTarget(action)}`}</small></Button></Tooltip>
+    <Tooltip title={editing ? '拖动以排序或移动分类' : locked ? action.unlockRequirements?.description ?? '尚未满足解锁条件' : `${action.description} · 速度 ${formatActionSpeed(action, player)} · 等级 ${formatActionLevel(action, player)}`} mouseEnterDelay={0.65} mouseLeaveDelay={0.08}><Button className={`action-button${selectedActionId === action.id ? ' selected' : ''}`} type={selectedActionId === action.id ? 'primary' : 'default'} disabled={!editing && (locked || !canAfford(player, action))} onClick={() => { if (!editing && !locked) onSelect(action); }}><strong>{locked ? '🔒 ' : ''}{action.name}</strong><small>{locked ? action.unlockRequirements?.description ?? '尚未解锁' : `${formatCost(action, player)} · ${formatTarget(action)}`}</small></Button></Tooltip>
     {editing && <Button className="remove-action-tile" type="primary" danger size="small" shape="circle" title="从面板隐藏" onClick={() => onHideAction(action.id)}>×</Button>}
     {editing && <div className="mobile-action-edit-controls"><Button size="small" disabled={actionIndex === 0} onClick={() => onDropAction(action.id, categoryId, actions[actionIndex - 1]?.id)}>↑</Button><Button size="small" disabled={actionIndex === actions.length - 1} onClick={() => onDropAction(action.id, categoryId, actions[actionIndex + 2]?.id)}>↓</Button><select aria-label={`移动${action.name}到分类`} value={categoryId} onChange={(event) => onDropAction(action.id, event.target.value)}>{categories.map((category) => <option value={category.id} key={category.id}>{category.label || '未命名'}</option>)}</select></div>}
   </div>; })}</div>;
@@ -179,8 +182,8 @@ function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): stri
   if (player.characterId === 'napoleon' && (action.napoleonSequence || ['attack_order', 'defense_order'].includes(action.id))) {
     const stacks = (buffId: string) => player.buffs.find((buff) => buff.buffId === buffId)?.stacks ?? 0;
     const tactical = stacks('tactical_advantage');
-    const bonus = tactical * 0.5 + stacks('napoleon_divine') * 0.5 + (stacks('hundred_days') > 0 ? 0.5 : 0) + stacks('napoleon_level');
-    const attackLevel = action.level + bonus + (action.napoleonSequence === 'TTAA' ? tactical * 0.5 : 0);
+    const bonus = tactical * 0.5;
+    const attackLevel = action.level + bonus + (['TTA', 'TTAA'].includes(action.napoleonSequence ?? '') ? tactical * 0.5 : 0);
     const defenseLevel = action.defenseLevel === undefined ? undefined : action.defenseLevel + bonus;
     if (defenseLevel !== undefined && action.category === 'attack') return `攻 ${formatAmount(attackLevel)} / 防 ${formatAmount(defenseLevel)}`;
     if (defenseLevel !== undefined) return formatAmount(defenseLevel);
@@ -191,3 +194,8 @@ function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): stri
 }
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
 function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.maxTargetsByPower) return '后发分配 n 次'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }
+function formatActionSpeed(action: ActionDefinition, player: SyncedPlayer): string {
+  if (player.characterId !== 'napoleon') return String(action.speedPriority);
+  const stacks = (buffId: string) => player.buffs.find((buff) => buff.buffId === buffId)?.stacks ?? 0;
+  return formatAmount(action.speedPriority + stacks('napoleon_speed') + stacks('napoleon_divine') * 0.5);
+}

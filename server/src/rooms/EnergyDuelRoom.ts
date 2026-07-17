@@ -30,6 +30,7 @@ interface StoredBuff {
   buffId: string;
   stacks: number;
   remainingTurns: number;
+  permanent: boolean;
   sourcePlayerId: string;
 }
 
@@ -46,6 +47,7 @@ export class BuffState extends Schema {
   @type('string') buffId = '';
   @type('float32') stacks = 1;
   @type('uint16') remainingTurns = 0;
+  @type('boolean') permanent = true;
   @type('string') sourcePlayerId = '';
 }
 
@@ -261,7 +263,8 @@ export class EnergyDuelRoom extends Room {
       resourceSpend: payload.resourceSpend && typeof payload.resourceSpend === 'object'
         && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : undefined,
       resourceChoice: payload.resourceChoice === 'energy' || payload.resourceChoice === 'charge' ? payload.resourceChoice : undefined,
-      strategySequence: typeof payload.strategySequence === 'string' ? payload.strategySequence : undefined,
+      napoleonStrategySource: payload.napoleonStrategySource === 'buffer' || payload.napoleonStrategySource === 'command' ? payload.napoleonStrategySource : undefined,
+      napoleonCommand: payload.napoleonCommand === 'A' || payload.napoleonCommand === 'D' || payload.napoleonCommand === 'T' ? payload.napoleonCommand : undefined,
     };
     if (action.actionId === 'transform') {
       const transformations = characterById.get(player.characterId)?.transformations ?? [];
@@ -586,14 +589,16 @@ export class EnergyDuelRoom extends Room {
       const scopeId = definition?.scope === 'player' ? PLAYER_BUFF_SCOPE : characterId;
       const existing = scopes.get(scopeId)?.get(buffId);
       const synced = priorById.get(buffId);
+      const initialRemainingTurns = activeRemainingTurns[buffId] ?? synced?.remainingTurns ?? definition?.durationTurns;
       const stored: StoredBuff = existing ?? {
         buffId,
         stacks: activeBuffStacks[buffId] ?? synced?.stacks ?? 1,
-        remainingTurns: synced?.remainingTurns || definition?.durationTurns || 0,
+        remainingTurns: initialRemainingTurns ?? 0,
+        permanent: synced?.permanent ?? initialRemainingTurns === undefined,
         sourcePlayerId: synced?.sourcePlayerId || playerId,
       };
       stored.stacks = activeBuffStacks[buffId] ?? stored.stacks;
-      if (activeRemainingTurns[buffId] !== undefined) stored.remainingTurns = activeRemainingTurns[buffId];
+      if (activeRemainingTurns[buffId] !== undefined) { stored.remainingTurns = activeRemainingTurns[buffId]; stored.permanent = false; }
       (scopeId === PLAYER_BUFF_SCOPE ? nextPlayer : nextCharacter).set(buffId, stored);
     }
     scopes.set(characterId, nextCharacter);
@@ -602,7 +607,7 @@ export class EnergyDuelRoom extends Room {
 
   private tickStoredBuffs(playerId: string): void {
     const scopes = this.storedBuffs.get(playerId);
-    tickScopedBuffs(scopes?.values() ?? [], (buffId) => buffById.get(buffId)?.durationTurns);
+    tickScopedBuffs(scopes?.values() ?? []);
     const starGod = scopes?.get('star_god');
     if (starGod && !starGod.has('transcendence') && !starGod.has('transcendence_permanent')) starGod.delete('transcendence_progress');
   }
@@ -613,7 +618,7 @@ export class EnergyDuelRoom extends Room {
     const characterBuffs = scopes.get(characterId) ?? new Map<string, StoredBuff>();
     scopes.set(characterId, characterBuffs);
     if (characterBuffs.has('mud_round_counter') || characterBuffs.has('mud_barrier')) return;
-    characterBuffs.set('mud_round_counter', { buffId: 'mud_round_counter', stacks: 1, remainingTurns: 0, sourcePlayerId: playerId });
+    characterBuffs.set('mud_round_counter', { buffId: 'mud_round_counter', stacks: 1, remainingTurns: 0, permanent: true, sourcePlayerId: playerId });
   }
 
   private syncActiveBuffs(playerId: string, characterId: string, target: MapSchema<BuffState>): void {
@@ -626,6 +631,7 @@ export class EnergyDuelRoom extends Room {
       buff.buffId = stored.buffId;
       buff.stacks = stored.stacks;
       buff.remainingTurns = Math.max(0, stored.remainingTurns);
+      buff.permanent = stored.permanent;
       buff.sourcePlayerId = stored.sourcePlayerId;
       target.set(buff.instanceId, buff);
     }

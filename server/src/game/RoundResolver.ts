@@ -1,7 +1,8 @@
 import {
   actionById,
+  canExecuteNapoleonStrategy,
   characterById,
-  napoleonStrategyModes,
+  napoleonStrategyFromCommand,
   type ActionDefinition,
   type EffectHandlerId,
   type ResolutionStep,
@@ -32,7 +33,8 @@ export interface SubmittedAction {
   targetGridIndex?: number;
   resourceSpend?: Record<string, number>;
   resourceChoice?: 'energy' | 'charge';
-  strategySequence?: string;
+  napoleonStrategySource?: 'buffer' | 'command';
+  napoleonCommand?: 'A' | 'D' | 'T';
 }
 
 export interface RoundResult {
@@ -56,9 +58,13 @@ export function validateAction(player: CombatPlayer, action: SubmittedAction, pl
   if (player.buffs?.has('defense_forbidden') && definition.category === 'defense') throw new Error('崩裂禁防期间不能使用防御技能');
   if (player.buffs?.has('attack_forbidden') && definition.category === 'attack') throw new Error('全面压制期间不能使用攻击技能');
   if (definition.napoleonSequence) {
-    const mode = action.strategySequence as 'execute' | 'append' | undefined;
-    if (!mode || !napoleonStrategyModes(player.commandBuffer ?? '', definition.napoleonSequence).includes(mode)) throw new Error('当前指令缓冲无法用所选方式执行该策略');
-  } else if (action.strategySequence !== undefined) throw new Error('该行动不接受策略执行方式');
+    if (action.napoleonStrategySource === 'buffer') {
+      if (action.napoleonCommand !== undefined || !canExecuteNapoleonStrategy(player.commandBuffer ?? '', definition.napoleonSequence)) throw new Error('当前指令缓冲无法执行该策略');
+    } else if (action.napoleonStrategySource === 'command') {
+      const triggered = action.napoleonCommand && napoleonStrategyFromCommand(player.commandBuffer ?? '', action.napoleonCommand);
+      if (!triggered || triggered.id !== definition.id) throw new Error('当前指令不会触发该策略');
+    } else throw new Error('请选择已有策略或触发它的指令');
+  } else if (action.napoleonStrategySource !== undefined || action.napoleonCommand !== undefined) throw new Error('该行动不接受拿破仑策略来源');
   if (['immortal_palm', 'rule_the_world'].includes(action.actionId) && !['energy', 'charge'].includes(action.resourceChoice ?? '')) throw new Error('请选择吞天获得气或蓄力');
   const variable = definition.variable;
   if (variable) {
@@ -142,9 +148,9 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   const aliveAtStart = Array.from(players.values()).filter((player) => player.alive);
   const hpAtStart = new Map(aliveAtStart.map((player) => [player.id, player.currentHp]));
   for (const player of aliveAtStart) if (player.characterId === 'napoleon') {
-    const tacticalCount = Array.from(player.commandBuffer ?? '').filter((command) => command === 'T').length;
-    const passive = (player.buffs?.has('napoleon_emperor') ? 1 : 0) + (player.buffs?.has('unfallen_fortress') ? 1 : 0);
-    if (tacticalCount + passive > 0) setBuff(player, 'tactical_advantage', Math.min(6, buffStacks(player, 'tactical_advantage') + tacticalCount + passive));
+    if (player.buffs?.has('napoleon_emperor')) addTacticalAdvantage(player, 2, Math.max(1, player.buffRemainingTurns?.napoleon_emperor ?? 1));
+    if (player.buffs?.has('hundred_days')) addTacticalAdvantage(player, 1, 1);
+    if (player.buffs?.has('unfallen_fortress')) addTacticalAdvantage(player, 1, Math.max(1, player.buffRemainingTurns?.unfallen_fortress ?? 1));
   }
   summary.push(`本回合行动：${aliveAtStart.map((player) => describeSubmittedAction(player, actions.get(player.id), players)).join('；')}。`);
 
@@ -155,7 +161,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     for (const [resourceId, amount] of Object.entries(costForSubmittedAction(player, action))) player.resources[resourceId] = Math.max(0, resourceValue(player, resourceId) - amount);
     if (sacrifice) { player.currentHp -= 1; summary.push(`${player.nickname} 以祭道抵免 1 点${sacrifice === 'energy' ? '气' : '蓄力'}缺口，进入${healthStateName(player)}。`); if (player.currentHp <= 0) { player.alive = false; eliminated.add(player.id); } }
     const strategy = requireAction(action.actionId).napoleonSequence;
-    if (strategy) player.commandBuffer = consumeNapoleonStrategy(player.commandBuffer ?? '', strategy, action.strategySequence === 'append');
+    if (strategy) player.commandBuffer = consumeNapoleonStrategy(player.commandBuffer ?? '', strategy, action.napoleonStrategySource === 'command' ? action.napoleonCommand : undefined);
     for (const [resourceId, amount] of Object.entries(action.resourceSpend ?? {})) player.resources[resourceId] = resourceValue(player, resourceId) - amount;
     if (action.actionId === 'filthy_bloodline') { setBuff(player, 'sleeping', 2); setBuff(player, 'sleep_progress', 1); }
   }
@@ -297,13 +303,13 @@ function resolveGlobalCounter(effectIds: readonly EffectHandlerId[], targetName:
 
 function resolveNapoleonStrategy(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const sequence = definition.napoleonSequence!; const direct = actionTargets(submitted); const levelBefore = submittedActionLevel(actor, submitted);
-  const directAttack = ['AA', 'AD', 'AT', 'TA', 'AAA', 'AAT', 'TAA', 'TAD', 'TTA', 'AADD', 'TATA', 'TTAA'].includes(sequence);
+  const directAttack = ['AA', 'AD', 'AT', 'TA', 'AAA', 'AAT', 'TAA', 'TAD', 'TTA', 'AADD', 'TATA'].includes(sequence);
   if (directAttack) {
     const target = players.get(direct[0]); const hpBefore = target?.currentHp;
     const tactical = buffStacks(actor, 'tactical_advantage');
-    const level = sequence === 'TTAA' ? levelBefore + tactical * 0.5 : levelBefore;
+    const level = sequence === 'TTA' ? levelBefore + tactical * 0.5 : levelBefore;
     resolveAttackTargets(actor, submitted, definition, direct, level, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
-    if (sequence === 'AAT' && target && hpBefore !== undefined && target.currentHp < hpBefore) setBuff(actor, 'napoleon_speed', 1, 2);
+    if (sequence === 'AAT' && target && hpBefore !== undefined && target.currentHp < hpBefore) setBuff(actor, 'napoleon_speed', 2, 2);
     if (['AT', 'TAD'].includes(sequence) && target?.alive) setBuff(target, 'calibrated', 1, 2);
     if (sequence === 'TATA' && target?.alive) { setBuff(target, 'attack_forbidden', 1, 2); setBuff(actor, 'napoleon_speed', 2, 2); }
     if (['TTA', 'TTAA'].includes(sequence)) removeBuff(actor, 'tactical_advantage');
@@ -313,13 +319,20 @@ function resolveNapoleonStrategy(actor: CombatPlayer, submitted: SubmittedAction
     if (sequence === 'ATA') for (const targetId of targets) { const target = players.get(targetId); if (target?.alive) setBuff(target, 'swayed', 1, 2); }
   } else if (sequence === 'AAAAA') {
     resolveAttackTargets(actor, submitted, definition, Array.from(players.values()).filter((target) => target.id !== actor.id && target.alive).map((target) => target.id), levelBefore, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
+  } else if (sequence === 'TTAA') {
+    const target = players.get(direct[0]);
+    const targets = target ? playersOnCells(actor, cellsAround(target.gridIndex ?? 0, players.size * 2, 2), players) : [];
+    const tactical = buffStacks(actor, 'tactical_advantage');
+    resolveAttackTargets(actor, submitted, definition, targets, levelBefore + tactical * 0.5, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
+    removeBuff(actor, 'tactical_advantage');
   }
-  if (sequence === 'DT') setBuff(actor, 'defense_deployment', 1, 2);
-  if (sequence === 'TT') { setBuff(actor, 'napoleon_speed', 1, 2); setBuff(actor, 'napoleon_level', 1, 2); }
-  if (sequence === 'TTT') { setBuff(actor, 'napoleon_speed', 2, 2); setBuff(actor, 'napoleon_level', 1, 2); }
-  if (sequence === 'TTTT') setBuff(actor, 'napoleon_divine', buffStacks(actor, 'napoleon_divine') + 1);
+  if (sequence === 'AT') addTacticalAdvantage(actor, 1, 3);
+  if (sequence === 'DT') { setBuff(actor, 'defense_deployment', 1, 2); addTacticalAdvantage(actor, 1, 3); }
+  if (sequence === 'TT') addTacticalAdvantage(actor, 2, 3);
+  if (sequence === 'TTT') addTacticalAdvantage(actor, 3, 3);
+  if (sequence === 'TTTT') { addTacticalAdvantage(actor, 4, 4); setBuff(actor, 'napoleon_divine', Math.min(3, buffStacks(actor, 'napoleon_divine') + 1)); }
   if (sequence === 'DDDDD') setBuff(actor, 'unfallen_fortress', 1, 4);
-  if (sequence === 'TTTTT') setBuff(actor, 'napoleon_emperor');
+  if (sequence === 'TTTTT') { addTacticalAdvantage(actor, 5, 5); setBuff(actor, 'napoleon_emperor', 1, 6); }
   if (sequence === 'TATAT') { setBuff(actor, 'elba_unlocked'); setBuff(actor, 'hundred_days'); }
   summary.push(`${actor.nickname} 执行「${definition.name}」，剩余指令缓冲为 ${actor.commandBuffer || '空'}。`);
 }
@@ -334,7 +347,7 @@ function resolveNapoleonCounter(actor: CombatPlayer, submitted: SubmittedAction 
     return adjustedAttackLevel(attacker, actor, action, players.size * 2) - defense < 0.5;
   }).sort(([leftId, left], [rightId, right]) => adjustedAttackLevel(players.get(rightId)!, actor, right, players.size * 2) - adjustedAttackLevel(players.get(leftId)!, actor, left, players.size * 2));
   const targetId = incoming[0]?.[0]; if (!targetId) return;
-  const level = (sequence === 'DA' ? 1 : 1.5) + buffStacks(actor, 'tactical_advantage') * 0.5 + buffStacks(actor, 'napoleon_divine') * 0.5 + (actor.buffs?.has('hundred_days') ? 0.5 : 0);
+  const level = 1.5 + buffStacks(actor, 'tactical_advantage') * 0.5;
   const hpBefore = players.get(targetId)?.currentHp;
   resolveAttackTargets(actor, submitted, requireAction(submitted.actionId), [targetId], level, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
   const target = players.get(targetId); if (sequence === 'DAD' && target?.alive && hpBefore !== undefined && target.currentHp < hpBefore) setBuff(target, 'swayed', 1, 2);
@@ -459,6 +472,10 @@ function potentialTargets(actor: CombatPlayer, action: SubmittedAction, players:
   if (effect === 'dream_path') { const target = players.get(actionTargets(action)[0]); return target ? playersOnCells(actor, clockwiseCells(actor.gridIndex ?? 0, target.gridIndex ?? 0, count), players) : []; }
   if (effect === 'hangup') return Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id).map((target) => target.id);
   const sequence = requireAction(action.actionId).napoleonSequence;
+  if (sequence === 'TTAA') {
+    const target = players.get(actionTargets(action)[0]);
+    return target ? playersOnCells(actor, cellsAround(target.gridIndex ?? 0, count, 2), players) : [];
+  }
   if (sequence === 'ATA') return playersOnCells(actor, cellsAround(actor.gridIndex ?? 0, count, 1), players);
   if (sequence === 'AAAA') return playersOnCells(actor, cellsAround(actor.gridIndex ?? 0, count, 2), players);
   if (sequence === 'AAAAA') return Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id).map((target) => target.id);
@@ -543,7 +560,7 @@ function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | un
   if (action.actionId === 'see_through') level = 0.5 + buffStacks(player, 'tempered');
   if (action.actionId === 'shatter') level = 1 + buffStacks(player, 'tempered');
   if (action.actionId === 'transcend_detonate') level = 3 + buffStacks(player, 'transcendence_progress') * 0.5;
-  if (player.characterId === 'napoleon') level += buffStacks(player, 'tactical_advantage') * 0.5 + buffStacks(player, 'napoleon_divine') * 0.5 + (player.buffs?.has('hundred_days') ? 0.5 : 0) + buffStacks(player, 'napoleon_level');
+  if (player.characterId === 'napoleon') level += buffStacks(player, 'tactical_advantage') * 0.5;
   if ((player.buffs?.has('transcendence') || player.buffs?.has('transcendence_permanent')) && action.actionId !== 'transcend_detonate') level += buffStacks(player, 'transcendence_progress') * 0.5;
   if (player.buffs?.has('iridescence_afterglow')) level = Math.max(1.5, level);
   return level;
@@ -564,19 +581,22 @@ function actionSpeed(playerId: string, action: SubmittedAction, player: CombatPl
   if (player?.characterId === 'ku' && action.actionId === 'shatter') speed = 1 + buffStacks(player, 'tempered');
   if (player?.buffs?.has('transcendence') || player?.buffs?.has('transcendence_permanent')) speed += buffStacks(player, 'transcendence_progress');
   if (player?.buffs?.has('swayed')) speed -= 1;
-  if (player?.characterId === 'napoleon') speed += buffStacks(player, 'napoleon_speed');
+  if (player?.characterId === 'napoleon') speed += buffStacks(player, 'napoleon_speed') + buffStacks(player, 'napoleon_divine') * 0.5;
   return speed;
 }
 
 function submittedDefenseLevel(player: CombatPlayer, action: SubmittedAction, definition: ActionDefinition): number {
   if (definition.defenseLevel === undefined) return submittedActionLevel(player, action);
-  return definition.defenseLevel + buffStacks(player, 'tactical_advantage') * 0.5 + buffStacks(player, 'napoleon_divine') * 0.5
-    + (player.buffs?.has('hundred_days') ? 0.5 : 0) + buffStacks(player, 'napoleon_level');
+  return definition.defenseLevel + buffStacks(player, 'tactical_advantage') * 0.5;
 }
 
-function consumeNapoleonStrategy(buffer: string, sequence: string, append: boolean): string {
-  const prepared = append ? `${buffer}${sequence.at(-1)}`.slice(-6) : buffer;
-  const index = prepared.indexOf(sequence);
+function addTacticalAdvantage(player: CombatPlayer, amount: number, remainingTurns: number): void {
+  setBuff(player, 'tactical_advantage', Math.min(6, buffStacks(player, 'tactical_advantage') + amount), remainingTurns + 1);
+}
+
+function consumeNapoleonStrategy(buffer: string, sequence: string, command?: 'A' | 'D' | 'T'): string {
+  const prepared = command ? `${buffer}${command}`.slice(-6) : buffer;
+  const index = command ? prepared.length - sequence.length : prepared.indexOf(sequence);
   if (index < 0) return prepared;
   return `${prepared.slice(0, index)}${prepared.slice(index + sequence.length)}`;
 }

@@ -1,4 +1,4 @@
-import { actionById, buffById, characterById, napoleonStrategyModes } from '@energy-duel/shared';
+import { actionById, buffById, canExecuteNapoleonStrategy, characterById, napoleonStrategyFromCommand } from '@energy-duel/shared';
 
 export interface PositionedPlayer {
   accountId: string;
@@ -28,10 +28,10 @@ export async function claimRoomCode(roomCode: string, exists: () => boolean | Pr
 
 export function releaseRoomCode(roomCode: string): void { claimedRoomCodes.delete(roomCode); }
 
-export function tickScopedBuffs<T extends { remainingTurns: number }>(scopes: Iterable<Map<string, T>>, durationFor: (buffId: string) => number | undefined): void {
+export function tickScopedBuffs<T extends { remainingTurns: number; permanent: boolean }>(scopes: Iterable<Map<string, T>>): void {
   for (const buffs of scopes) {
     for (const [buffId, stored] of buffs) {
-      if (durationFor(buffId) === undefined) continue;
+      if (stored.permanent) continue;
       stored.remainingTurns -= 1;
       if (stored.remainingTurns <= 0) buffs.delete(buffId);
     }
@@ -74,7 +74,8 @@ export function isActionUnlocked(characterId: string, formId: string, actionId: 
   const grantedByBuff = Array.from(currentBuffs.keys()).some((buffId) => buffById.get(buffId)?.grantedActionIds?.includes(actionId));
   if (!visibleInTree && !grantedByBuff) return false;
   const action = actionById.get(actionId);
-  if (action?.napoleonSequence && napoleonStrategyModes(commandBuffer, action.napoleonSequence).length === 0) return false;
+  if (action?.napoleonSequence && !canExecuteNapoleonStrategy(commandBuffer, action.napoleonSequence)
+    && napoleonStrategyFromCommand(commandBuffer, action.napoleonSequence.at(-1) as 'A' | 'D' | 'T')?.id !== action.id) return false;
   const requirements = action?.unlockRequirements;
   return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId))
     && (requirements?.noneBuffs ?? []).every((buffId) => !currentBuffs.has(buffId))

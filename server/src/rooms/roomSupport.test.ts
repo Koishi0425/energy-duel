@@ -88,18 +88,18 @@ describe('room support', () => {
   it('shows Napoleon strategies only for an executable ordered buffer', () => {
     expect(isActionUnlocked('napoleon', 'base', 'nap_strategy_aa', [], {}, '')).toBe(false);
     expect(isActionUnlocked('napoleon', 'base', 'nap_strategy_aa', [], {}, 'A')).toBe(true);
+    expect(isActionUnlocked('napoleon', 'base', 'nap_strategy_aa', [], {}, 'AA')).toBe(true);
     expect(isActionUnlocked('napoleon', 'base', 'transform', [], {}, 'TATAT')).toBe(false);
     expect(isActionUnlocked('napoleon', 'base', 'transform', ['elba_unlocked'], {}, '')).toBe(true);
   });
 
   it('ticks finite buffs in inactive character scopes without removing infinite buffs', () => {
-    const gonggang = new Map([['timed', { remainingTurns: 2 }], ['infinite', { remainingTurns: 0 }]]);
-    const jiaosila = new Map<string, { remainingTurns: number }>();
-    const durationFor = (id: string) => id === 'timed' ? 2 : undefined;
-    tickScopedBuffs([gonggang, jiaosila], durationFor);
+    const gonggang = new Map([['timed', { remainingTurns: 2, permanent: false }], ['infinite', { remainingTurns: 0, permanent: true }]]);
+    const jiaosila = new Map<string, { remainingTurns: number; permanent: boolean }>();
+    tickScopedBuffs([gonggang, jiaosila]);
     expect(gonggang.get('timed')?.remainingTurns).toBe(1);
     expect(gonggang.has('infinite')).toBe(true);
-    tickScopedBuffs([gonggang, jiaosila], durationFor);
+    tickScopedBuffs([gonggang, jiaosila]);
     expect(gonggang.has('timed')).toBe(false);
     expect(gonggang.has('infinite')).toBe(true);
   });

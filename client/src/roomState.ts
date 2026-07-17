@@ -26,6 +26,7 @@ export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined
       buffId: buff.buffId,
       stacks: buff.stacks,
       remainingTurns: buff.remainingTurns,
+      permanent: buff.permanent,
       sourcePlayerId: buff.sourcePlayerId,
     }));
     return {

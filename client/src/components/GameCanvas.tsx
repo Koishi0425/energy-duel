@@ -22,7 +22,7 @@ interface Props {
   onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
-interface TokenView { root: Container; portrait: Sprite; ring: Graphics; name: Text; status: Text; assetUrl: string }
+interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
 
 export default function GameCanvas(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -135,9 +135,10 @@ export default function GameCanvas(props: Props) {
 function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {
   const root = new Container(); const ring = new Graphics();
   const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL)); portrait.anchor.set(0.5, 1);
+  const commandBuffer = new Text({ style: { fill: 0xffdf68, fontWeight: '700', dropShadow: true, align: 'center' } }); commandBuffer.anchor.set(0.5, 1);
   const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } }); name.anchor.set(0.5, 0);
   const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
-  root.addChild(ring, portrait, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
+  root.addChild(ring, portrait, commandBuffer, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
   const currentPlayer = () => propsRef.current.players.find((candidate) => candidate.playerId === playerId);
   root.on('pointerover', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
   root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
@@ -147,7 +148,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
     if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
     else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
   });
-  return { root, portrait, ring, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
+  return { root, portrait, ring, commandBuffer, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
@@ -164,6 +165,8 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   view.root.alpha = !player.connected ? 0.22 : !player.alive ? 0.38 : props.targeting && !targetable ? 0.28 : 1;
   const ringRadius = portraitHeight * 0.34;
   view.ring.clear().ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32)).fill({ color: player.color, alpha: 0.3 }).stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
+  view.commandBuffer.visible = !obscured && player.characterId === 'napoleon' && player.commandBuffer.length > 0;
+  view.commandBuffer.text = `指令 ${player.commandBuffer}`; view.commandBuffer.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 9 : 11; view.commandBuffer.position.set(0, 4 - portraitHeight);
   view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
   const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
   view.status.text = obscured ? '状态未知' : player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);

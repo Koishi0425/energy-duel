@@ -9,10 +9,10 @@ describe('announcements', () => {
     );
   });
 
-  it('publishes the latest follow-up announcement first without changing the release version', () => {
+  it('publishes the v0.4.0 announcement first', () => {
     expect(announcements[0]).toMatchObject({
-      id: '2026-07-16-v030-followup-fixes',
-      version: 'v0.3.0',
+      id: '2026-07-17-v040-commanders-and-counterplay',
+      version: 'v0.4.0',
     });
   });
 

@@ -275,10 +275,22 @@ export function isResourceVisibleForCharacter(resourceId: string, characterId: s
   return definition?.alwaysVisible === true || definition?.characterIds?.includes(characterId) === true || Math.abs(current) > 1e-6;
 }
 
-export type NapoleonStrategyMode = 'execute' | 'append';
-export function napoleonStrategyModes(commandBuffer: string, sequence: string): NapoleonStrategyMode[] {
-  const modes: NapoleonStrategyMode[] = [];
-  if (commandBuffer.includes(sequence)) modes.push('execute');
-  if (`${commandBuffer}${sequence.at(-1)}`.slice(-6).includes(sequence)) modes.push('append');
-  return modes;
+export type NapoleonCommand = 'A' | 'D' | 'T';
+
+export function napoleonCommandForAction(actionId: string): NapoleonCommand | undefined {
+  if (actionId === 'attack_order') return 'A';
+  if (actionId === 'defense_order') return 'D';
+  if (actionId === 'tactical_order') return 'T';
+  return undefined;
+}
+
+export function canExecuteNapoleonStrategy(commandBuffer: string, sequence: string): boolean {
+  return commandBuffer.includes(sequence);
+}
+
+export function napoleonStrategyFromCommand(commandBuffer: string, command: NapoleonCommand): ActionDefinition | undefined {
+  const nextBuffer = `${commandBuffer}${command}`.slice(-6);
+  return gameConfig.actions
+    .filter((action) => action.napoleonSequence && nextBuffer.endsWith(action.napoleonSequence))
+    .sort((left, right) => (right.napoleonSequence!.length - left.napoleonSequence!.length) || left.id.localeCompare(right.id))[0];
 }

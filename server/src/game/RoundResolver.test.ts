@@ -432,11 +432,12 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.buffs?.has('sleeping')).toBe(false); expect(actor.buffs?.has('mud_awakened')).toBe(true); expect(actor.resources.energy).toBe(3);
   });
 
-  it('appends and consumes an ordered Napoleon strategy sequence', () => {
+  it('uses a command to trigger and consume the longest matching Napoleon strategy', () => {
     const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
     actor.characterId = 'napoleon'; actor.commandBuffer = 'A'; actor.currentHp = actor.maxHp = 2; target.currentHp = target.maxHp = 2;
-    const strategy = { actionId: 'nap_strategy_aa', targetId: 'b', strategySequence: 'append' };
+    const strategy = { actionId: 'nap_strategy_aa', targetId: 'b', napoleonStrategySource: 'command' as const, napoleonCommand: 'A' as const };
     expect(() => validateAction(actor, strategy, players)).not.toThrow();
+    expect(() => validateAction(actor, { actionId: 'attack_order', targetId: 'b' }, players)).not.toThrow();
     resolveRound(players, actions(['a', strategy], ['b', { actionId: 'charge' }]));
     expect(actor.commandBuffer).toBe('');
     expect(target.currentHp).toBe(1);
@@ -446,7 +447,7 @@ describe('RoundResolver JSON-driven actions', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 1]); const actor = players.get('a')!;
     actor.characterId = 'napoleon'; actor.commandBuffer = 'AD'; actor.currentHp = actor.maxHp = 2;
     resolveRound(players, actions(
-      ['a', { actionId: 'nap_strategy_ad', targetId: 'b', strategySequence: 'execute' }],
+      ['a', { actionId: 'nap_strategy_ad', targetId: 'b', napoleonStrategySource: 'buffer' }],
       ['b', { actionId: 'charge' }],
       ['c', { actionId: 'slash', targetId: 'a' }],
     ));
@@ -458,7 +459,7 @@ describe('RoundResolver JSON-driven actions', () => {
     const players = roster(['a', 0], ['b', 1]); const actor = players.get('a')!; const attacker = players.get('b')!;
     actor.characterId = 'napoleon'; actor.commandBuffer = 'DA'; actor.currentHp = actor.maxHp = 2; attacker.currentHp = attacker.maxHp = 2;
     resolveRound(players, actions(
-      ['a', { actionId: 'nap_strategy_da', strategySequence: 'execute' }],
+      ['a', { actionId: 'nap_strategy_da', napoleonStrategySource: 'buffer' }],
       ['b', { actionId: 'fist', targetId: 'a' }],
     ));
     expect(actor.currentHp).toBe(2);
@@ -469,9 +470,17 @@ describe('RoundResolver JSON-driven actions', () => {
   it('unlocks Napoleon transformation only through Elba Escape', () => {
     const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
     actor.characterId = 'napoleon'; actor.commandBuffer = 'TATAT'; actor.currentHp = actor.maxHp = 2;
-    resolveRound(players, actions(['a', { actionId: 'nap_strategy_tatat', strategySequence: 'execute' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'nap_strategy_tatat', napoleonStrategySource: 'buffer' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffs?.has('elba_unlocked')).toBe(true);
     expect(actor.buffs?.has('hundred_days')).toBe(true);
+  });
+
+  it('grants tactical advantage only when a Napoleon strategy or engine resolves', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = 'TT'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'nap_strategy_tt', napoleonStrategySource: 'buffer' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.tactical_advantage).toBe(2);
+    expect(actor.commandBuffer).toBe('');
   });
 
   it('does not grant basic resources to Napoleon when damaged', () => {

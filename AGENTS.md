@@ -227,7 +227,14 @@ Run commands from the repository root:
   reachable through a standard-room transformation list or accepted by the
   standard-room server. Napoleon replaces the normal skill tree with the three
   command actions and synchronizes an ordered, six-command public buffer; never
-  encode command order as unordered buff stacks.
+  encode command order as unordered buff stacks. Strategy cards include both
+  existing buffer sequences and the longest sequence formed by appending their
+  final command at the buffer tail. Existing-buffer execution wins when both
+  apply. Base command cards always remain ordinary commands; clients send a
+  strategy card's resulting source explicitly and the server validates it.
+  Buff definitions may supply a default duration, but synchronized runtime Buff
+  state owns the actual remaining turns and its explicit permanent flag. Tick
+  every non-permanent Buff so effects may set or refresh arbitrary durations.
 - The login/lobby shell must stay independent of Ant Design and PixiJS. Battle
   UI and the in-app tutorial are lazy-loaded. Use `?perf=1` to display local FPS,
   slow-frame, long-task, RTT, and optional heap metrics while profiling.

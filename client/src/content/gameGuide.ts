@@ -201,8 +201,8 @@ export const characterGuides: CharacterGuideDefinition[] = [
   },
   {
     characterId: 'napoleon', role: '公开指令与策略编排', difficulty: '专家',
-    summary: '放弃基础资源与全部通用招式，以攻击、防守、战术三种指令组织公开的指令缓冲。',
-    gamePlan: ['攻击负责施压，防守维持生存，战术指令在后续回合转化为战术优势。', '指令缓冲最多保留最近 6 条。'],
+    summary: '放弃基础资源与全部通用招式，以攻击、防守、战术三种指令编排策略序列，择机执行策略获取有时限的战术优势。',
+    gamePlan: ['攻击负责施压，防守维持生存，执行策略获取战术优势后再用强化后的指令压制对手。', '指令缓冲最多保留最近 6 条，公开可见。'],
     keyMechanics: [{ title: '技能树替换', description: '变身后只剩三种指令，完成厄尔巴逃逸前不能再次变身。' }],
     featuredActionIds: ['attack_order', 'defense_order', 'tactical_order'],
   },

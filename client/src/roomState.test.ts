@@ -12,7 +12,7 @@ describe('readSyncedPlayers', () => {
       gridIndex: 0, color: 0x6d7cff, ready: true, alive: true, currentHp: 1, maxHp: 1,
       characterId: 'default_character', currentFormId: 'base', submitted: false, connected: true, resultConfirmed: false,
       resources: { values: () => [{ resourceId: 'energy', current: 2, max: 0 }][Symbol.iterator]() },
-      buffs: { values: () => [{ instanceId: 'frozen-1', buffId: 'frozen', stacks: 1, remainingTurns: 2, sourcePlayerId: 'player-2' }][Symbol.iterator]() },
+      buffs: { values: () => [{ instanceId: 'frozen-1', buffId: 'frozen', stacks: 1, remainingTurns: 2, permanent: false, sourcePlayerId: 'player-2' }][Symbol.iterator]() },
     };
     const result = readSyncedPlayers([player]);
     expect(result[0].resources.energy.current).toBe(2);
