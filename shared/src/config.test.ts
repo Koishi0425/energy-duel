@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { circularDistance } from './geometry.js';
-import { gameConfig, validateGameConfig } from './config.js';
+import { gameConfig, napoleonStrategyModes, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(12);
-    expect(gameConfig.actions).toHaveLength(43);
+    expect(gameConfig.version).toBe(14);
+    expect(gameConfig.actions).toHaveLength(87);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
-    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock']);
+    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku']);
     expect(gameConfig.characters[0].forms[0].unlockedActions).toEqual(['charge', 'gain_charge', 'defend', 'steal', 'double_steal', 'chop', 'super_defend', 'transform']);
     expect(gameConfig.actions.find((action) => action.id === 'transform')?.cost).toEqual({});
-    expect(gameConfig.characters.slice(1).every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
+    expect(gameConfig.characters.slice(1).filter((character) => character.id !== 'napoleon').every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
     expect(gameConfig.characters.every((character) => Object.keys(character.transformationCost).length === 0)).toBe(true);
     expect(gameConfig.buffs.map((buff) => buff.id)).toEqual(expect.arrayContaining(['axe_raised', 'fragile']));
     expect(gameConfig.actions.find((action) => action.id === 'defend')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'defend_broken' });
@@ -19,20 +19,24 @@ describe('game configuration', () => {
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
     expect(gameConfig.assets.every((asset) => asset.url.endsWith('.webp') && asset.previewUrl?.endsWith('.webp'))).toBe(true);
-    expect(gameConfig.characters.slice(4).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
+    expect(gameConfig.characters.slice(4, 9).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
   });
 
   it('keeps every base skill after transformation and only appends character skills', () => {
     const base = gameConfig.characters[0].forms[0].unlockedActions.filter((id) => id !== 'transform');
-    for (const character of gameConfig.characters.slice(1)) {
+    for (const character of gameConfig.characters.slice(1).filter((character) => character.id !== 'napoleon')) {
       expect(character.forms[0].unlockedActions).toEqual(expect.arrayContaining(base));
     }
+    expect(gameConfig.characters.find((character) => character.id === 'napoleon')?.forms[0].unlockedActions.slice(0, 3)).toEqual(['attack_order', 'defense_order', 'tactical_order']);
+    expect(gameConfig.actions.filter((action) => action.napoleonSequence)).toHaveLength(29);
+    expect(gameConfig.characters.every((character) => !character.transformations.includes('star_god'))).toBe(true);
     expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('axe_defend');
     expect(gameConfig.characters[3].forms[0].unlockedActions).toEqual(expect.arrayContaining(['stardust', 'sovereign_blade', 'summon_forth']));
     expect(gameConfig.actions.find((action) => action.id === 'axe_defend')?.unlockRequirements?.allBuffs).toEqual(['axe_raised']);
     expect(gameConfig.actions.find((action) => action.id === 'summon_forth')?.unlockRequirements).toBeUndefined();
+    expect(gameConfig.buffs.find((buff) => buff.id === 'sovereign_blade_forged')?.description).toBe('当前层数即君王之剑的锻造等级。');
   });
 
   it('rejects duplicate ids and invalid references', () => {
@@ -66,6 +70,13 @@ describe('game configuration', () => {
     const invalid = structuredClone(gameConfig) as any;
     invalid.actions[0].target.selectionTiming = 'late-ish';
     expect(() => validateGameConfig(invalid)).toThrow(/selection timing/);
+  });
+
+  it('derives explicit Napoleon execution modes from the ordered buffer', () => {
+    expect(napoleonStrategyModes('A', 'AA')).toEqual(['append']);
+    expect(napoleonStrategyModes('AA', 'AA')).toEqual(['execute', 'append']);
+    expect(napoleonStrategyModes('DTD', 'DT')).toEqual(['execute', 'append']);
+    expect(napoleonStrategyModes('', 'AA')).toEqual([]);
   });
 
   it('marks Stardust as all-in and assigns special-resource visibility', () => {

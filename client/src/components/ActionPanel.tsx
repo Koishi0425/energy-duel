@@ -4,6 +4,7 @@ import {
   buffById,
   characterById,
   resourceById,
+  napoleonStrategyModes,
   type ActionCategory,
   type ActionDefinition,
   type SyncedPlayer,
@@ -44,7 +45,8 @@ export default function ActionPanel({ player, selectedActionId, submittedLabel, 
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
   const grantedIds = player.buffs.flatMap((buff) => buffById.get(buff.buffId)?.grantedActionIds ?? []);
   const unlockedIds = [...new Set([...(form?.unlockedActions.filter((id) => id !== 'transform') ?? []), ...grantedIds])];
-  const unlockedActions = unlockedIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => Boolean(action));
+  const unlockedActions = unlockedIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => Boolean(action))
+    .filter((action) => !action.napoleonSequence || napoleonStrategyModes(player.commandBuffer, action.napoleonSequence).length > 0);
   const lockedActionIds = new Set(unlockedActions.filter((action) => !meetsUnlockRequirements(player, action)).map((action) => action.id));
   const normalizedLayout = reconcileLayout(layout, unlockedActions);
   const detachedIds = new Set(normalizedLayout.detachedCategoryIds);
@@ -96,7 +98,7 @@ export default function ActionPanel({ player, selectedActionId, submittedLabel, 
 
   return <>
     <div className={`action-panel-content${editing ? ' is-editing' : ''}`}>
-      <div className="action-panel-tools"><span>{editing ? '编辑模式：拖动技能进行排序或跨分类移动' : '选择本回合行动'}</span><div><Button size="small" type={editing ? 'primary' : 'default'} onClick={() => setEditing((value) => !value)}>{editing ? '完成' : '编辑面板'}</Button>{editing && <Button size="small" type="text" onClick={() => { setLayout(createDefaultLayout()); setActiveCategoryId('base'); }}>恢复默认</Button>}</div></div>
+      <div className="action-panel-tools"><span>{editing ? '编辑模式：拖动技能进行排序或跨分类移动' : player.characterId === 'napoleon' ? `指令缓冲：${player.commandBuffer || '空'}` : '选择本回合行动'}</span><div><Button size="small" type={editing ? 'primary' : 'default'} onClick={() => setEditing((value) => !value)}>{editing ? '完成' : '编辑面板'}</Button>{editing && <Button size="small" type="text" onClick={() => { setLayout(createDefaultLayout()); setActiveCategoryId('base'); }}>恢复默认</Button>}</div></div>
       {tabItems.length > 0 ? <Tabs activeKey={selectedTab} onChange={setActiveCategoryId} items={tabItems} size="small" tabBarExtraContent={editing ? <Button size="small" type="dashed" onClick={addCategory}>＋ 分类</Button> : undefined} /> : <div className="empty-action-categories"><p className="muted">所有分类均已独立显示</p>{editing && <Button size="small" onClick={addCategory}>＋ 添加分类</Button>}</div>}
       {editing && normalizedLayout.hiddenActionIds.length > 0 && <div className="hidden-action-tray"><span>已隐藏：</span>{normalizedLayout.hiddenActionIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => action !== undefined).filter((action) => unlockedIds.includes(action.id)).map((action) => <Button key={action.id} size="small" onClick={() => restoreAction(action.id)}>＋ {action.name}</Button>)}</div>}
       {!editing && <Tooltip title={transformations.length ? (canTransform ? '选择其他角色；消耗由目标角色决定' : '当前资源不足') : '当前没有其他可用角色'} mouseEnterDelay={0.6}>
@@ -174,6 +176,17 @@ function formatAmount(value: number): string { return Math.abs(value - 1 / 3) < 
 function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): string {
   if (action.defenseBreak?.mode === 'persistent' && player.buffs.some((buff) => buff.buffId === action.defenseBreak?.brokenBuffId)) return '0（已破碎）';
   if (action.variable) return `${action.variable.levelPerPower}n`;
+  if (player.characterId === 'napoleon' && (action.napoleonSequence || ['attack_order', 'defense_order'].includes(action.id))) {
+    const stacks = (buffId: string) => player.buffs.find((buff) => buff.buffId === buffId)?.stacks ?? 0;
+    const tactical = stacks('tactical_advantage');
+    const bonus = tactical * 0.5 + stacks('napoleon_divine') * 0.5 + (stacks('hundred_days') > 0 ? 0.5 : 0) + stacks('napoleon_level');
+    const attackLevel = action.level + bonus + (action.napoleonSequence === 'TTAA' ? tactical * 0.5 : 0);
+    const defenseLevel = action.defenseLevel === undefined ? undefined : action.defenseLevel + bonus;
+    if (defenseLevel !== undefined && action.category === 'attack') return `攻 ${formatAmount(attackLevel)} / 防 ${formatAmount(defenseLevel)}`;
+    if (defenseLevel !== undefined) return formatAmount(defenseLevel);
+    if (action.category === 'special') return '—';
+    return formatAmount(attackLevel);
+  }
   return action.level >= 999 ? '∞' : String(action.level);
 }
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }

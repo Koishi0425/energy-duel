@@ -12,6 +12,10 @@ export const EFFECT_HANDLERS = [
   'silent_fear', 'haunting_shadows', 'rockfall_hammer', 'filthy_bloodline',
   'nightmare_dash',
   'continue_sleep',
+  'immortal_palm', 'rule_the_world',
+  'attack_order', 'defense_order', 'tactical_order', 'napoleon_strategy',
+  'harmony_with_light', 'nebula_shock', 'create_star_core', 'transcend_fuse', 'transcend_detonate',
+  'void_pierce', 'censure', 'redirect', 'see_through', 'shatter',
 ] as const;
 export type EffectHandlerId = typeof EFFECT_HANDLERS[number];
 
@@ -82,12 +86,14 @@ export interface ActionDefinition {
   vfxId: string;
   variable?: VariableActionDefinition;
   usesAllVariableResource?: boolean;
-  damageType?: 'generic' | 'blunt' | 'slash' | 'magic';
+  damageType?: 'generic' | 'blunt' | 'slash' | 'magic' | 'true';
   anyResourceCost?: number;
   targetsGridCell?: boolean;
   canSkipDeferred?: boolean;
   defenseBreak?: DefenseBreakDefinition;
   cooldownReduction?: CooldownReductionDefinition;
+  napoleonSequence?: string;
+  defenseLevel?: number;
   unlockRequirements?: {
     allBuffs?: string[];
     noneBuffs?: string[];
@@ -165,11 +171,11 @@ export function validateGameConfig(input: unknown): GameConfig {
   }
   for (const action of config.actions) {
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
-    if (action.damageType && !['generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
+    if (action.damageType && !['generic', 'blunt', 'slash', 'magic', 'true'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
     if (action.anyResourceCost !== undefined && (!Number.isInteger(action.anyResourceCost) || action.anyResourceCost < 1)) throw new Error(`Action ${action.id} has an invalid flexible cost.`);
     if (action.defenseBreak) {
       const { mode, brokenBuffId } = action.defenseBreak;
-      if (action.category !== 'defense' || !['persistent', 'recreated'].includes(mode)
+      if ((action.category !== 'defense' && action.defenseLevel === undefined) || !['persistent', 'recreated'].includes(mode)
         || (mode === 'persistent' && (!brokenBuffId || !buffIds.has(brokenBuffId)))
         || (mode === 'recreated' && brokenBuffId !== undefined)) {
         throw new Error(`Action ${action.id} has an invalid defense break rule.`);
@@ -179,6 +185,9 @@ export function validateGameConfig(input: unknown): GameConfig {
       || !Number.isInteger(action.cooldownReduction.stacks) || action.cooldownReduction.stacks < 1)) {
       throw new Error(`Action ${action.id} has an invalid cooldown reduction.`);
     }
+    if (action.napoleonSequence !== undefined && (!/^[ADT]{2,5}$/.test(action.napoleonSequence)
+      || action.effects[0]?.handler !== 'napoleon_strategy')) throw new Error(`Action ${action.id} has an invalid Napoleon sequence.`);
+    if (action.defenseLevel !== undefined && (!Number.isFinite(action.defenseLevel) || action.defenseLevel < 0)) throw new Error(`Action ${action.id} has an invalid defense level.`);
     if (!targetModes.has(action.target?.mode)) throw new Error(`Action ${action.id} has an invalid target mode.`);
     if (action.target.selectionTiming && !['planned', 'deferred'].includes(action.target.selectionTiming)) {
       throw new Error(`Action ${action.id} has an invalid target selection timing.`);
@@ -261,6 +270,15 @@ export const characterById = new Map(gameConfig.characters.map((character) => [c
 export const assetById = new Map(gameConfig.assets.map((asset) => [asset.id, asset]));
 
 export function isResourceVisibleForCharacter(resourceId: string, characterId: string, current: number): boolean {
+  if (characterId === 'napoleon' && ['energy', 'charge'].includes(resourceId)) return false;
   const definition = resourceById.get(resourceId);
   return definition?.alwaysVisible === true || definition?.characterIds?.includes(characterId) === true || Math.abs(current) > 1e-6;
+}
+
+export type NapoleonStrategyMode = 'execute' | 'append';
+export function napoleonStrategyModes(commandBuffer: string, sequence: string): NapoleonStrategyMode[] {
+  const modes: NapoleonStrategyMode[] = [];
+  if (commandBuffer.includes(sequence)) modes.push('execute');
+  if (`${commandBuffer}${sequence.at(-1)}`.slice(-6).includes(sequence)) modes.push('append');
+  return modes;
 }

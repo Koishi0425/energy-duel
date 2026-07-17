@@ -3,11 +3,12 @@ import type { SyncedBuff, SyncedPlayer, SyncedResource } from '@energy-duel/shar
 interface RawResourceCollection { values(): IterableIterator<SyncedResource> }
 interface RawBuffCollection { values(): IterableIterator<SyncedBuff> }
 
-export interface RawSyncedPlayer extends Omit<SyncedPlayer, 'resources' | 'buffs' | 'controllerPlayerId' | 'isTrainingDummy'> {
+export interface RawSyncedPlayer extends Omit<SyncedPlayer, 'resources' | 'buffs' | 'controllerPlayerId' | 'isTrainingDummy' | 'commandBuffer'> {
   resources?: RawResourceCollection;
   buffs?: RawBuffCollection;
   controllerPlayerId?: string;
   isTrainingDummy?: boolean;
+  commandBuffer?: string;
 }
 
 export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined): SyncedPlayer[] {
@@ -47,6 +48,7 @@ export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined
       resultConfirmed: player.resultConfirmed ?? false,
       controllerPlayerId: player.controllerPlayerId ?? player.playerId,
       isTrainingDummy: player.isTrainingDummy ?? false,
+      commandBuffer: player.commandBuffer ?? '',
     };
   });
 }

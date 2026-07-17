@@ -198,6 +198,7 @@ export interface SyncedPlayer {
   resultConfirmed: boolean;
   controllerPlayerId: string;
   isTrainingDummy: boolean;
+  commandBuffer: string;
 }
 
 export type GamePhase = 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished';
@@ -231,6 +232,8 @@ export interface SubmitActionMessage {
   power?: number;
   targetGridIndex?: number;
   resourceSpend?: Record<string, number>;
+  resourceChoice?: 'energy' | 'charge';
+  strategySequence?: string;
   requestId?: string;
 }
 

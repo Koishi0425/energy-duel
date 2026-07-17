@@ -139,7 +139,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.buffs?.has('axe_defend_broken')).toBe(true);
   });
 
-  it('keeps a persistent defense broken at level zero', () => {
+  it('does not combine Stardust hits against a defense', () => {
     const players = roster(['a', 0], ['b', 0]);
     players.get('a')!.resources.stars = 4;
     const target = players.get('b')!;
@@ -149,9 +149,7 @@ describe('RoundResolver JSON-driven actions', () => {
       ['b', { actionId: 'defend' }],
     ));
     expect(target.currentHp).toBe(2);
-    expect(target.buffs?.has('defend_broken')).toBe(true);
-    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'defend' }]));
-    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('defend_broken')).not.toBe(true);
   });
 
   it('recreates a generated defense on its next use', () => {
@@ -170,17 +168,16 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.currentHp).toBe(2);
   });
 
-  it('uses level zero after a defense breaks within the same round', () => {
-    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+  it('combines Stardust hits when the target uses an attack', () => {
+    const players = roster(['a', 0], ['b', 1]);
     players.get('a')!.resources.stars = 4;
     const target = players.get('b')!;
     target.currentHp = target.maxHp = 2;
     resolveRound(players, actions(
       ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
-      ['b', { actionId: 'defend' }],
-      ['c', { actionId: 'fist', targetId: 'b' }],
+      ['b', { actionId: 'wave', targetId: 'a' }],
     ));
-    expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(false);
   });
 
   it('cancels equal-level attacks and applies only the positive level difference', () => {
@@ -264,7 +261,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')!.resources.stars).toBe(2);
   });
 
-  it('keeps Collect Light broken at level zero after an equal attack', () => {
+  it('does not combine Stardust hits to break Collect Light', () => {
     const players = roster(['a', 0], ['b', 0]);
     players.get('a')!.resources.stars = 4;
     const target = players.get('b')!; target.characterId = 'regent'; target.currentHp = target.maxHp = 2;
@@ -274,9 +271,9 @@ describe('RoundResolver JSON-driven actions', () => {
     ));
     expect(target.currentHp).toBe(2);
     expect(target.resources.stars).toBe(1);
-    expect(target.buffs?.has('collect_light_broken')).toBe(true);
+    expect(target.buffs?.has('collect_light_broken')).not.toBe(true);
     resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'collect_light' }]));
-    expect(target.currentHp).toBe(1);
+    expect(target.currentHp).toBe(2);
   });
 
   it('uses afterglow as a minimum next-round action level', () => {
@@ -292,12 +289,15 @@ describe('RoundResolver JSON-driven actions', () => {
   it('forges, fires and locks the sovereign blade', () => {
     const players = roster(['a', 2], ['b', 0]);
     const actor = players.get('a')!;
-    actor.resources.stars = 4;
+    actor.resources.stars = 8;
     resolveRound(players, actions(['a', { actionId: 'forge_sword' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.sovereign_blade_forged).toBe(3);
     expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
+    resolveRound(players, actions(['a', { actionId: 'forge_sword' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.sovereign_blade_forged).toBe(6);
     resolveRound(players, actions(['a', { actionId: 'sovereign_blade', targetId: 'b' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffs?.has('sovereign_blade_active')).toBe(false);
+    expect(players.get('b')!.alive).toBe(false);
   });
 
   it('lets Summon Forth create or refresh an already active sovereign blade', () => {
@@ -311,7 +311,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.buffs?.has('sovereign_blade_active')).toBe(true);
   });
 
-  it('aggregates repeated deferred Stardust allocations per target', () => {
+  it('keeps repeated Stardust allocations separate outside attack clashes', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 0]);
     players.get('a')!.resources.stars = 4;
     for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
@@ -319,7 +319,8 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(players.get('a')!, stardust, players)).not.toThrow();
     const result = resolveRound(players, actions(['a', stardust], ['b', { actionId: 'charge' }], ['c', { actionId: 'defend' }]));
     expect(players.get('a')!.resources.stars).toBe(0);
-    expect(players.get('b')!.currentHp).toBe(1);
+    expect(players.get('b')!.currentHp).toBe(0);
+    expect(players.get('b')!.alive).toBe(false);
     expect(players.get('c')!.currentHp).toBe(2);
     expect(result.summary[0]).toContain('B ×2、C ×2');
   });
@@ -388,6 +389,18 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('b')!.buffs?.has('darkness')).toBe(true);
   });
 
+  it('lets Dark Shelter absorb the damage added to a mastered Absorb', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    const ao = players.get('a')!; ao.characterId = 'ao'; ao.buffs = new Set(['ao_mastery']); ao.buffStacks = { ao_mastery: 4 };
+    const nightmare = players.get('b')!; nightmare.characterId = 'nightmare'; nightmare.currentHp = nightmare.maxHp = 2; nightmare.resources.charge = 1;
+    resolveRound(players, actions(
+      ['a', { actionId: 'absorb_charge', targetId: 'b' }],
+      ['b', { actionId: 'dark_shelter' }],
+    ));
+    expect(nightmare.currentHp).toBe(2);
+    expect(nightmare.buffs?.has('dark_shelter_power')).toBe(true);
+  });
+
   it('reduces Shadow Blade cooldown only after Nightmare-specific actions', () => {
     const players = roster(['a', 10], ['b', 0]); const actor = players.get('a')!;
     actor.characterId = 'nightmare'; actor.buffs = new Set(['shadow_blade_cooldown']); actor.buffStacks = { shadow_blade_cooldown: 4 };
@@ -417,5 +430,96 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(players.get('b')!, { actionId: 'fist', targetId: 'a' }, players)).toThrow(/可被选中/);
     resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffs?.has('sleeping')).toBe(false); expect(actor.buffs?.has('mud_awakened')).toBe(true); expect(actor.resources.energy).toBe(3);
+  });
+
+  it('appends and consumes an ordered Napoleon strategy sequence', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = 'A'; actor.currentHp = actor.maxHp = 2; target.currentHp = target.maxHp = 2;
+    const strategy = { actionId: 'nap_strategy_aa', targetId: 'b', strategySequence: 'append' };
+    expect(() => validateAction(actor, strategy, players)).not.toThrow();
+    resolveRound(players, actions(['a', strategy], ['b', { actionId: 'charge' }]));
+    expect(actor.commandBuffer).toBe('');
+    expect(target.currentHp).toBe(1);
+  });
+
+  it('applies a composite Napoleon strategy defense against unrelated attackers', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 1]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = 'AD'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'nap_strategy_ad', targetId: 'b', strategySequence: 'execute' }],
+      ['b', { actionId: 'charge' }],
+      ['c', { actionId: 'slash', targetId: 'a' }],
+    ));
+    expect(actor.currentHp).toBe(2);
+    expect(actor.commandBuffer).toBe('');
+  });
+
+  it('automatically counters the highest fully blocked attacker with DA', () => {
+    const players = roster(['a', 0], ['b', 1]); const actor = players.get('a')!; const attacker = players.get('b')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = 'DA'; actor.currentHp = actor.maxHp = 2; attacker.currentHp = attacker.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'nap_strategy_da', strategySequence: 'execute' }],
+      ['b', { actionId: 'fist', targetId: 'a' }],
+    ));
+    expect(actor.currentHp).toBe(2);
+    expect(attacker.currentHp).toBe(0);
+    expect(attacker.alive).toBe(false);
+  });
+
+  it('unlocks Napoleon transformation only through Elba Escape', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = 'TATAT'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'nap_strategy_tatat', strategySequence: 'execute' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffs?.has('elba_unlocked')).toBe(true);
+    expect(actor.buffs?.has('hundred_days')).toBe(true);
+  });
+
+  it('does not grant basic resources to Napoleon when damaged', () => {
+    const players = roster(['a', 0], ['b', 1]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'tactical_order' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(actor.currentHp).toBe(1);
+    expect(actor.resources.energy).toBe(0);
+  });
+
+  it('lets Ye Qingxian sacrifice one health state for an exact one-resource shortfall', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'ye_qingxian'; actor.resources.charge = 1; actor.currentHp = actor.maxHp = 2; target.currentHp = target.maxHp = 2;
+    const palm = { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'charge' as const };
+    expect(() => validateAction(actor, palm, players)).not.toThrow();
+    resolveRound(players, actions(['a', palm], ['b', { actionId: 'charge' }]));
+    expect(actor.currentHp).toBe(1);
+    expect(actor.resources.energy).toBe(0);
+    expect(actor.resources.charge).toBe(2);
+    expect(target.alive).toBe(false);
+  });
+
+  it('applies Star Body before normal defense while true damage bypasses it and barriers', () => {
+    const players = roster(['a', 0], ['b', 0]); const attacker = players.get('a')!; const target = players.get('b')!;
+    target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 1.5 };
+    resolveRound(players, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+    target.buffs.add('mud_barrier'); target.buffStacks.mud_barrier = 1;
+    attacker.characterId = 'ku'; attacker.resources.charge = 2; attacker.buffs = new Set(['tempered']); attacker.buffStacks = { tempered: 1 };
+    resolveRound(players, actions(['a', { actionId: 'void_pierce', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('mud_barrier')).toBe(true);
+  });
+
+  it('grows Ku after a successful general defense', () => {
+    const players = roster(['a', 1], ['b', 0]); const target = players.get('b')!;
+    target.characterId = 'ku'; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.buffStacks?.tempered).toBe(1);
+    expect(target.resources.energy).toBe(0.5);
+  });
+
+  it('consumes Star God transcendence instead of dying', () => {
+    const players = roster(['a', 2], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.buffs = new Set(['transcendence']); target.buffStacks = { transcendence: 1 };
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('transcendence')).toBe(false);
   });
 });

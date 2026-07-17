@@ -11,3 +11,4 @@ coverage/
 # 忽略 cloudflared 的所有私钥和登录凭证
 .cloudflared/*.json
 .cloudflared/cert.pem
+characterdraft/

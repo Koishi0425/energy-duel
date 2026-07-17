@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 14,
   "resources": [
     { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10, "alwaysVisible": true },
     { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20, "alwaysVisible": true },
@@ -14,7 +14,7 @@
     { "id": "regent_claimed", "name": "辉星君权", "description": "本局已经获得过储君首次变身的 3 点辉星。", "color": "#ffd86b", "scope": "player" },
     { "id": "iridescence_afterglow", "name": "流光余辉", "description": "下回合结算受到的攻击时，自身招式等级最低视为 1.5。", "color": "#fff0a6", "scope": "character" },
     { "id": "hidden_cache_pending", "name": "隐秘藏品", "description": "下回合开始时获得 3 辉星，然后移除此状态。", "color": "#f5ca66", "scope": "character" },
-    { "id": "sovereign_blade_forged", "name": "君王之剑", "description": "当前层数即君王之剑的锻造等级，最高为 3。", "color": "#ff9f43", "scope": "character" },
+    { "id": "sovereign_blade_forged", "name": "君王之剑", "description": "当前层数即君王之剑的锻造等级。", "color": "#ff9f43", "scope": "character" },
     { "id": "sovereign_blade_active", "name": "王剑激活", "description": "君王之剑已经激活，可以发动一次攻击。", "color": "#ffcc66", "scope": "character" },
     { "id": "quick_attack_ready", "name": "迅雷余势", "description": "下一次十伯伏特不消耗蓄力。", "color": "#ffe066", "scope": "character" },
     { "id": "ao_mastery", "name": "熟能生巧", "description": "当前层数为凹与吸的升级阶段，最高四层。", "color": "#b8f2e6", "scope": "character" },
@@ -35,6 +35,26 @@
     { "id": "sleep_progress", "name": "沉睡积蓄", "description": "记录本次已经沉睡的回合数。", "color": "#78909c", "scope": "character" },
     { "id": "mud_slash_unlocked", "name": "血脉斩", "description": "泥岩已经通过苏醒永久获得斩。", "color": "#c08552", "scope": "character", "grantedActionIds": ["slash"] },
     { "id": "mud_awakened", "name": "血脉苏醒", "description": "层数为苏醒后临时获得的攻击等级加成。", "color": "#d4a373", "scope": "character" }
+    ,{ "id": "swayed", "name": "动摇", "description": "下回合行动速度降低 1。", "color": "#d8b4fe", "scope": "player", "durationTurns": 1 }
+    ,{ "id": "star_body", "name": "神体", "description": "受到非真实攻击时，先按层数降低攻击等级。", "color": "#93c5fd", "scope": "character" }
+    ,{ "id": "harmony_uses", "name": "和光同尘", "description": "记录本局累计使用次数，层数即下次生成格挡的基础等级。", "color": "#bfdbfe", "scope": "character" }
+    ,{ "id": "shock", "name": "震荡", "description": "持续期间使用攻击分类招式会在回合结束时左移一个健康状态。", "color": "#818cf8", "scope": "player", "durationTurns": 2 }
+    ,{ "id": "transcendence", "name": "超脱", "description": "每回合获得神体、攻击与速度加成；致死时退出并保留濒死状态。", "color": "#f0abfc", "scope": "character", "durationTurns": 4, "grantedActionIds": ["transcend_fuse", "transcend_detonate"] }
+    ,{ "id": "transcendence_permanent", "name": "永久超脱", "description": "每回合获得神体、攻击与速度加成；致死时退出并保留濒死状态。", "color": "#f5d0fe", "scope": "character", "grantedActionIds": ["transcend_detonate"] }
+    ,{ "id": "transcendence_progress", "name": "超脱进度", "description": "记录本次超脱已积累的回合数。", "color": "#c4b5fd", "scope": "character" }
+    ,{ "id": "tempered", "name": "千锤百炼", "description": "每层强化苦的专属反制技能，最多 4 层。", "color": "#f59e0b", "scope": "character" }
+    ,{ "id": "defense_forbidden", "name": "崩裂禁防", "description": "不能提交防御分类招式。", "color": "#ef4444", "scope": "player", "durationTurns": 2 }
+    ,{ "id": "tactical_advantage", "name": "战术优势", "description": "每层使拿破仑的指令与策略等级提高 0.5。", "color": "#60a5fa", "scope": "character" }
+    ,{ "id": "elba_unlocked", "name": "厄尔巴逃逸", "description": "拿破仑重新解锁变身。", "color": "#fbbf24", "scope": "character", "grantedActionIds": ["transform"] }
+    ,{ "id": "napoleon_speed", "name": "战役速度", "description": "下一回合拿破仑指令与策略获得速度加成。", "color": "#38bdf8", "scope": "character", "durationTurns": 1 }
+    ,{ "id": "napoleon_level", "name": "战役强化", "description": "下一回合拿破仑指令与策略获得等级加成。", "color": "#818cf8", "scope": "character", "durationTurns": 1 }
+    ,{ "id": "calibrated", "name": "校准标记", "description": "下回合受到攻击时，攻击方等级提高 1。", "color": "#fb7185", "scope": "player", "durationTurns": 1 }
+    ,{ "id": "defense_deployment", "name": "防御部署", "description": "下回合受到攻击时，攻击方等级降低 1。", "color": "#60a5fa", "scope": "character", "durationTurns": 1 }
+    ,{ "id": "napoleon_divine", "name": "神机", "description": "每层永久令拿破仑指令与策略等级提高 0.5。", "color": "#a78bfa", "scope": "character" }
+    ,{ "id": "napoleon_emperor", "name": "皇帝", "description": "每回合开始时获得 1 层战术优势。", "color": "#fbbf24", "scope": "character" }
+    ,{ "id": "hundred_days", "name": "百日王朝", "description": "永久令拿破仑指令与策略等级提高 0.5。", "color": "#f59e0b", "scope": "character" }
+    ,{ "id": "unfallen_fortress", "name": "不落要塞", "description": "每回合获得战术优势，并提供 1 级基础格挡。", "color": "#64748b", "scope": "character", "durationTurns": 3 }
+    ,{ "id": "attack_forbidden", "name": "全面压制", "description": "下回合不能提交攻击分类技能。", "color": "#dc2626", "scope": "player", "durationTurns": 1 }
   ],
   "passives": [
     { "id": "sword_dao", "name": "剑道", "description": "无法使用拳；斩只消耗1/3气。" },
@@ -42,6 +62,11 @@
     { "id": "shadow_blade_passive", "name": "暗影之刃", "description": "无法使用拳和斩；开局可释放一次范围斩击，使用后需完成四次梦魇专属招式恢复。" },
     { "id": "child_of_earth", "name": "土石之子", "description": "无斩；拳不再脆弱，但使用拳时若承受至少0.5等级差的伤害会直接死亡；每次使用拳永久提高拳0.5级。" },
     { "id": "fertile_soil", "name": "沃土予身", "description": "变身当回合开始计数；无屏障时每第四回合获得一层屏障，屏障失去时恢复一个健康状态。" }
+    ,{ "id": "sacrifice_path", "name": "祭道", "description": "气与蓄力合计不少于 3 时，每次技能至多以左移一个健康状态抵免 1 点资源缺口。" }
+    ,{ "id": "devour_heaven", "name": "吞天", "description": "专属招式令其他玩家左移后，获得提交时选择的 1 点气或蓄力。" }
+    ,{ "id": "napoleon_command", "name": "皇帝的指挥", "description": "无法产生或消耗基础资源，只能通过攻击、防守、战术指令组织策略。" }
+    ,{ "id": "star_body_passive", "name": "神体", "description": "非真实攻击在等级比较前先减去神体层数。" }
+    ,{ "id": "tempered_passive", "name": "千锤百炼", "description": "成功阻止对手行动的预期效果时获得 0.5 气并永久成长，最多 4 层。" }
   ],
   "assets": [
     { "id": "portrait_default", "url": "/assets/characters/default_character/base/portrait.884a7ba26363.webp", "previewUrl": "/assets/characters/default_character/base/preview.bb92b1de8d4c.webp" },
@@ -61,7 +86,7 @@
         "id": "base", "name": "基础形态", "defaultAssetId": "portrait_default", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "transform"]
       }],
-      "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "jiaosila", "name": "娇斯拉", "defaultAssetId": "portrait_jiaosila",
@@ -69,7 +94,7 @@
         "id": "base", "name": "原子形态", "defaultAssetId": "portrait_jiaosila", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "atomic_breath", "transform"]
       }],
-      "transformations": ["default_character", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "gonggang", "name": "贡刚", "defaultAssetId": "portrait_gonggang",
@@ -77,7 +102,7 @@
         "id": "base", "name": "战斧形态", "defaultAssetId": "portrait_gonggang", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "raise_axe", "axe_defend", "transform"]
       }],
-      "transformations": ["default_character", "jiaosila", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "regent", "name": "储君", "description": "群星王座的继承人。拥有宇宙的力量，但总是让他的仆从们去做各种事情。", "defaultAssetId": "portrait_regent",
@@ -85,32 +110,52 @@
         "id": "base", "name": "辉星王储", "defaultAssetId": "portrait_regent", "poses": {},
         "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "collect_light", "iridescence", "hidden_cache", "particle_wall", "winning_hand", "stardust", "forge_sword", "forge_wall", "sovereign_blade", "summon_forth", "transform"]
       }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "pikachu", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "pikachu", "name": "皮卡丘", "defaultAssetId": "portrait_pikachu",
       "forms": [{ "id": "base", "name": "雷电形态", "defaultAssetId": "portrait_pikachu", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "ten_volt", "hundred_thousand_volt", "quick_attack", "transform"] }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "li_chungang", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "li_chungang", "name": "李淳罡", "defaultAssetId": "portrait_li_chungang", "passiveIds": ["sword_dao"],
       "forms": [{ "id": "base", "name": "剑道宗师", "defaultAssetId": "portrait_li_chungang", "poses": {}, "unlockedActions": ["charge", "gain_charge", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "sword_aura", "open_heaven_gate", "transform"] }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "ao", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "ao", "name": "凹", "defaultAssetId": "portrait_ao", "passiveIds": ["practice_makes_perfect"],
       "forms": [{ "id": "base", "name": "熟练形态", "defaultAssetId": "portrait_ao", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "absorb_charge", "aoao_divine", "transform"] }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "nightmare", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "nightmare", "name": "梦魇", "defaultAssetId": "portrait_nightmare", "passiveIds": ["shadow_blade_passive"],
       "forms": [{ "id": "base", "name": "永恒梦魇", "defaultAssetId": "portrait_nightmare", "poses": {}, "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "shadow_blade", "dream_path", "dark_shelter", "silent_fear", "haunting_shadows", "transform"] }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "mudrock"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
     },
     {
       "id": "mudrock", "name": "泥岩", "defaultAssetId": "portrait_mudrock", "passiveIds": ["child_of_earth", "fertile_soil"],
       "forms": [{ "id": "base", "name": "沃土重装", "defaultAssetId": "portrait_mudrock", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "rockfall_hammer", "filthy_bloodline", "transform"] }],
-      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare"], "transformationCost": {}
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
+    },
+    {
+      "id": "ye_qingxian", "name": "叶倾仙", "defaultAssetId": "portrait_default", "passiveIds": ["sacrifice_path", "devour_heaven"],
+      "forms": [{ "id": "base", "name": "仙古形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "immortal_palm", "rule_the_world", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "napoleon", "ku"], "transformationCost": {}
+    },
+    {
+      "id": "napoleon", "name": "拿破仑", "defaultAssetId": "portrait_default", "passiveIds": ["napoleon_command"],
+      "forms": [{ "id": "base", "name": "皇帝形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["attack_order", "defense_order", "tactical_order", "nap_strategy_aa", "nap_strategy_ad", "nap_strategy_at", "nap_strategy_da", "nap_strategy_dd", "nap_strategy_dt", "nap_strategy_ta", "nap_strategy_td", "nap_strategy_tt", "nap_strategy_aaa", "nap_strategy_aat", "nap_strategy_ata", "nap_strategy_ddd", "nap_strategy_ddt", "nap_strategy_dad", "nap_strategy_ttt", "nap_strategy_taa", "nap_strategy_tad", "nap_strategy_tta", "nap_strategy_aaaa", "nap_strategy_dddd", "nap_strategy_tttt", "nap_strategy_aadd", "nap_strategy_tata", "nap_strategy_ttaa", "nap_strategy_aaaaa", "nap_strategy_ddddd", "nap_strategy_ttttt", "nap_strategy_tatat"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "ku"], "transformationCost": {}
+    },
+    {
+      "id": "star_god", "name": "星神（练功房测试）", "defaultAssetId": "portrait_default", "passiveIds": ["star_body_passive"],
+      "forms": [{ "id": "base", "name": "星神形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "harmony_with_light", "nebula_shock", "create_star_core", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku"], "transformationCost": {}
+    },
+    {
+      "id": "ku", "name": "苦", "defaultAssetId": "portrait_default", "passiveIds": ["tempered_passive"],
+      "forms": [{ "id": "base", "name": "苦修形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "void_pierce", "censure", "redirect", "see_through", "shatter", "transform"] }],
+      "transformations": ["default_character", "jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon"], "transformationCost": {}
     }
   ],
   "actions": [
@@ -133,10 +178,10 @@
     { "id": "hidden_cache", "name": "隐秘藏品", "category": "resource", "description": "获得 1 辉星；下回合开始时再获得 3 辉星。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "hidden_cache" }], "vfxId": "hidden_cache" },
     { "id": "particle_wall", "name": "粒子墙", "category": "defense", "description": "选择正整数 n，消耗 2n 辉星并生成 2n 级临时格挡。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 2, "levelPerPower": 2, "minPower": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "particle_wall" }], "vfxId": "particle_wall", "defenseBreak": { "mode": "recreated" } },
     { "id": "winning_hand", "name": "胜券在王", "category": "resource", "description": "消耗 5 辉星，获得 9 辉星；出招时处于脆弱状态。", "cost": { "stars": 5 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "winning_hand" }], "vfxId": "winning_hand" },
-    { "id": "stardust", "name": "星尘", "category": "attack", "description": "固定消耗当前全部辉星；行动公开后，按消耗数量分配等量的 0.5 级攻击，可以重复选择同一名玩家。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 1, "levelPerPower": 0.5, "minPower": 1 }, "usesAllVariableResource": true, "target": { "mode": "multiple_enemies", "selectionTiming": "deferred", "maxTargetsByPower": true }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "stardust" }], "vfxId": "stardust" },
+    { "id": "stardust", "name": "星尘", "category": "attack", "description": "固定消耗当前全部辉星；行动公开后分配等量的 1.5 级多段攻击。重复选择同一目标时，仅在对方使用攻击技能进行对波时合并等级，面对其他技能时逐段独立结算。", "cost": {}, "variable": { "resourceId": "stars", "costPerPower": 1, "levelPerPower": 1.5, "minPower": 1 }, "usesAllVariableResource": true, "target": { "mode": "multiple_enemies", "selectionTiming": "deferred", "maxTargetsByPower": true }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "stardust" }], "vfxId": "stardust" },
     { "id": "forge_sword", "name": "铸剑者", "category": "resource", "description": "锻造 3；首次锻造时激活君王之剑。", "cost": { "energy": 1, "stars": 4 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "forge_sword" }], "vfxId": "forge_sword" },
     { "id": "forge_wall", "name": "筑墙", "category": "defense", "description": "生成 2.5 级临时格挡并锻造 1；首次锻造时激活君王之剑。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 2.5, "effects": [{ "handler": "forge_wall" }], "vfxId": "forge_wall", "defenseBreak": { "mode": "recreated" } },
-    { "id": "sovereign_blade", "name": "君王之剑", "category": "attack", "description": "以当前锻造等级发动攻击，最高 3 级；使用后进入锁定，继续锻造不会解除锁定。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "sovereign_blade" }], "vfxId": "sovereign_blade", "unlockRequirements": { "allBuffs": ["sovereign_blade_forged", "sovereign_blade_active"], "description": "需要君王之剑已经生成且处于激活状态" } },
+    { "id": "sovereign_blade", "name": "君王之剑", "category": "attack", "description": "以当前锻造等级发动攻击；使用后进入锁定，继续锻造不会解除锁定。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "sovereign_blade" }], "vfxId": "sovereign_blade", "unlockRequirements": { "allBuffs": ["sovereign_blade_forged", "sovereign_blade_active"], "description": "需要君王之剑已经生成且处于激活状态" } },
     { "id": "summon_forth", "name": "征召上前", "category": "special", "description": "始终可用。先锻造 0.5；若君王之剑尚未生成则生成，随后将其激活或重置为可使用状态。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "summon_forth" }], "vfxId": "summon_forth" },
     { "id": "ten_volt", "name": "十伯伏特", "category": "attack", "description": "沿顺、逆时针逐格传导，各命中第一名未躲开的玩家。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 1, "damageType": "magic", "effects": [{ "handler": "ten_volt" }], "vfxId": "ten_volt" },
     { "id": "hundred_thousand_volt", "name": "十万伏特", "category": "attack", "description": "沿顺、逆时针逐格传导，各命中第一名未躲开的玩家。", "cost": { "energy": 2, "charge": 2 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 3, "damageType": "magic", "effects": [{ "handler": "hundred_thousand_volt" }], "vfxId": "hundred_thousand_volt" },
@@ -155,6 +200,50 @@
     { "id": "rockfall_hammer", "name": "岩崩锤", "category": "attack", "description": "消耗 1 次使用次数；在速度 4 恢复 1 个健康状态，并对自身格及顺、逆时针各 2 格内的所有其他存活玩家造成 2 级钝击。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "rockfall_hammer" }], "vfxId": "rockfall_hammer", "unlockRequirements": { "minBuffStacks": { "hammer_ready": 1 }, "description": "每被其他玩家选中三次获得一次使用次数" } },
     { "id": "filthy_bloodline", "name": "秽壤的血脉", "category": "special", "description": "消耗3气进入最多三回合沉睡；可提前苏醒并按未沉睡回合返还气。苏醒后获得斩，并按沉睡时长获得等时长攻击加成。", "cost": { "energy": 3 }, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "filthy_bloodline" }], "vfxId": "filthy_bloodline" },
     { "id": "continue_sleep", "name": "继续沉睡", "category": "special", "description": "保持沉睡一回合；第三个沉睡回合结束后自动苏醒。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "continue_sleep" }], "vfxId": "sleep" },
+    { "id": "immortal_palm", "name": "掌仙术", "category": "attack", "description": "对一名玩家发动 3 级魔法攻击。吞天收益由提交时选择气或蓄力。", "cost": { "energy": 3 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 3, "damageType": "magic", "effects": [{ "handler": "immortal_palm" }], "vfxId": "immortal_palm" },
+    { "id": "rule_the_world", "name": "君临天下", "category": "attack", "description": "对自身及两侧各 2 格内的其他玩家造成 3 级魔法攻击，并恐惧行动等级不高于 3 的目标。", "cost": { "energy": 1, "charge": 2 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 3, "damageType": "magic", "effects": [{ "handler": "rule_the_world" }], "vfxId": "rule_the_world" },
+    { "id": "attack_order", "name": "攻击指令 A", "category": "attack", "description": "发布攻击指令并对一名玩家造成 1 级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "blunt", "effects": [{ "handler": "attack_order" }], "vfxId": "attack_order" },
+    { "id": "defense_order", "name": "防守指令 D", "category": "defense", "description": "发布防守指令并生成 1.5 级临时格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "effects": [{ "handler": "defense_order" }], "vfxId": "defense_order", "defenseBreak": { "mode": "recreated" } },
+    { "id": "tactical_order", "name": "战术指令 T", "category": "special", "description": "发布战术指令；缓冲中的战术指令会在之后产生战术优势。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "tactical_order" }], "vfxId": "tactical_order" },
+    { "id": "harmony_with_light", "name": "和光同尘", "category": "defense", "description": "第 n 次使用生成 n 级临时格挡并获得 0.5 神体；超脱时获得 1 神体。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "harmony_with_light" }], "vfxId": "harmony_with_light", "defenseBreak": { "mode": "recreated" } },
+    { "id": "nebula_shock", "name": "星云震荡", "category": "attack", "description": "1 级魔法攻击并施加 2 回合震荡。", "cost": { "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "magic", "effects": [{ "handler": "nebula_shock" }], "vfxId": "nebula_shock" },
+    { "id": "create_star_core", "name": "创生星核", "category": "defense", "description": "生成 3 级临时格挡。获得超脱，持续 4 回合。", "cost": { "energy": 3, "charge": 2 }, "target": { "mode": "none" }, "speedPriority": 2, "level": 3, "effects": [{ "handler": "create_star_core" }], "vfxId": "create_star_core", "defenseBreak": { "mode": "recreated" }, "unlockRequirements": { "noneBuffs": ["transcendence", "transcendence_permanent"], "description": "超脱期间不能再次使用" } },
+    { "id": "transcend_fuse", "name": "融合", "category": "special", "description": "将本次超脱变为永久。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "transcend_fuse" }], "vfxId": "transcend_fuse" },
+    { "id": "transcend_detonate", "name": "引爆", "category": "attack", "description": "结束超脱，对所有其他玩家造成随超脱进度成长的魔法攻击。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 2, "level": 3, "damageType": "magic", "effects": [{ "handler": "transcend_detonate" }], "vfxId": "transcend_detonate" },
+    { "id": "void_pierce", "name": "裂空刺", "category": "attack", "description": "以千锤百炼层数作为等级与速度的真实攻击。", "cost": { "charge": 2 }, "target": { "mode": "single_enemy" }, "speedPriority": 0, "level": 0, "damageType": "true", "effects": [{ "handler": "void_pierce" }], "vfxId": "void_pierce" },
+    { "id": "censure", "name": "杖责", "category": "attack", "description": "1.5 级钝击；命中资源行动时令其本回合资源收益无效。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "damageType": "blunt", "effects": [{ "handler": "censure" }], "vfxId": "censure" },
+    { "id": "redirect", "name": "挪移", "category": "defense", "description": "动态格挡；将所选玩家对自己的最高等级攻击转移给顺时针下一名存活玩家。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "effects": [{ "handler": "redirect" }], "vfxId": "redirect" },
+    { "id": "see_through", "name": "看破", "category": "attack", "description": "若目标使用攻击或特殊行动，取消该行动并按成长等级攻击；否则仅造成 0.5 级攻击。", "cost": { "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "damageType": "blunt", "effects": [{ "handler": "see_through" }], "vfxId": "see_through" },
+    { "id": "shatter", "name": "崩裂", "category": "attack", "description": "成长攻击；对防御行动额外提高等级并施加 2 回合禁防。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "blunt", "effects": [{ "handler": "shatter" }], "vfxId": "shatter" },
+    { "id": "nap_strategy_aa", "name": "集中炮击·AA", "category": "attack", "description": "2级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AA" },
+    { "id": "nap_strategy_ad", "name": "攻守交替·AD", "category": "attack", "description": "1级钝击并提供1.5级格挡。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "defenseLevel": 1.5, "defenseBreak": { "mode": "recreated" }, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AD" },
+    { "id": "nap_strategy_at", "name": "校准射击·AT", "category": "attack", "description": "1级钝击；目标下回合受到攻击时攻击方等级+1。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 1, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AT" },
+    { "id": "nap_strategy_da", "name": "盾反·DA", "category": "defense", "description": "1.5级格挡；完全抵消攻击后，自动对其中等级最高的攻击者造成1级反击。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "defenseLevel": 1.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DA" },
+    { "id": "nap_strategy_dd", "name": "深沟高垒·DD", "category": "defense", "description": "2.5级格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 2.5, "defenseLevel": 2.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DD" },
+    { "id": "nap_strategy_dt", "name": "防御部署·DT", "category": "defense", "description": "2级格挡；下回合受到攻击时攻击方等级-1。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 2, "defenseLevel": 2, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DT" },
+    { "id": "nap_strategy_ta", "name": "优势炮击·TA", "category": "attack", "description": "1级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TA" },
+    { "id": "nap_strategy_td", "name": "优势布防·TD", "category": "defense", "description": "1.5级格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "defenseLevel": 1.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "TD" },
+    { "id": "nap_strategy_tt", "name": "战略谋划·TT", "category": "special", "description": "下回合速度+1且基础等级+1。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TT" },
+    { "id": "nap_strategy_aaa", "name": "炮兵齐射·AAA", "category": "attack", "description": "2.5级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 2.5, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AAA" },
+    { "id": "nap_strategy_aat", "name": "试探炮击·AAT", "category": "attack", "description": "2级钝击；造成左移后下回合速度+1。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AAT" },
+    { "id": "nap_strategy_ata", "name": "压制炮击·ATA", "category": "attack", "description": "对自身及相邻格造成2级钝击并令命中者下回合速度-1。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "ATA" },
+    { "id": "nap_strategy_ddd", "name": "铜墙铁壁·DDD", "category": "defense", "description": "3级格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 3, "defenseLevel": 3, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DDD" },
+    { "id": "nap_strategy_ddt", "name": "战略收缩·DDT", "category": "defense", "description": "2.5级格挡；完全抵消攻击后下回合速度+1。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 2.5, "defenseLevel": 2.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DDT" },
+    { "id": "nap_strategy_dad", "name": "弹性防御·DAD", "category": "defense", "description": "1.5级格挡；完全抵消攻击后，自动对其中等级最高的攻击者造成1.5级反击。反击造成左移时，施加动摇。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "defenseLevel": 1.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DAD" },
+    { "id": "nap_strategy_ttt", "name": "皇帝诏令·TTT", "category": "special", "description": "下回合速度+2且基础等级+1。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TTT" },
+    { "id": "nap_strategy_taa", "name": "战术突击·TAA", "category": "attack", "description": "1.5级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 1.5, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TAA" },
+    { "id": "nap_strategy_tad", "name": "标记打击·TAD", "category": "attack", "description": "2级钝击并施加校准标记。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TAD" },
+    { "id": "nap_strategy_tta", "name": "雷霆一击·TTA", "category": "attack", "description": "2级钝击并消耗全部战术优势。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TTA" },
+    { "id": "nap_strategy_aaaa", "name": "大军团炮击·AAAA", "category": "attack", "description": "对自身及两侧各2格造成3级钝击。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 3, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AAAA" },
+    { "id": "nap_strategy_dddd", "name": "不落要塞·DDDD", "category": "defense", "description": "3.5级格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 3.5, "defenseLevel": 3.5, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DDDD" },
+    { "id": "nap_strategy_tttt", "name": "神机妙算·TTTT", "category": "special", "description": "永久获得1层神机。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TTTT" },
+    { "id": "nap_strategy_aadd", "name": "炮火准备·AADD", "category": "attack", "description": "2.5级钝击并提供2.5级格挡。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 2.5, "defenseLevel": 2.5, "defenseBreak": { "mode": "recreated" }, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AADD" },
+    { "id": "nap_strategy_tata", "name": "全面压制·TATA", "category": "attack", "description": "2.5级钝击；目标下回合不能攻击，自身速度+2。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 2.5, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TATA" },
+    { "id": "nap_strategy_ttaa", "name": "大帝亲征·TTAA", "category": "attack", "description": "2级钝击；消耗全部战术优势且每层额外+1级。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 3, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "TTAA" },
+    { "id": "nap_strategy_aaaaa", "name": "毁灭炮击·AAAAA", "category": "attack", "description": "对所有其他玩家造成3级钝击。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 3, "level": 3, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AAAAA" },
+    { "id": "nap_strategy_ddddd", "name": "永恒要塞·DDDDD", "category": "defense", "description": "4级格挡并获得3回合不落要塞。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 4, "defenseLevel": 4, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DDDDD" },
+    { "id": "nap_strategy_ttttt", "name": "加冕称帝·TTTTT", "category": "special", "description": "永久获得皇帝。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TTTTT" },
+    { "id": "nap_strategy_tatat", "name": "厄尔巴逃逸·TATAT", "category": "special", "description": "永久解锁变身并获得百日王朝。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TATAT" },
     { "id": "wave", "name": "波（兼容）", "category": "attack", "description": "兼容旧规则的一气攻击。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "effects": [{ "handler": "wave" }], "vfxId": "wave" },
     { "id": "hangup", "name": "挂机（兼容）", "category": "attack", "description": "兼容旧规则的全场攻击。", "cost": { "energy": 3 }, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "hangup" }], "vfxId": "hangup" }
   ]

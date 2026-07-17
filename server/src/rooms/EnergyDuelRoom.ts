@@ -69,6 +69,7 @@ export class PlayerState extends Schema {
   @type('boolean') resultConfirmed = false;
   @type('string') controllerPlayerId = '';
   @type('boolean') isTrainingDummy = false;
+  @type('string') commandBuffer = '';
 }
 
 export class RoundLogEntryState extends Schema {
@@ -233,6 +234,7 @@ export class EnergyDuelRoom extends Room {
       player.currentHp = player.maxHp;
       player.submitted = false;
       player.resultConfirmed = false;
+      player.commandBuffer = '';
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
       if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
@@ -258,11 +260,16 @@ export class EnergyDuelRoom extends Room {
       targetGridIndex: typeof payload.targetGridIndex === 'number' ? payload.targetGridIndex : undefined,
       resourceSpend: payload.resourceSpend && typeof payload.resourceSpend === 'object'
         && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : undefined,
+      resourceChoice: payload.resourceChoice === 'energy' || payload.resourceChoice === 'charge' ? payload.resourceChoice : undefined,
+      strategySequence: typeof payload.strategySequence === 'string' ? payload.strategySequence : undefined,
     };
     if (action.actionId === 'transform') {
       const transformations = characterById.get(player.characterId)?.transformations ?? [];
       if (!action.transformCharacterId || !transformations.includes(action.transformCharacterId)) {
         return this.sendError(client, '该变身尚未解锁', requestId, 'submit_action');
+      }
+      if (this.state.roomMode !== 'training' && action.transformCharacterId === 'star_god') {
+        return this.sendError(client, '星神目前仅在练功房开放测试', requestId, 'submit_action');
       }
       const targetCharacter = characterById.get(action.transformCharacterId);
       for (const [resourceId, amount] of Object.entries(targetCharacter?.transformationCost ?? {})) {
@@ -382,6 +389,7 @@ export class EnergyDuelRoom extends Room {
       synced.characterId = combatPlayer.characterId ?? synced.characterId;
       synced.currentFormId = combatPlayer.currentFormId ?? synced.currentFormId;
       synced.gridIndex = combatPlayer.gridIndex ?? synced.gridIndex;
+      synced.commandBuffer = combatPlayer.commandBuffer ?? synced.commandBuffer;
       synced.submitted = false;
       for (const [resourceId, current] of Object.entries(combatPlayer.resources)) {
         const resource = synced.resources.get(resourceId);
@@ -541,6 +549,7 @@ export class EnergyDuelRoom extends Room {
       actionId,
       Array.from(player.buffs.values(), (buff) => ({ buffId: buff.buffId, stacks: buff.stacks })),
       Object.fromEntries(Array.from(player.resources.entries(), ([resourceId, resource]) => [resourceId, resource.current])),
+      player.commandBuffer,
     );
   }
 
@@ -562,6 +571,7 @@ export class EnergyDuelRoom extends Room {
       buffStacks: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.stacks])),
       buffRemainingTurns: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.remainingTurns])),
       gridIndex: player.gridIndex,
+      commandBuffer: player.commandBuffer,
     };
   }
 
@@ -591,7 +601,10 @@ export class EnergyDuelRoom extends Room {
   }
 
   private tickStoredBuffs(playerId: string): void {
-    tickScopedBuffs(this.storedBuffs.get(playerId)?.values() ?? [], (buffId) => buffById.get(buffId)?.durationTurns);
+    const scopes = this.storedBuffs.get(playerId);
+    tickScopedBuffs(scopes?.values() ?? [], (buffId) => buffById.get(buffId)?.durationTurns);
+    const starGod = scopes?.get('star_god');
+    if (starGod && !starGod.has('transcendence') && !starGod.has('transcendence_permanent')) starGod.delete('transcendence_progress');
   }
 
   private ensureCharacterEntryState(playerId: string, characterId: string): void {

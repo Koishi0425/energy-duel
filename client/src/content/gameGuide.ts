@@ -146,7 +146,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     gamePlan: ['第一次变身获得的星是整局资源；使用星尘会一次消耗当前全部辉星，需要先规划储量。', '君王之剑可按资源选择整数强度；征召上前能从零锻造或重新激活被锁定的剑。'],
     keyMechanics: [
       { title: '星资源', description: '首次变身时获得，之后切换回来不会重复领取。' },
-      { title: '星尘全押', description: '提交时自动投入当前全部辉星，再在后发阶段分配等量的 0.5 级攻击。' },
+      { title: '星尘全押', description: '提交时自动投入当前全部辉星，再在后发阶段分配等量的 1.5 级多段攻击；仅在对波时合并等级。' },
       { title: '锻造状态', description: '等级、激活与锁定状态属于储君，切走后仍会保存。' },
     ],
     featuredActionIds: ['hidden_cache', 'stardust', 'sovereign_blade', 'summon_forth'],
@@ -191,6 +191,34 @@ export const characterGuides: CharacterGuideDefinition[] = [
       { title: '不可选中', description: '沉睡期间无法被选中并免疫伤害，但也不能像普通回合一样自由行动。' },
     ],
     featuredActionIds: ['fist', 'rockfall_hammer', 'filthy_bloodline', 'continue_sleep', 'slash'],
+  },
+  {
+    characterId: 'ye_qingxian', role: '生命换取资源与收割', difficulty: '专家',
+    summary: '用祭道抵免最后一点资源缺口，再以掌仙术和君临天下触发吞天回收资源。',
+    gamePlan: ['资源合计达到 3 后才能用祭道补足一项恰好差 1 的费用。', '提交专属攻击时先选择吞天获得气或蓄力。'],
+    keyMechanics: [{ title: '祭道', description: '自伤不触发濒死获得气；濒死时再次祭道可能直接死亡。' }],
+    featuredActionIds: ['immortal_palm', 'rule_the_world'],
+  },
+  {
+    characterId: 'napoleon', role: '公开指令与策略编排', difficulty: '专家',
+    summary: '放弃基础资源与全部通用招式，以攻击、防守、战术三种指令组织公开的指令缓冲。',
+    gamePlan: ['攻击负责施压，防守维持生存，战术指令在后续回合转化为战术优势。', '指令缓冲最多保留最近 6 条。'],
+    keyMechanics: [{ title: '技能树替换', description: '变身后只剩三种指令，完成厄尔巴逃逸前不能再次变身。' }],
+    featuredActionIds: ['attack_order', 'defense_order', 'tactical_order'],
+  },
+  {
+    characterId: 'star_god', role: '成长减伤与超脱（练功房测试）', difficulty: '专家',
+    summary: '仅在练功房开放；叠加神体与和光同尘，再通过创生星核测试超脱分支。',
+    gamePlan: ['先用和光同尘积累神体。', '超脱期间根据局势选择融合或引爆。'],
+    keyMechanics: [{ title: '练功房限定', description: '当前设计仍在调整，普通房间不能选择或变身为星神。' }],
+    featuredActionIds: ['harmony_with_light', 'nebula_shock', 'create_star_core', 'transcend_fuse', 'transcend_detonate'],
+  },
+  {
+    characterId: 'ku', role: '预判反制与永久成长', difficulty: '专家',
+    summary: '预判对手行动分类，应对成功后积累千锤百炼并强化整套专属技能。',
+    gamePlan: ['根据对手资源和局势选择杖责、看破或崩裂。', '成长后用裂空刺穿透普通防护。'],
+    keyMechanics: [{ title: '应对成功', description: '成功阻止目标行动的预期效果时获得 0.5 气并提高一层成长，最多 4 层。' }],
+    featuredActionIds: ['void_pierce', 'censure', 'redirect', 'see_through', 'shatter'],
   },
 ];
 

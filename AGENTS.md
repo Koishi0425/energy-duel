@@ -108,8 +108,10 @@ Run commands from the repository root:
   reveals every submitted action, then lets each deferred actor allocate targets
   before authoritative resolution. Deferred selection supports single targets,
   repeated allocations, and explicitly skippable windows such as Haunting Shadows.
-- Transforming adds the target character's skill tree without removing any
-  base skills. The initial character may use charge, gain-charge, steal,
+- Transforming normally adds the target character's skill tree without removing
+  base skills. Napoleon is the sole replacement-tree exception: while active,
+  only his three commands, executable strategies, and conditionally unlocked
+  transform entry are visible. The initial character may use charge, gain-charge, steal,
   double-steal, chop, defend, super-defend, and the transform entry;
   offensive and other special trees unlock after transforming. Keep this invariant in configuration, server
   validation, tests, manuals, and UI filtering.
@@ -118,15 +120,16 @@ Run commands from the repository root:
   server evaluate the same requirements. Gonggang's axe defense is the first
   example and requires the `axe_raised` buff.
   Transformation costs belong to target character definitions, not the generic
-  transform action. Players may switch repeatedly to any configured character
-  other than the current one. Buffs default to character scope: inactive
+  transform action. Players may normally switch repeatedly to any configured
+  non-training-only character other than the current one; Napoleon cannot leave
+  until Elba Escape grants the transform action. Buffs default to character scope: inactive
   character buffs remain server-side and finite durations keep ticking; only
   explicitly player-scoped buffs follow across forms.
   Regent unlocks the persistent `stars` resource and receives three Stars only
   on the first transformation each game. Stardust always spends every Star the
   actor currently holds; its authoritative power equals that full amount.
-  Sovereign Blade forge level is capped
-  at three, supports half-point stacks, and its forge/active/locked state is
+  Sovereign Blade forge level has no upper limit, supports half-point stacks,
+  and its forge/active/locked state is
   character-scoped and restored when switching back. Summon Forth can create the
   Blade from zero forge or reactivate it while locked. Variable actions normally
   choose an integer power at submission; all-in variables derive and validate
@@ -213,9 +216,18 @@ Run commands from the repository root:
   only for that use. Super Defense and Dark Shelter do not use this rule.
   Defend, Axe Defend, and Collect Light are persistent breakable defenses;
   Particle Wall, Iridescence, and Forge Wall are recreated defenses.
+  Repeated hits from the same multi-hit action combine their levels only when
+  the target selected an attack-category action (an attack clash). Against
+  defense, base, resource, special, or missing actions, every hit resolves
+  separately. Stardust is the first action using this rule and each hit is 1.5.
   Cooldown progress is action-configured through `cooldownReduction`; do not
   infer it from the actor's current character. Shadow Blade progresses only from
   Nightmare-specific actions listed in gameplay configuration.
+  Star God is registered for training-room balance tests only and must never be
+  reachable through a standard-room transformation list or accepted by the
+  standard-room server. Napoleon replaces the normal skill tree with the three
+  command actions and synchronizes an ordered, six-command public buffer; never
+  encode command order as unordered buff stacks.
 - The login/lobby shell must stay independent of Ant Design and PixiJS. Battle
   UI and the in-app tutorial are lazy-loaded. Use `?perf=1` to display local FPS,
   slow-frame, long-task, RTT, and optional heap metrics while profiling.

@@ -85,6 +85,13 @@ describe('room support', () => {
     expect(isActionUnlocked('mudrock', 'base', 'slash', ['mud_slash_unlocked'])).toBe(true);
   });
 
+  it('shows Napoleon strategies only for an executable ordered buffer', () => {
+    expect(isActionUnlocked('napoleon', 'base', 'nap_strategy_aa', [], {}, '')).toBe(false);
+    expect(isActionUnlocked('napoleon', 'base', 'nap_strategy_aa', [], {}, 'A')).toBe(true);
+    expect(isActionUnlocked('napoleon', 'base', 'transform', [], {}, 'TATAT')).toBe(false);
+    expect(isActionUnlocked('napoleon', 'base', 'transform', ['elba_unlocked'], {}, '')).toBe(true);
+  });
+
   it('ticks finite buffs in inactive character scopes without removing infinite buffs', () => {
     const gonggang = new Map([['timed', { remainingTurns: 2 }], ['infinite', { remainingTurns: 0 }]]);
     const jiaosila = new Map<string, { remainingTurns: number }>();

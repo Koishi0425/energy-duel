@@ -51,6 +51,17 @@ describe('EnergyDuelRoom character-scoped buffs', () => {
     room.syncActiveBuffs('p', 'regent', restored);
     expect(restored.get('p:sovereign_blade_forged')?.stacks).toBe(2.5);
   });
+
+  it('removes Star God progress when finite transcendence expires', () => {
+    const room = new EnergyDuelRoom() as any; const current = new MapSchema<BuffState>();
+    const transcendence = new BuffState(); transcendence.instanceId = 'p:transcendence'; transcendence.buffId = 'transcendence'; transcendence.remainingTurns = 1; transcendence.sourcePlayerId = 'p';
+    const progress = new BuffState(); progress.instanceId = 'p:transcendence_progress'; progress.buffId = 'transcendence_progress'; progress.stacks = 3; progress.sourcePlayerId = 'p';
+    current.set(transcendence.instanceId, transcendence); current.set(progress.instanceId, progress);
+    room.captureActiveBuffs('p', 'star_god', new Set(['transcendence', 'transcendence_progress']), current, { transcendence: 1, transcendence_progress: 3 }, { transcendence: 1 });
+    room.tickStoredBuffs('p');
+    const restored = new MapSchema<BuffState>(); room.syncActiveBuffs('p', 'star_god', restored);
+    expect(Array.from(restored.values(), (buff) => buff.buffId)).toEqual([]);
+  });
 });
 
 describe('EnergyDuelRoom training actors', () => {

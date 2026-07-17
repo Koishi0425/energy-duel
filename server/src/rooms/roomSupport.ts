@@ -1,4 +1,4 @@
-import { actionById, buffById, characterById } from '@energy-duel/shared';
+import { actionById, buffById, characterById, napoleonStrategyModes } from '@energy-duel/shared';
 
 export interface PositionedPlayer {
   accountId: string;
@@ -68,12 +68,14 @@ export function colorForAccount(accountId: string, usedColors: Set<number>): num
 
 export interface UnlockBuff { buffId: string; stacks: number }
 
-export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>, resources: Readonly<Record<string, number>> = {}): boolean {
+export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>, resources: Readonly<Record<string, number>> = {}, commandBuffer = ''): boolean {
   const currentBuffs = new Map(Array.from(buffs, (buff) => typeof buff === 'string' ? [buff, 1] : [buff.buffId, buff.stacks]));
   const visibleInTree = characterById.get(characterId)?.forms.find((form) => form.id === formId)?.unlockedActions.includes(actionId) === true;
   const grantedByBuff = Array.from(currentBuffs.keys()).some((buffId) => buffById.get(buffId)?.grantedActionIds?.includes(actionId));
   if (!visibleInTree && !grantedByBuff) return false;
-  const requirements = actionById.get(actionId)?.unlockRequirements;
+  const action = actionById.get(actionId);
+  if (action?.napoleonSequence && napoleonStrategyModes(commandBuffer, action.napoleonSequence).length === 0) return false;
+  const requirements = action?.unlockRequirements;
   return (requirements?.allBuffs ?? []).every((buffId) => currentBuffs.has(buffId))
     && (requirements?.noneBuffs ?? []).every((buffId) => !currentBuffs.has(buffId))
     && Object.entries(requirements?.minBuffStacks ?? {}).every(([buffId, stacks]) => (currentBuffs.get(buffId) ?? 0) >= stacks)

@@ -4,6 +4,7 @@ import {
   characterById,
   gameConfig,
   isResourceVisibleForCharacter,
+  napoleonStrategyModes,
   resourceById,
   type ActionDefinition,
   type CommandResultMessage,
@@ -55,6 +56,10 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [flexibleAction, setFlexibleAction] = useState<ActionDefinition>();
   const [resourceSpend, setResourceSpend] = useState<Record<string, number>>({});
   const [pendingSpend, setPendingSpend] = useState<Record<string, number>>();
+  const [resourceChoiceAction, setResourceChoiceAction] = useState<ActionDefinition>();
+  const [pendingResourceChoice, setPendingResourceChoice] = useState<'energy' | 'charge'>();
+  const [strategyModeAction, setStrategyModeAction] = useState<ActionDefinition>();
+  const [pendingStrategyMode, setPendingStrategyMode] = useState<'execute' | 'append'>();
   const [gridAction, setGridAction] = useState<{ action: ActionDefinition; targetIds: string[] }>();
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
@@ -173,7 +178,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (next && next.playerId !== activeActorId) { setActiveActorId(next.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setSubmittedLabel(undefined); }
   }, [activeActorId, controlledActors, gameState.phase, gameState.roomMode]);
 
-  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number, targetGridIndex?: number, spend?: Record<string, number>) => {
+  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number, targetGridIndex?: number, spend?: Record<string, number>, resourceChoiceOverride?: 'energy' | 'charge' | null, strategyModeOverride?: 'execute' | 'append' | null) => {
+    const resourceChoice = resourceChoiceOverride === undefined ? pendingResourceChoice : resourceChoiceOverride ?? undefined;
+    const strategyMode = strategyModeOverride === undefined ? pendingStrategyMode : strategyModeOverride ?? undefined;
     const targetNames = targetIds.map((id) => players.find((player) => player.playerId === id)?.nickname ?? id);
     const label = transformCharacterId
       ? `已选择变身：${characterById.get(transformCharacterId)?.name ?? transformCharacterId}`
@@ -184,12 +191,26 @@ function RoomContent({ room, session, onLeave }: Props) {
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
       targetIds: action.target.mode === 'multiple_enemies' && targetIds.length > 0 ? targetIds : undefined,
-      transformCharacterId, power, targetGridIndex, resourceSpend: spend,
+      transformCharacterId, power, targetGridIndex, resourceSpend: spend, resourceChoice, strategySequence: strategyMode,
     });
+    setPendingResourceChoice(undefined);
+    setPendingStrategyMode(undefined);
     void api.info({ content: label, duration: 1.6 });
   };
 
   const chooseAction = (action: ActionDefinition) => {
+    if (activeActor?.characterId === 'ye_qingxian' && ['immortal_palm', 'rule_the_world'].includes(action.id)) {
+      setSelectedActionId(action.id); setSelectedTargetIds([]); setResourceChoiceAction(action); return;
+    }
+    if (action.napoleonSequence) {
+      const modes = napoleonStrategyModes(activeActor?.commandBuffer ?? '', action.napoleonSequence);
+      if (modes.length > 1) { setSelectedActionId(action.id); setSelectedTargetIds([]); setStrategyModeAction(action); return; }
+      if (modes[0]) { setPendingStrategyMode(modes[0]); continueChooseAction(action, undefined, modes[0]); return; }
+    }
+    setPendingResourceChoice(undefined); setPendingStrategyMode(undefined); continueChooseAction(action, null, null);
+  };
+
+  const continueChooseAction = (action: ActionDefinition, resourceChoice?: 'energy' | 'charge' | null, strategyMode?: 'execute' | 'append' | null) => {
     setSelectedActionId(action.id); setSelectedTargetIds([]);
     const deferred = action.target.selectionTiming === 'deferred'
       || (['steal', 'absorb_charge'].includes(action.id) && activeActor?.characterId === 'ao' && (activeActor.buffs.find((buff) => buff.buffId === 'ao_mastery')?.stacks ?? 0) >= 2);
@@ -208,7 +229,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (action.targetsGridCell) { setGridAction({ action, targetIds: [] }); return; }
     if (action.target.mode === 'single_enemy' || action.target.mode === 'multiple_enemies') {
       void api.open({ type: 'info', content: action.target.mode === 'multiple_enemies' ? `请选择 ${action.target.maxTargets} 次目标` : '请在战场上选择目标', duration: 1.5 });
-    } else submit(action);
+    } else submit(action, [], undefined, undefined, undefined, undefined, resourceChoice, strategyMode);
   };
 
   const chooseTarget = (player: SyncedPlayer) => {
@@ -346,6 +367,14 @@ function RoomContent({ room, session, onLeave }: Props) {
     <Modal title={flexibleAction ? `${flexibleAction.name} · 任意资源支付` : '任意资源支付'} open={Boolean(flexibleAction)} okText="确认支付" cancelText="取消" onCancel={() => { setFlexibleAction(undefined); setSelectedActionId(undefined); }} onOk={confirmFlexibleAction} okButtonProps={{ disabled: flexibleSelected !== flexibleRequired }}>
       <p>请选择合计 {flexibleRequired} 点资源（已选 {flexibleSelected}）。任意资源支付只接受整数点数。</p>
       {activeActor && Object.values(activeActor.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, activeActor.characterId, resource.current)).map((resource) => <div className="resource-payment-row" key={resource.resourceId}><span>{resourceById.get(resource.resourceId)?.name ?? resource.resourceId}（持有 {formatNumber(resource.current)}）</span><InputNumber min={0} max={Math.max(0, Math.floor(resource.current + 1e-6))} step={1} precision={0} value={resourceSpend[resource.resourceId] ?? 0} onChange={(value) => setResourceSpend((current) => ({ ...current, [resource.resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>)}
+    </Modal>
+    <Modal title="吞天收益选择" open={Boolean(resourceChoiceAction)} footer={null} onCancel={() => { setResourceChoiceAction(undefined); setSelectedActionId(undefined); }}>
+      <p>若本次招式令其他玩家健康状态左移，将获得你选择的基础资源。</p>
+      <div className="deferred-selection-actions"><Button type="primary" onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('energy'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'energy', null); }}>获得气</Button><Button onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('charge'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'charge', null); }}>获得蓄力</Button></div>
+    </Modal>
+    <Modal title="策略执行方式" open={Boolean(strategyModeAction)} footer={null} onCancel={() => { setStrategyModeAction(undefined); setSelectedActionId(undefined); }}>
+      <p>当前缓冲为「{activeActor?.commandBuffer || '空'}」，策略序列为「{strategyModeAction?.napoleonSequence}」。</p>
+      <div className="deferred-selection-actions"><Button type="primary" onClick={() => { const action = strategyModeAction; setPendingStrategyMode('execute'); setStrategyModeAction(undefined); if (action) continueChooseAction(action, null, 'execute'); }}>纯执行已有序列</Button><Button onClick={() => { const action = strategyModeAction; setPendingStrategyMode('append'); setStrategyModeAction(undefined); if (action) continueChooseAction(action, null, 'append'); }}>追加尾指令并执行</Button></div>
     </Modal>
     {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
