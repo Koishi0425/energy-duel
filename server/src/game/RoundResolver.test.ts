@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { actionById, type ActionDefinition } from '@energy-duel/shared';
 import { buildResolutionSteps, resolveRound, validateAction, type CombatPlayer, type SubmittedAction } from './RoundResolver.js';
 
 function roster(...players: Array<[string, number]>): Map<string, CombatPlayer> {
@@ -168,7 +169,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.currentHp).toBe(2);
   });
 
-  it('combines Stardust hits when the target uses an attack', () => {
+  it('combines Stardust skill levels against an attack but caps damage at one hit', () => {
     const players = roster(['a', 0], ['b', 1]);
     players.get('a')!.resources.stars = 4;
     const target = players.get('b')!;
@@ -177,7 +178,79 @@ describe('RoundResolver JSON-driven actions', () => {
       ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
       ['b', { actionId: 'wave', targetId: 'a' }],
     ));
-    expect(target.alive).toBe(false);
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(1);
+  });
+
+  it('resolves multi-hit behavior from configuration instead of the effect id', () => {
+    const template = actionById.get('stardust')!;
+    const genericMultiHit = structuredClone(template) as ActionDefinition;
+    genericMultiHit.id = 'test_multi_hit';
+    genericMultiHit.name = '测试多段攻击';
+    genericMultiHit.effects = [{ handler: 'wave' }];
+    actionById.set(genericMultiHit.id, genericMultiHit);
+    try {
+      const players = roster(['a', 0], ['b', 1]);
+      const target = players.get('b')!;
+      target.currentHp = target.maxHp = 2;
+      const result = resolveRound(players, actions(
+        ['a', { actionId: genericMultiHit.id, power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
+        ['b', { actionId: 'wave', targetId: 'a' }],
+      ));
+      expect(target.currentHp).toBe(1);
+      expect(result.summary.join('\n')).toContain('测试多段攻击');
+      expect(result.summary.join('\n')).toContain('合并 4 段技能等级');
+    } finally {
+      actionById.delete(genericMultiHit.id);
+    }
+  });
+
+  it('does not combine multi-hit skill levels when the target attack is unrelated', () => {
+    const players = roster(['a', 0], ['b', 1], ['c', 0]);
+    players.get('a')!.resources.stars = 2;
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 2, targetIds: ['b', 'b'] }],
+      ['b', { actionId: 'wave', targetId: 'c' }],
+      ['c', { actionId: 'charge' }],
+    ));
+    expect(result.summary.join('\n')).not.toContain('合并 2 段技能等级');
+  });
+
+  it.each([
+    [3, 0.5],
+    [4, 1.5],
+    [5, 1.5],
+  ])('uses %i Stardust hits to beat skill level four but receives at most 1.5 damage', (stars, expectedDamage) => {
+    const players = roster(['a', 0], ['b', 1]);
+    const attacker = players.get('a')!;
+    const target = players.get('b')!;
+    attacker.resources.stars = stars;
+    target.characterId = 'napoleon';
+    target.buffs = new Set(['tactical_advantage']);
+    target.buffStacks = { tactical_advantage: 6 };
+    target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: stars, targetIds: Array(stars).fill('b') }],
+      ['b', { actionId: 'wave', targetId: 'a' }],
+    ));
+    expect(target.currentHp).toBe(expectedDamage >= 0.5 ? 1 : 2);
+    expect(target.alive).toBe(true);
+    expect(result.summary.join('\n')).toContain(`有效伤害 ${expectedDamage}`);
+  });
+
+  it('takes only the highest effective damage from repeated sources in one round', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 1]);
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'fist', targetId: 'b' }],
+      ['b', { actionId: 'charge' }],
+      ['c', { actionId: 'slash', targetId: 'b' }],
+    ));
+    expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(true);
   });
 
   it('cancels equal-level attacks and applies only the positive level difference', () => {
@@ -211,7 +284,8 @@ describe('RoundResolver JSON-driven actions', () => {
     players.get('b')!.currentHp = 2;
     players.get('b')!.maxHp = 2;
     const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
-    expect(result.summary).toContain('momoi 的拳（0.5级）对 Glmg 的气（0级）：等级差 0.5，Glmg 进入濒死状态。');
+    expect(result.summary.join('\n')).toContain('技能 0.5 / 伤害 0.5');
+    expect(result.summary.join('\n')).toContain('Glmg 进入濒死状态');
   });
 
   it('switches characters repeatedly using target-configured free transformation costs', () => {
@@ -319,8 +393,8 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(players.get('a')!, stardust, players)).not.toThrow();
     const result = resolveRound(players, actions(['a', stardust], ['b', { actionId: 'charge' }], ['c', { actionId: 'defend' }]));
     expect(players.get('a')!.resources.stars).toBe(0);
-    expect(players.get('b')!.currentHp).toBe(0);
-    expect(players.get('b')!.alive).toBe(false);
+    expect(players.get('b')!.currentHp).toBe(1);
+    expect(players.get('b')!.alive).toBe(true);
     expect(players.get('c')!.currentHp).toBe(2);
     expect(result.summary[0]).toContain('B ×2、C ×2');
   });
@@ -527,6 +601,21 @@ describe('RoundResolver JSON-driven actions', () => {
     const players = roster(['a', 2], ['b', 0]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.buffs = new Set(['transcendence']); target.buffStacks = { transcendence: 1 };
     resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('transcendence')).toBe(false);
+  });
+
+  it('applies transcendence once to the highest damage when a lower hit resolves first', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 2]);
+    const target = players.get('b')!;
+    target.characterId = 'star_god'; target.currentHp = 1; target.maxHp = 2;
+    target.buffs = new Set(['transcendence']); target.buffStacks = { transcendence: 1, transcendence_progress: 0 };
+    resolveRound(players, actions(
+      ['a', { actionId: 'fist', targetId: 'b' }],
+      ['b', { actionId: 'charge' }],
+      ['c', { actionId: 'atomic_breath', targetId: 'b' }],
+    ));
     expect(target.alive).toBe(true);
     expect(target.currentHp).toBe(1);
     expect(target.buffs?.has('transcendence')).toBe(false);

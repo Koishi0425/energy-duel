@@ -4,7 +4,7 @@ import { canExecuteNapoleonStrategy, gameConfig, napoleonStrategyFromCommand, va
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(15);
+    expect(gameConfig.version).toBe(16);
     expect(gameConfig.actions).toHaveLength(87);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku']);
@@ -81,10 +81,37 @@ describe('game configuration', () => {
   });
 
   it('marks Stardust as all-in and assigns special-resource visibility', () => {
-    expect(gameConfig.actions.find((action) => action.id === 'stardust')?.usesAllVariableResource).toBe(true);
+    const stardust = gameConfig.actions.find((action) => action.id === 'stardust');
+    expect(stardust?.usesAllVariableResource).toBe(true);
+    expect(stardust?.multiHit).toBe(true);
+    expect(stardust?.variable?.skillLevelPerPower).toBe(1.5);
+    expect(stardust?.damageLevel).toBe(1.5);
     expect(gameConfig.resources.find((resource) => resource.id === 'energy')?.alwaysVisible).toBe(true);
     expect(gameConfig.resources.find((resource) => resource.id === 'stars')?.characterIds).toEqual(['regent']);
     expect(gameConfig.buffs.find((buff) => buff.id === 'tactical_advantage')?.durationTurns).toBeUndefined();
+  });
+
+  it('rejects invalid split skill and damage levels', () => {
+    for (const mutate of [
+      (config: any) => { config.actions[0].skillLevel = -0.5; },
+      (config: any) => { config.actions[0].damageLevel = Number.NaN; },
+      (config: any) => { config.actions.find((action: any) => action.variable).variable.skillLevelPerPower = -1; },
+    ]) {
+      const invalid = structuredClone(gameConfig) as any;
+      mutate(invalid);
+      expect(() => validateGameConfig(invalid)).toThrow();
+    }
+  });
+
+  it('accepts multi-hit only for power-sized repeated attacks', () => {
+    for (const mutate of [
+      (config: any) => { config.actions[0].multiHit = true; },
+      (config: any) => { config.actions.find((action: any) => action.id === 'stardust').multiHit = false; },
+    ]) {
+      const invalid = structuredClone(gameConfig) as any;
+      mutate(invalid);
+      expect(() => validateGameConfig(invalid)).toThrow(/multi-hit/);
+    }
   });
 });
 

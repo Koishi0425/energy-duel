@@ -178,7 +178,12 @@ function formatCost(action: ActionDefinition, player: SyncedPlayer): string {
 function formatAmount(value: number): string { return Math.abs(value - 1 / 3) < 0.001 ? '1/3' : String(value); }
 function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): string {
   if (action.defenseBreak?.mode === 'persistent' && player.buffs.some((buff) => buff.buffId === action.defenseBreak?.brokenBuffId)) return '0（已破碎）';
-  if (action.variable) return `${action.variable.levelPerPower}n`;
+  if (action.variable) {
+    const skill = action.variable.skillLevelPerPower ?? action.variable.levelPerPower;
+    const damage = action.damageLevel ?? action.variable.damageLevelPerPower ?? action.variable.levelPerPower;
+    const damageLabel = action.damageLevel !== undefined ? String(damage) : `${damage}n`;
+    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== skill) ? `技能 ${skill}n / 伤害 ${damageLabel}` : `${skill}n`;
+  }
   if (player.characterId === 'napoleon' && (action.napoleonSequence || ['attack_order', 'defense_order'].includes(action.id))) {
     const stacks = (buffId: string) => player.buffs.find((buff) => buff.buffId === buffId)?.stacks ?? 0;
     const tactical = stacks('tactical_advantage');
@@ -190,7 +195,10 @@ function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): stri
     if (action.category === 'special') return '—';
     return formatAmount(attackLevel);
   }
-  return action.level >= 999 ? '∞' : String(action.level);
+  const skill = action.skillLevel ?? action.level;
+  const damage = action.damageLevel ?? skill;
+  const skillLabel = skill >= 999 ? '∞' : formatAmount(skill);
+  return action.category === 'attack' && damage !== skill ? `技能 ${skillLabel} / 伤害 ${formatAmount(damage)}` : skillLabel;
 }
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
 function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.maxTargetsByPower) return '后发分配 n 次'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }

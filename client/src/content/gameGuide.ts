@@ -50,12 +50,14 @@ export const ruleSections: GuideSection[] = [
   {
     id: 'combat',
     title: '等级比较与生命状态',
-    summary: '伤害不是直接扣除数值，而是比较攻击等级与目标本回合对该攻击者有效的招式等级。',
+    summary: '技能等级决定对抗胜负，伤害等级决定命中后的健康结算；未特别说明时两者相等。',
     points: [
-      '等级差小于 0.5 时攻击被抵消；达到 0.5 但小于 1 时生命左移一层；达到 1 时直接死亡。',
-      '等级低于 3 的攻击最多令生命左移一层。治疗会令生命右移。',
-      '需要选目标的招式只会对其目标或实际作用范围内的攻击者提供等级，不能用攻击别人的招式抵挡第三人的攻击。',
-      '可破碎防御承受不低于自身等级的攻击后破碎；当前攻击仍按原等级比较，之后等级为 0。重新生成的临时防御仅在当次使用中保持破碎。',
+      '技能对抗差小于 0.5 时不命中；胜出后取伤害等级与技能差的较小值，再由防御抵消。',
+      '同一回合受到多段或多个来源的伤害时，健康结算只取最高有效伤害等级，不累计较低伤害。',
+      '若行动标记为多段攻击，并且目标的攻击技能对使用者有效，则只合并技能等级。伤害等级不得合并。若上述条件不成立，则每一个攻击段独立判定。',
+      '最高有效伤害低于 3 时最多令生命左移一层；达到 3 才可跨状态击杀。治疗会令生命右移。',
+      '需要选目标的招式只会对其目标或实际作用范围内的攻击者提供技能等级，不能用攻击别人的招式对抗第三人的攻击。',
+      '可破碎防御承受不低于自身防御等级的单次伤害后破碎；当前伤害仍先扣除原防御等级，之后防御等级为 0。重新生成的临时防御仅在当次使用中保持破碎。',
       '初始角色没有濒死状态；变身角色拥有健康、濒死、死亡三种状态，并在首次进入濒死时获得 1 气。',
       '“脆弱”会令拳或斩在满足条件时直接致死，具体条件以招式与被动说明为准。',
     ],
@@ -146,7 +148,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     gamePlan: ['第一次变身获得的星是整局资源；使用星尘会一次消耗当前全部辉星，需要先规划储量。', '君王之剑可按资源选择整数强度；征召上前能从零锻造或重新激活被锁定的剑。'],
     keyMechanics: [
       { title: '星资源', description: '首次变身时获得，之后切换回来不会重复领取。' },
-      { title: '星尘全押', description: '提交时自动投入当前全部辉星，再在后发阶段分配等量的 1.5 级多段攻击；仅在对波时合并等级。' },
+      { title: '星尘全押', description: '提交时必须投入全部辉星；每点辉星产生一个技能等级与伤害等级均为 1.5 的攻击段；全部攻击段遵循多段攻击通则。' },
       { title: '锻造状态', description: '等级、激活与锁定状态属于储君，切走后仍会保存。' },
     ],
     featuredActionIds: ['hidden_cache', 'stardust', 'sovereign_blade', 'summon_forth'],
@@ -251,9 +253,19 @@ export function formatGuideActionCost(action: ActionDefinition): string {
 }
 
 export function formatGuideActionLevel(action: ActionDefinition): string {
-  if (action.variable) return `${formatNumber(action.variable.levelPerPower)}n`;
+  if (action.variable) {
+    const skill = action.variable.skillLevelPerPower ?? action.variable.levelPerPower;
+    const damage = action.damageLevel ?? action.variable.damageLevelPerPower ?? action.variable.levelPerPower;
+    const damageLabel = action.damageLevel !== undefined ? formatNumber(damage) : `${formatNumber(damage)}n`;
+    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== skill)
+      ? `技能 ${formatNumber(skill)}n / 伤害 ${damageLabel}`
+      : `${formatNumber(skill)}n`;
+  }
   if (action.id === 'sovereign_blade') return '锻造等级';
-  return action.level >= 999 ? '∞' : formatNumber(action.level);
+  const skill = action.skillLevel ?? action.level;
+  const damage = action.damageLevel ?? skill;
+  const skillLabel = skill >= 999 ? '∞' : formatNumber(skill);
+  return action.category === 'attack' && damage !== skill ? `技能 ${skillLabel} / 伤害 ${formatNumber(damage)}` : skillLabel;
 }
 
 export function formatGuideTarget(action: ActionDefinition): string {

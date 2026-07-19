@@ -216,10 +216,16 @@ Run commands from the repository root:
   only for that use. Super Defense and Dark Shelter do not use this rule.
   Defend, Axe Defend, and Collect Light are persistent breakable defenses;
   Particle Wall, Iridescence, and Forge Wall are recreated defenses.
-  Repeated hits from the same multi-hit action combine their levels only when
-  the target selected an attack-category action (an attack clash). Against
-  defense, base, resource, special, or missing actions, every hit resolves
-  separately. Stardust is the first action using this rule and each hit is 1.5.
+  Actions have separate skill and damage levels; when unspecified both inherit
+  the legacy shared level. Skill clashes compare only skill level. Defense does
+  not clash and instead subtracts from damage level. An action with `multiHit:
+  true` uses the global multi-hit resolver: repeated allocations against an
+  attack-category action combine skill level only; allocations against other
+  categories resolve separately; damage level never combines. Do not branch on
+  a character ID or action ID to implement these rules. Stardust only supplies
+  its per-hit values and target allocations. A player resolves health from only
+  the highest effective damage level received during the round, across repeated
+  hits and multiple sources.
   Cooldown progress is action-configured through `cooldownReduction`; do not
   infer it from the actor's current character. Shadow Blade progresses only from
   Nightmare-specific actions listed in gameplay configuration.
