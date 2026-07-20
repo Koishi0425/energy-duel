@@ -83,10 +83,20 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .roster-player { display: grid; grid-template-columns: 12px minmax(0, 1fr); width: 100%; padding: 7px; color: #f4f6ff; text-align: left; border: 0; border-radius: 8px; background: transparent; }
 .roster-player:hover { background: rgba(109,124,255,.1); }
 .roster-player:disabled { cursor: not-allowed; opacity: .72; }
-.roster-player strong, .roster-player small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-name-row { grid-column: 2; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.roster-name-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-room-status { flex: none; padding: 1px 5px; border: 1px solid #46506d; border-radius: 4px; color: #b8c0d8; font-size: 9px; font-weight: 700; line-height: 1.35; }
+.player-room-status.positive { border-color: #28785d; color: #82ebbd; background: rgba(28,94,72,.3); }
+.player-room-status.waiting { border-color: #80652e; color: #f1cd79; background: rgba(105,76,24,.28); }
+.player-room-status.offline { border-color: #7c3442; color: #ff9aaa; background: rgba(101,35,49,.3); }
+.roster-player small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .roster-player small { grid-column: 2; color: #8992b2; font-size: 11px; }
 .color-chip { width: 11px; height: 11px; margin-top: 3px; border-radius: 50%; }
 .mobile-roster { display: none; }
+.emote-trigger.ant-btn { width: 30px; padding: 0; font-size: 18px; line-height: 1; }
+.emote-picker { display: grid; grid-template-columns: repeat(4, 42px); gap: 6px; }
+.emote-picker button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 1px solid #35405f; border-radius: 6px; color: #fff; background: #121a31; font-size: 24px; cursor: pointer; }
+.emote-picker button:hover, .emote-picker button:focus-visible { border-color: #7b89ff; outline: none; background: #202b52; }
 
 .game-control-panel { position: absolute; z-index: 9; right: 24px; bottom: 24px; width: min(430px, calc(100vw - 48px)); min-width: 330px; min-height: 150px; max-width: calc(100vw - 48px); max-height: min(82vh, 760px); overflow: auto; resize: both; padding: 16px; border: 1px solid #303b60; border-radius: 16px; background: rgba(10,14,29,.93); box-shadow: 0 20px 50px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
 .round-result { max-height: 100px; margin-bottom: 10px; overflow-y: auto; color: #c8cee6; font-size: 13px; line-height: 1.45; }

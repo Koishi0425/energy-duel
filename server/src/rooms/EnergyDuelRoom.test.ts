@@ -94,6 +94,23 @@ describe('EnergyDuelRoom training actors', () => {
   });
 });
 
+describe('EnergyDuelRoom emotes', () => {
+  it('broadcasts only validated, rate-limited emotes for the sending player', () => {
+    const room = new EnergyDuelRoom() as any;
+    const player = new PlayerState(); player.playerId = 'p'; player.accountId = 'account';
+    room.state.players.set(player.playerId, player);
+    room.broadcast = vi.fn();
+    const client = { sessionId: 'p', send: vi.fn() };
+
+    room.sendEmote(client, { emoteId: 'laugh' });
+    expect(room.broadcast).toHaveBeenCalledWith('room_emote', expect.objectContaining({ playerId: 'p', emoteId: 'laugh' }));
+    room.sendEmote(client, { emoteId: 'not-an-emote' });
+    room.sendEmote(client, { emoteId: 'laugh' });
+    expect(room.broadcast).toHaveBeenCalledTimes(1);
+    expect(client.send).toHaveBeenCalledWith('command_result', expect.objectContaining({ ok: false, command: 'send_emote' }));
+  });
+});
+
 describe('EnergyDuelRoom game reset', () => {
   it('restores circular starting cells after a finished game', () => {
     const room = new EnergyDuelRoom() as any;

@@ -5,7 +5,9 @@ import {
   characterById,
   gameConfig,
   isResourceVisibleForCharacter,
+  isRoomEmoteId,
   napoleonStrategyFromCommand,
+  roomEmotes,
   type NapoleonCommand,
   resourceById,
   type ActionDefinition,
@@ -14,6 +16,8 @@ import {
   type GameRatingResultMessage,
   type PlayerProfile,
   type ResolutionStep,
+  type RoomEmoteId,
+  type RoomEmoteMessage,
   type RoundResolutionMessage,
   type SessionResponse,
   type SyncedBoardObject,
@@ -22,7 +26,7 @@ import {
   type SyncedRoundLogEntry,
 } from '@energy-duel/shared';
 import type { Room } from '@colyseus/sdk';
-import { Button, Card, Collapse, ConfigProvider, Drawer, Input, InputNumber, Modal, Select, Tag, message, theme } from 'antd';
+import { Button, Card, Collapse, ConfigProvider, Drawer, Input, InputNumber, Modal, Popover, Select, Tag, message, theme } from 'antd';
 import 'antd/dist/reset.css';
 import type { DemoRoomState } from './App';
 import ActionPanel from './components/ActionPanel';
@@ -35,6 +39,7 @@ import BoardObjectDetails from './components/BoardObjectDetails';
 import type { GuidePageId } from './content/gameGuide';
 import { readSyncedBoardObjects, readSyncedPlayers } from './roomState';
 import { fetchPlayerProfile } from './session';
+import { playerRoomStatus } from './playerRoomStatus';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
 const Tutorial = lazy(() => import('./components/Tutorial'));
@@ -79,6 +84,8 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [activeStep, setActiveStep] = useState<ResolutionStep>();
   const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
   const [ratingResult, setRatingResult] = useState<GameRatingResultMessage>();
+  const [emotesByPlayerId, setEmotesByPlayerId] = useState<Record<string, RoomEmoteId>>({});
+  const [emotePickerOpen, setEmotePickerOpen] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   const [tutorialRequest, setTutorialRequest] = useState<{ page: GuidePageId; characterId?: string }>();
@@ -87,6 +94,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   });
   const mounted = useRef(true);
   const profileRequests = useRef(new Set<string>());
+  const emoteTimers = useRef(new Map<string, number>());
 
   useEffect(() => {
     mounted.current = true;
@@ -114,6 +122,18 @@ function RoomContent({ room, session, onLeave }: Props) {
       void api.info({ content: `行动已公开：请为「${actionById.get(payload.actionId)?.name ?? payload.actionId}」后发分配目标`, duration: 2 });
     });
     const removeRatingResult = room.onMessage('game_rating_result', (payload: GameRatingResultMessage) => setRatingResult(payload));
+    const removeEmote = room.onMessage('room_emote', (payload: RoomEmoteMessage) => {
+      if (typeof payload?.playerId !== 'string' || !isRoomEmoteId(payload.emoteId)) return;
+      window.clearTimeout(emoteTimers.current.get(payload.playerId));
+      setEmotesByPlayerId((current) => ({ ...current, [payload.playerId]: payload.emoteId }));
+      const timer = window.setTimeout(() => {
+        setEmotesByPlayerId((current) => {
+          const next = { ...current }; delete next[payload.playerId]; return next;
+        });
+        emoteTimers.current.delete(payload.playerId);
+      }, 3_000);
+      emoteTimers.current.set(payload.playerId, timer);
+    });
     const handleDrop = () => setNetworkState('reconnecting');
     const handleReconnect = () => { setNetworkState('online'); void api.success({ content: '已重新连接', duration: 1 }); };
     const handleLeave = () => { setNetworkState('offline'); onLeave(); };
@@ -122,7 +142,8 @@ function RoomContent({ room, session, onLeave }: Props) {
     room.send('ping', { sentAt: performance.now() });
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
-      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult();
+      for (const timer of emoteTimers.current.values()) window.clearTimeout(timer); emoteTimers.current.clear();
+      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult(); removeEmote();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
 
@@ -341,7 +362,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     {contextHolder}
     <header className="game-header">
       <div><p className="eyebrow">CIRCULAR GRID</p><h1>{phaseTitle(gameState)}</h1></div>
-      <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
+      <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Popover open={emotePickerOpen} onOpenChange={setEmotePickerOpen} trigger="click" placement="bottomRight" content={<EmotePicker onSelect={(emoteId) => { room.send('send_emote', { requestId: requestId(), emoteId }); setEmotePickerOpen(false); }} />}><Button size="small" className="emote-trigger" aria-label="发表情" title="发表情">☺</Button></Popover><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
     </header>
     {networkState === 'reconnecting' && <div className="reconnecting-banner">连接中断，正在保留席位并自动重连…</div>}
     {submittedLabel && activeActor?.submitted && <div className="selection-toast">{activeActor.nickname}：{submittedLabel}</div>}
@@ -349,7 +370,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} boardObjects={boardObjects} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(object) => { setHovered(undefined); setInspectedBoardObject(object); }} />
+        <GameCanvas players={players} phase={gameState.phase} boardObjects={boardObjects} emotesByPlayerId={emotesByPlayerId} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(object) => { setHovered(undefined); setInspectedBoardObject(object); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
@@ -406,12 +427,19 @@ function TrainingSetup({ actors, room }: { actors: SyncedPlayer[]; room: Room<De
   </div>;
 }
 
+function EmotePicker({ onSelect }: { onSelect: (emoteId: RoomEmoteId) => void }) {
+  return <div className="emote-picker" role="menu" aria-label="房间表情">
+    {roomEmotes.map((emote) => <button key={emote.id} type="button" role="menuitem" title={emote.label} aria-label={emote.label} onClick={() => onSelect(emote.id)}>{emote.emoji}</button>)}
+  </div>;
+}
+
 function Roster({ players, gameState, viewer, onInspect }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer; onInspect: (player: SyncedPlayer) => void }) {
   return <div className="roster-list">{players.map((player) => {
     const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
     const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
     const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
-    return <button className="roster-player" key={player.accountId} type="button" disabled={Boolean(obscured)} title={obscured ? '黑暗中无法查看资料' : player.isTrainingDummy ? '查看角色详情' : '查看玩家详细资料'} onClick={() => onInspect(player)}><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `${healthLabel} ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
+    const status = playerRoomStatus(player, gameState.phase);
+    return <button className="roster-player" key={player.accountId} type="button" disabled={Boolean(obscured)} title={obscured ? '黑暗中无法查看资料' : player.isTrainingDummy ? '查看角色详情' : '查看玩家详细资料'} onClick={() => onInspect(player)}><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><span className="roster-name-row"><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong>{!obscured && <span className={`player-room-status ${status.tone}`}>{status.label}</span>}</span><small>{obscured ? '状态未知' : player.alive ? `${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '本局已淘汰'}</small></button>;
   })}</div>;
 }
 

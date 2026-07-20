@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, type ResolutionStep, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
+import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RoomEmoteId, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
+import { playerRoomStatus } from '../playerRoomStatus';
 
 interface ScreenPoint { x: number; y: number }
 interface Props {
   players: SyncedPlayer[];
+  phase: GamePhase;
   boardObjects: SyncedBoardObject[];
+  emotesByPlayerId?: Record<string, RoomEmoteId>;
   targeting?: boolean;
   targetablePlayerIds?: string[];
   selectedTargetIds?: string[];
@@ -24,7 +27,7 @@ interface Props {
   onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
-interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
+interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; emoteBubble: Graphics; emote: Text; assetUrl: string }
 interface BoardObjectView {
   root: Container;
   overlay: Container;
@@ -191,7 +194,7 @@ export default function GameCanvas(props: Props) {
     const map = mapRef.current;
     if (!map) return;
     map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncGridSelection();
-  }, [props.players, props.boardObjects, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
+  }, [props.players, props.phase, props.boardObjects, props.emotesByPlayerId, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -231,7 +234,9 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
   const commandBuffer = new Text({ style: { fill: 0xffdf68, fontWeight: '700', dropShadow: true, align: 'center' } }); commandBuffer.anchor.set(0.5, 1);
   const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } }); name.anchor.set(0.5, 0);
   const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
-  root.addChild(ring, portrait, commandBuffer, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
+  const emoteBubble = new Graphics();
+  const emote = new Text({ style: { fontSize: 23, align: 'center' } }); emote.anchor.set(0.5);
+  root.addChild(ring, portrait, commandBuffer, name, status, emoteBubble, emote); root.eventMode = 'static'; root.cursor = 'pointer';
   const currentPlayer = () => propsRef.current.players.find((candidate) => candidate.playerId === playerId);
   root.on('pointerover', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
   root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
@@ -241,7 +246,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
     if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
     else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
   });
-  return { root, portrait, ring, commandBuffer, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
+  return { root, portrait, ring, commandBuffer, name, status, emoteBubble, emote, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
@@ -263,7 +268,14 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
   const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
   const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
-  view.status.text = obscured ? '状态未知' : player.alive ? `${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  const roomStatus = playerRoomStatus(player, props.phase).label;
+  view.status.text = obscured ? '状态未知' : player.alive ? `${roomStatus} · ${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : roomStatus; view.status.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  const emoteDefinition = roomEmotes.find((candidate) => candidate.id === props.emotesByPlayerId?.[player.playerId]);
+  const emoteX = portraitHeight * 0.38; const emoteY = 3 - portraitHeight * 0.62;
+  view.emoteBubble.visible = Boolean(emoteDefinition); view.emote.visible = Boolean(emoteDefinition);
+  view.emoteBubble.clear();
+  if (emoteDefinition) view.emoteBubble.roundRect(emoteX - 20, emoteY - 17, 40, 34, 9).fill({ color: 0xf7f8ff, alpha: 0.96 }).stroke({ color: player.color, width: 2 });
+  view.emote.text = emoteDefinition?.emoji ?? ''; view.emote.position.set(emoteX, emoteY);
 }
 
 function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {

@@ -224,6 +224,24 @@ export type ActionCategory = 'base' | 'attack' | 'defense' | 'resource' | 'speci
 export type TargetMode = 'none' | 'single_enemy' | 'multiple_enemies' | 'all_enemies';
 export type ActionId = string;
 
+export const roomEmotes = [
+  { id: 'thumbs_up', emoji: '👍', label: '赞' },
+  { id: 'laugh', emoji: '😂', label: '笑哭' },
+  { id: 'thinking', emoji: '🤔', label: '思考' },
+  { id: 'surprised', emoji: '😮', label: '惊讶' },
+  { id: 'cry', emoji: '😭', label: '难过' },
+  { id: 'angry', emoji: '😤', label: '生气' },
+  { id: 'clap', emoji: '👏', label: '鼓掌' },
+  { id: 'good_game', emoji: '🤝', label: '好局' },
+] as const;
+
+export type RoomEmoteId = typeof roomEmotes[number]['id'];
+export interface RoomEmoteMessage { playerId: string; emoteId: RoomEmoteId; sentAt: number }
+
+export function isRoomEmoteId(value: unknown): value is RoomEmoteId {
+  return typeof value === 'string' && roomEmotes.some((emote) => emote.id === value);
+}
+
 export interface SyncedGameState {
   phase: GamePhase;
   round: number;

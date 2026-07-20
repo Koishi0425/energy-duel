@@ -3,6 +3,7 @@ import {
   buffById,
   characterById,
   gameConfig,
+  isRoomEmoteId,
   type SessionIdentity,
   type ConfigureTrainingActorMessage,
   type SubmitDeferredTargetsMessage,
@@ -21,6 +22,7 @@ const NICKNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{1,16}$/;
 const DEFAULT_CHARACTER_ID = 'default_character';
 const DEFAULT_FORM_ID = 'base';
 const PLAYER_BUFF_SCOPE = '*';
+const EMOTE_COOLDOWN_MS = 1_200;
 
 export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
@@ -118,6 +120,7 @@ export class EnergyDuelRoom extends Room {
   private destroying = false;
   private claimedRoomCode = '';
   private readonly storedBuffs = new Map<string, Map<string, Map<string, StoredBuff>>>();
+  private readonly lastEmoteAt = new Map<string, number>();
   private nextDummyId = 1;
   private readonly gamePerformance = new Map<string, GamePerformance>();
   private currentGameId = '';
@@ -151,6 +154,7 @@ export class EnergyDuelRoom extends Room {
     this.onMessage('submit_deferred_targets', (client, payload: SubmitDeferredTargetsMessage) => this.submitDeferredTargets(client, payload));
     this.onMessage('cancel_action', (client, payload: { actorPlayerId?: string; requestId?: string }) => this.cancelAction(client, payload?.requestId, payload?.actorPlayerId));
     this.onMessage('acknowledge_result', (client, payload: { requestId?: string }) => this.acknowledgeResult(client, payload?.requestId));
+    this.onMessage('send_emote', (client, payload: { emoteId?: unknown; requestId?: string }) => this.sendEmote(client, payload));
     this.onMessage('ping', (client, payload: { sentAt?: number }) => client.send('pong', { sentAt: payload?.sentAt, serverAt: Date.now() }));
     this.onMessage('add_training_dummy', (client, payload: { requestId?: string }) => this.addTrainingDummy(client, payload?.requestId));
     this.onMessage('remove_training_dummy', (client, payload: { actorPlayerId?: string; requestId?: string }) => this.removeTrainingDummy(client, payload));
@@ -220,6 +224,7 @@ export class EnergyDuelRoom extends Room {
       return;
     }
     this.actions.cancel(client.sessionId);
+    this.lastEmoteAt.delete(client.sessionId);
     this.storedBuffs.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     assignGridIndices(this.state.players.values());
@@ -390,6 +395,19 @@ export class EnergyDuelRoom extends Room {
     const totalDurationMs = Math.max(450, result.steps.reduce((total, step) => total + step.durationMs, 0));
     this.broadcast('round_resolution', { round: this.state.round, steps: result.steps, totalDurationMs });
     this.clock.setTimeout(() => this.applyRoundResult(combatPlayers, combatBoardObjects, result), totalDurationMs);
+  }
+
+  private sendEmote(client: Client, payload: { emoteId?: unknown; requestId?: string }): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player?.connected || !isRoomEmoteId(payload?.emoteId)) {
+      return this.sendError(client, '表情无效', payload?.requestId, 'send_emote');
+    }
+    const now = Date.now();
+    if (now - (this.lastEmoteAt.get(client.sessionId) ?? 0) < EMOTE_COOLDOWN_MS) {
+      return this.sendError(client, '表情发送太频繁', payload?.requestId, 'send_emote');
+    }
+    this.lastEmoteAt.set(client.sessionId, now);
+    this.broadcast('room_emote', { playerId: player.playerId, emoteId: payload.emoteId, sentAt: now });
   }
 
   private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, combatBoardObjects: Map<string, CombatBoardObject>, result: RoundResult): void {
