@@ -179,6 +179,22 @@ export interface SyncedBuff {
   sourcePlayerId: string;
 }
 
+export type BoardObjectKind = 'terrain' | 'summon';
+
+export interface SyncedBoardObject {
+  objectId: string;
+  definitionId: string;
+  kind: BoardObjectKind;
+  ownerPlayerId: string;
+  sourceCharacterId: string;
+  gridIndex: number;
+  stacks: number;
+  currentHp: number;
+  maxHp: number;
+  remainingTurns: number;
+  permanent: boolean;
+}
+
 export interface SyncedPlayer {
   playerId: string;
   accountId: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { actionById, type ActionDefinition } from '@energy-duel/shared';
-import { buildResolutionSteps, resolveRound, validateAction, type CombatPlayer, type SubmittedAction } from './RoundResolver.js';
+import { buildResolutionSteps, resolveRound, validateAction, type CombatBoardObject, type CombatPlayer, type SubmittedAction } from './RoundResolver.js';
 
 function roster(...players: Array<[string, number]>): Map<string, CombatPlayer> {
   return new Map(players.map(([id, energy]) => [id, {
@@ -10,6 +10,22 @@ function roster(...players: Array<[string, number]>): Map<string, CombatPlayer> 
 
 function actions(...items: Array<[string, SubmittedAction]>): Map<string, SubmittedAction> {
   return new Map(items);
+}
+
+function dominion(ownerPlayerId: string, gridIndex: number): CombatBoardObject {
+  return {
+    objectId: `dominion:${ownerPlayerId}:${gridIndex}`,
+    definitionId: 'dominion',
+    kind: 'terrain',
+    ownerPlayerId,
+    sourceCharacterId: 'inner_guard',
+    gridIndex,
+    stacks: 1,
+    currentHp: 0,
+    maxHp: 0,
+    remainingTurns: 0,
+    permanent: true,
+  };
 }
 
 describe('RoundResolver JSON-driven actions', () => {
@@ -577,15 +593,94 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.alive).toBe(false);
   });
 
-  it('applies Star Body before normal defense while true damage bypasses it and barriers', () => {
+  it('applies Star Body before block and lets true damage bypass only Star Body', () => {
     const players = roster(['a', 0], ['b', 0]); const attacker = players.get('a')!; const target = players.get('b')!;
     target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 1.5 };
     resolveRound(players, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'charge' }]));
     expect(target.currentHp).toBe(2);
     target.buffs.add('mud_barrier'); target.buffStacks.mud_barrier = 1;
     attacker.characterId = 'ku'; attacker.resources.charge = 2; attacker.buffs = new Set(['tempered']); attacker.buffStacks = { tempered: 1 };
-    resolveRound(players, actions(['a', { actionId: 'void_pierce', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'void_pierce', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('mud_barrier')).toBe(false);
+  });
+
+  it('kills when a level-3 damage source retains at least 1 effective damage after block', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.currentHp).toBe(0);
+    expect(target.alive).toBe(false);
+  });
+
+  it('centers Rule the World on its selected grid cell', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0], ['d', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    actor.resources.energy = 1; actor.resources.charge = 2;
+    players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4; players.get('d')!.gridIndex = 6;
+    const action = { actionId: 'rule_the_world', targetGridIndex: 6, resourceChoice: 'energy' as const };
+    expect(() => validateAction(actor, action, players)).not.toThrow();
+    resolveRound(players, actions(['a', action], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }], ['d', { actionId: 'charge' }]));
+    expect(players.get('b')!.alive).toBe(true);
+    expect(players.get('c')!.alive).toBe(false);
+    expect(players.get('d')!.alive).toBe(false);
+  });
+
+  it('applies Star Body after skill clash rather than before it', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.currentHp = target.maxHp = 2;
+    target.characterId = 'star_god'; target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 1 };
+    resolveRound(players, actions(
+      ['a', { actionId: 'atomic_breath', targetId: 'b' }],
+      ['b', { actionId: 'slash', targetId: 'a' }],
+    ));
     expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(true);
+  });
+
+  it('retrospectively kills on a heavy hit even after a higher nonlethal hit resolved', () => {
+    const fastTrue = structuredClone(actionById.get('wave')!) as ActionDefinition;
+    fastTrue.id = 'test_fast_true'; fastTrue.name = '测试快速真实伤害'; fastTrue.level = 1.5; fastTrue.speedPriority = 3; fastTrue.damageType = 'true';
+    actionById.set(fastTrue.id, fastTrue);
+    try {
+      const players = roster(['a', 0], ['b', 0], ['c', 2]); const target = players.get('b')!;
+      players.get('c')!.resources.charge = 1; target.currentHp = target.maxHp = 2;
+      target.characterId = 'star_god'; target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 2 };
+      resolveRound(players, actions(
+        ['a', { actionId: fastTrue.id, targetId: 'b' }],
+        ['b', { actionId: 'charge' }],
+        ['c', { actionId: 'atomic_breath', targetId: 'b' }],
+      ));
+      expect(target.currentHp).toBe(0);
+      expect(target.alive).toBe(false);
+    } finally {
+      actionById.delete(fastTrue.id);
+    }
+  });
+
+  it('lets piercing damage ignore block but still apply Star Body and barrier', () => {
+    const template = actionById.get('atomic_breath')!;
+    const piercing = structuredClone(template) as ActionDefinition;
+    piercing.id = 'test_piercing'; piercing.name = '测试穿刺'; piercing.damageType = 'piercing'; piercing.effects = [{ handler: 'wave' }];
+    actionById.set(piercing.id, piercing);
+    try {
+      const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+      target.characterId = 'star_god'; target.currentHp = target.maxHp = 2;
+      target.buffs = new Set(['star_body', 'mud_barrier']); target.buffStacks = { star_body: 1, mud_barrier: 1 };
+      resolveRound(players, actions(['a', { actionId: piercing.id, targetId: 'b' }], ['b', { actionId: 'charge' }]));
+      expect(target.currentHp).toBe(2);
+      expect(target.buffs?.has('mud_barrier')).toBe(false);
+    } finally {
+      actionById.delete(piercing.id);
+    }
+  });
+
+  it('does not trigger Mudrock barrier while Mudrock uses a defense action', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.characterId = 'mudrock'; target.currentHp = target.maxHp = 2;
+    target.buffs = new Set(['mud_barrier']); target.buffStacks = { mud_barrier: 1 };
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.alive).toBe(false);
     expect(target.buffs?.has('mud_barrier')).toBe(true);
   });
 
@@ -606,7 +701,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.buffs?.has('transcendence')).toBe(false);
   });
 
-  it('applies transcendence once to the highest damage when a lower hit resolves first', () => {
+  it('does not let temporary transcendence save a near-death Star God', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 2]);
     const target = players.get('b')!;
     target.characterId = 'star_god'; target.currentHp = 1; target.maxHp = 2;
@@ -616,8 +711,76 @@ describe('RoundResolver JSON-driven actions', () => {
       ['b', { actionId: 'charge' }],
       ['c', { actionId: 'atomic_breath', targetId: 'b' }],
     ));
-    expect(target.alive).toBe(true);
-    expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(false);
+    expect(target.currentHp).toBe(0);
     expect(target.buffs?.has('transcendence')).toBe(false);
+  });
+
+  it('heals one health state at the end of each transcendence round', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    target.characterId = 'star_god'; target.currentHp = 1; target.maxHp = 2;
+    target.buffs = new Set(['transcendence']); target.buffStacks = { transcendence: 1, transcendence_progress: 0 };
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffStacks?.star_body).toBe(0.5);
+    expect(target.buffStacks?.transcendence_progress).toBe(1);
+  });
+
+  it('locks Inner Guard at one device and keeps Dominion as unique terrain markers', () => {
+    const players = roster(['a', 2], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; players.get('a')!.gridIndex = 0;
+    target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3; target.gridIndex = 2;
+    const existing = dominion('b', 0);
+    const boardObjects = new Map<string, CombatBoardObject>([[existing.objectId, existing]]);
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'charge' }]), boardObjects);
+    expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(true);
+    expect(target.buffs?.has('unbroken')).toBe(true);
+    expect(target.buffStacks?.inner_guard_devices).toBe(1);
+    expect(boardObjects.get(existing.objectId)).toBe(existing);
+    expect(Array.from(boardObjects.values()).map((object) => [object.gridIndex, object.stacks])).toEqual([[0, 1], [1, 1], [3, 1]]);
+  });
+
+  it('lets fragile Inner Guard trigger the one-device lock instead of dying', () => {
+    const players = roster(['a', 2], ['b', 1]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3;
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'fist', targetId: 'a' }]));
+    expect(target.currentHp).toBe(1);
+    expect(target.alive).toBe(true);
+    expect(target.buffs?.has('unbroken')).toBe(true);
+  });
+
+  it('applies direct health shifts to devices and runs the same lock check', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.gridIndex = 0; target.characterId = 'inner_guard'; target.currentHp = 2; target.maxHp = 3; target.gridIndex = 2;
+    const boardObjects = new Map<string, CombatBoardObject>();
+    resolveRound(players, actions(['a', { actionId: 'chop' }], ['b', { actionId: 'steal', targetId: 'a' }]), boardObjects);
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('unbroken')).toBe(true);
+    expect(Array.from(boardObjects.values()).map((object) => object.gridIndex)).toEqual([0, 1, 3]);
+  });
+
+  it('makes Dissipation skip skill clashes and attribute its Dominion source to the target cell', () => {
+    const players = roster(['a', 0], ['b', 2]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; players.get('a')!.characterId = 'inner_guard'; players.get('a')!.gridIndex = 0;
+    target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3; target.gridIndex = 2; target.resources.charge = 1;
+    const boardObjects = new Map<string, CombatBoardObject>();
+    resolveRound(players, actions(['a', { actionId: 'dissipation', targetId: 'b' }], ['b', { actionId: 'atomic_breath', targetId: 'a' }]), boardObjects);
+    expect(target.currentHp).toBe(2);
+    expect(Array.from(boardObjects.values()).filter((object) => object.ownerPlayerId === 'b').map((object) => object.gridIndex)).toEqual([2, 3, 1]);
+  });
+
+  it('uses Dominion cells for Collapsing Fear and reduces its near-death cost', () => {
+    const players = roster(['a', 2], ['b', 0], ['c', 0]); const actor = players.get('a')!;
+    actor.characterId = 'inner_guard'; actor.currentHp = 1; actor.maxHp = 3; actor.gridIndex = 0;
+    players.get('b')!.currentHp = players.get('b')!.maxHp = 2; players.get('b')!.gridIndex = 2;
+    players.get('c')!.currentHp = players.get('c')!.maxHp = 2; players.get('c')!.gridIndex = 4;
+    const actorDominion = dominion('a', 0); const targetDominion = dominion('a', 4);
+    const boardObjects = new Map<string, CombatBoardObject>([[actorDominion.objectId, actorDominion], [targetDominion.objectId, targetDominion]]);
+    expect(() => validateAction(actor, { actionId: 'collapsing_fear' }, players)).not.toThrow();
+    resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }]), boardObjects);
+    expect(actor.resources.energy).toBe(0);
+    expect(actor.alive).toBe(false);
+    expect(players.get('c')!.alive).toBe(false);
   });
 });

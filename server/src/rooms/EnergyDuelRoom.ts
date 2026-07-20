@@ -11,7 +11,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { ArraySchema, MapSchema, Schema, type } from '@colyseus/schema';
 import { Client, Room, ServerError, matchMaker } from '@colyseus/core';
-import { resolveRound, validateAction, type CombatPlayer, type RoundResult, type SubmittedAction } from '../game/RoundResolver.js';
+import { resolveRound, validateAction, type CombatBoardObject, type CombatPlayer, type RoundResult, type SubmittedAction } from '../game/RoundResolver.js';
 import { calculateGameScore, type GamePerformanceInput } from '../game/RatingCalculator.js';
 import { ActionSubmissionStore } from '../game/ActionSubmissionStore.js';
 import { sessionService } from '../services.js';
@@ -24,6 +24,10 @@ const PLAYER_BUFF_SCOPE = '*';
 
 export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
+}
+
+function maxHpForCharacter(characterId: string): number {
+  return characterId === DEFAULT_CHARACTER_ID ? 1 : characterId === 'inner_guard' ? 3 : 2;
 }
 
 interface StoredBuff {
@@ -74,6 +78,20 @@ export class PlayerState extends Schema {
   @type('string') commandBuffer = '';
 }
 
+export class BoardObjectState extends Schema {
+  @type('string') objectId = '';
+  @type('string') definitionId = '';
+  @type('string') kind: 'terrain' | 'summon' = 'terrain';
+  @type('string') ownerPlayerId = '';
+  @type('string') sourceCharacterId = '';
+  @type('uint8') gridIndex = 0;
+  @type('float32') stacks = 1;
+  @type('float32') currentHp = 0;
+  @type('float32') maxHp = 0;
+  @type('uint16') remainingTurns = 0;
+  @type('boolean') permanent = true;
+}
+
 export class RoundLogEntryState extends Schema {
   @type('uint16') gameNumber = 0;
   @type('uint16') round = 0;
@@ -83,6 +101,7 @@ export class RoundLogEntryState extends Schema {
 
 export class DemoRoomState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
+  @type({ map: BoardObjectState }) boardObjects = new MapSchema<BoardObjectState>();
   @type('string') phase: 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished' = 'waiting';
   @type('uint16') round = 0;
   @type('uint16') gameNumber = 0;
@@ -230,6 +249,7 @@ export class EnergyDuelRoom extends Room {
     this.state.phase = 'choosing';
     this.state.lastResult = '游戏开始，请选择本回合行动。';
     assignGridIndices(this.state.players.values());
+    this.state.boardObjects.clear();
     for (const player of this.state.players.values()) {
       this.gamePerformance.set(player.playerId, { roundsParticipated: 0, actionsCompleted: 0, damageStatesDealt: 0, eliminations: 0, successfulDefenses: 0, recoveryStates: 0 });
       player.alive = true;
@@ -270,9 +290,6 @@ export class EnergyDuelRoom extends Room {
       const transformations = characterById.get(player.characterId)?.transformations ?? [];
       if (!action.transformCharacterId || !transformations.includes(action.transformCharacterId)) {
         return this.sendError(client, '该变身尚未解锁', requestId, 'submit_action');
-      }
-      if (this.state.roomMode !== 'training' && action.transformCharacterId === 'star_god') {
-        return this.sendError(client, '星神目前仅在练功房开放测试', requestId, 'submit_action');
       }
       const targetCharacter = characterById.get(action.transformCharacterId);
       for (const [resourceId, amount] of Object.entries(targetCharacter?.transformationCost ?? {})) {
@@ -367,14 +384,15 @@ export class EnergyDuelRoom extends Room {
 
   private resolveCurrentRound(): void {
     const combatPlayers = this.combatPlayers();
-    const result = resolveRound(combatPlayers, this.actions.asReadonlyMap());
+    const combatBoardObjects = this.combatBoardObjects();
+    const result = resolveRound(combatPlayers, this.actions.asReadonlyMap(), combatBoardObjects);
     this.state.phase = 'resolving';
     const totalDurationMs = Math.max(450, result.steps.reduce((total, step) => total + step.durationMs, 0));
     this.broadcast('round_resolution', { round: this.state.round, steps: result.steps, totalDurationMs });
-    this.clock.setTimeout(() => this.applyRoundResult(combatPlayers, result), totalDurationMs);
+    this.clock.setTimeout(() => this.applyRoundResult(combatPlayers, combatBoardObjects, result), totalDurationMs);
   }
 
-  private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, result: RoundResult): void {
+  private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, combatBoardObjects: Map<string, CombatBoardObject>, result: RoundResult): void {
     for (const [playerId, delta] of Object.entries(result.performance)) {
       const totals = this.gamePerformance.get(playerId); const synced = this.state.players.get(playerId); if (!totals) continue;
       if (synced?.alive) { totals.roundsParticipated += 1; totals.actionsCompleted += 1; }
@@ -400,6 +418,13 @@ export class EnergyDuelRoom extends Room {
       }
       if (previousCharacterId !== synced.characterId) this.ensureCharacterEntryState(playerId, synced.characterId);
       this.syncActiveBuffs(playerId, synced.characterId, synced.buffs);
+      if (previousCharacterId !== synced.characterId) this.restoreCharacterHealth(playerId, synced);
+    }
+    this.state.boardObjects.clear();
+    for (const object of combatBoardObjects.values()) {
+      const synced = new BoardObjectState();
+      Object.assign(synced, object);
+      this.state.boardObjects.set(object.objectId, synced);
     }
     if (Array.from(combatPlayers.values()).filter((player) => player.alive).length > 1) this.applyNextRoundStartEffects(result);
     this.state.lastResult = result.summary.join('\n');
@@ -468,6 +493,7 @@ export class EnergyDuelRoom extends Room {
     this.state.round = 0;
     this.state.lastResult = '上一局已结束，可以重新准备。';
     assignGridIndices(this.state.players.values());
+    this.state.boardObjects.clear();
     for (const player of this.state.players.values()) {
       player.ready = false;
       player.resultConfirmed = false;
@@ -477,7 +503,7 @@ export class EnergyDuelRoom extends Room {
         player.characterId = DEFAULT_CHARACTER_ID;
         player.currentFormId = DEFAULT_FORM_ID;
       }
-      player.maxHp = player.characterId === DEFAULT_CHARACTER_ID ? 1 : 2;
+      player.maxHp = maxHpForCharacter(player.characterId);
       player.currentHp = player.maxHp;
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
@@ -536,7 +562,7 @@ export class EnergyDuelRoom extends Room {
       const character = characterById.get(payload.characterId);
       if (!character) return this.sendError(client, '角色不存在', payload.requestId, 'configure_training_actor');
       player.characterId = character.id; player.currentFormId = character.forms[0]?.id ?? DEFAULT_FORM_ID;
-      player.maxHp = character.id === DEFAULT_CHARACTER_ID ? 1 : 2; player.currentHp = player.maxHp; player.buffs.clear(); this.storedBuffs.set(player.playerId, new Map());
+      player.maxHp = maxHpForCharacter(character.id); player.currentHp = player.maxHp; player.buffs.clear(); this.storedBuffs.set(player.playerId, new Map()); this.ensureCharacterEntryState(player.playerId, character.id); this.syncActiveBuffs(player.playerId, character.id, player.buffs);
     }
     if (payload.resources && typeof payload.resources === 'object') for (const [resourceId, amount] of Object.entries(payload.resources)) {
       const resource = player.resources.get(resourceId);
@@ -612,13 +638,36 @@ export class EnergyDuelRoom extends Room {
     if (starGod && !starGod.has('transcendence') && !starGod.has('transcendence_permanent')) starGod.delete('transcendence_progress');
   }
 
+  private combatBoardObjects(): Map<string, CombatBoardObject> {
+    return new Map(Array.from(this.state.boardObjects.values(), (object) => [object.objectId, {
+      objectId: object.objectId,
+      definitionId: object.definitionId,
+      kind: object.kind,
+      ownerPlayerId: object.ownerPlayerId,
+      sourceCharacterId: object.sourceCharacterId,
+      gridIndex: object.gridIndex,
+      stacks: object.stacks,
+      currentHp: object.currentHp,
+      maxHp: object.maxHp,
+      remainingTurns: object.remainingTurns,
+      permanent: object.permanent,
+    }]));
+  }
+
   private ensureCharacterEntryState(playerId: string, characterId: string): void {
-    if (characterId !== 'mudrock') return;
     const scopes = this.storedBuffs.get(playerId); if (!scopes) return;
     const characterBuffs = scopes.get(characterId) ?? new Map<string, StoredBuff>();
     scopes.set(characterId, characterBuffs);
+    if (characterId === 'inner_guard' && !characterBuffs.has('inner_guard_devices')) characterBuffs.set('inner_guard_devices', { buffId: 'inner_guard_devices', stacks: 3, remainingTurns: 0, permanent: true, sourcePlayerId: playerId });
+    if (characterId !== 'mudrock') return;
     if (characterBuffs.has('mud_round_counter') || characterBuffs.has('mud_barrier')) return;
     characterBuffs.set('mud_round_counter', { buffId: 'mud_round_counter', stacks: 1, remainingTurns: 0, permanent: true, sourcePlayerId: playerId });
+  }
+
+  private restoreCharacterHealth(playerId: string, player: PlayerState): void {
+    player.maxHp = maxHpForCharacter(player.characterId);
+    if (player.characterId !== 'inner_guard') { player.currentHp = player.maxHp; return; }
+    player.currentHp = Math.max(1, Math.min(3, this.storedBuffs.get(playerId)?.get('inner_guard')?.get('inner_guard_devices')?.stacks ?? 3));
   }
 
   private syncActiveBuffs(playerId: string, characterId: string, target: MapSchema<BuffState>): void {

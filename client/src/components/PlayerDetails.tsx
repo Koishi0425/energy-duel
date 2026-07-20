@@ -21,7 +21,7 @@ export default function PlayerDetails({ player, profile, onOpenGuide, showPortra
       {onOpenGuide && <Button size="small" onClick={() => onOpenGuide(player.characterId)}>查看{character?.name ?? '角色'}教程</Button>}
       {Boolean(character?.passiveIds?.length) && <div className="buff-list"><strong>被动技能</strong>{character?.passiveIds?.map((id) => { const passive = passiveById.get(id); return <div className="buff-detail" key={id}><Tag color="purple">{passive?.name ?? id}</Tag><small>{passive?.description}</small></div>; })}</div>}
       <div className="detail-section">
-        <span>生命 {player.currentHp}/{player.maxHp}</span>
+        <span>{player.characterId === 'inner_guard' ? '装置' : '生命'} {player.currentHp}/{player.maxHp}</span>
         <Progress percent={player.maxHp > 0 ? Math.round(player.currentHp / player.maxHp * 100) : 0} showInfo={false} status={player.alive ? 'active' : 'exception'} />
       </div>
       <div className="resource-list">

@@ -1,5 +1,5 @@
 import rawGameConfig from '../config/game.json' with { type: 'json' };
-import type { ActionCategory, TargetMode } from './types.js';
+import type { ActionCategory, BoardObjectKind, TargetMode } from './types.js';
 
 export const EFFECT_HANDLERS = [
   'charge', 'gain_charge', 'steal', 'double_steal', 'chop', 'wave', 'fist', 'slash',
@@ -15,7 +15,9 @@ export const EFFECT_HANDLERS = [
   'immortal_palm', 'rule_the_world',
   'attack_order', 'defense_order', 'tactical_order', 'napoleon_strategy',
   'harmony_with_light', 'nebula_shock', 'create_star_core', 'transcend_fuse', 'transcend_detonate',
+  'hollow_fist',
   'void_pierce', 'censure', 'redirect', 'see_through', 'shatter',
+  'dissipation', 'collapsing_fear',
 ] as const;
 export type EffectHandlerId = typeof EFFECT_HANDLERS[number];
 
@@ -46,6 +48,16 @@ export interface PassiveDefinition {
 }
 
 export interface AssetDefinition { id: string; url: string; previewUrl?: string }
+export interface BoardObjectDefinition {
+  id: string;
+  name: string;
+  kind: BoardObjectKind;
+  color: string;
+  description: string;
+  displayMode: 'marker' | 'stacks' | 'health';
+  sourceLabel?: string;
+  defaultAssetId?: string;
+}
 export interface EffectDefinition { handler: EffectHandlerId }
 export interface TargetDefinition {
   mode: TargetMode;
@@ -94,7 +106,10 @@ export interface ActionDefinition {
   /** Marks an attack as repeated hits governed by the global multi-hit rules. */
   multiHit?: boolean;
   usesAllVariableResource?: boolean;
-  damageType?: 'generic' | 'blunt' | 'slash' | 'magic' | 'true';
+  /** Physical/magical taxonomy. It does not alter resolution yet. */
+  damageAttribute?: 'physical' | 'magic';
+  /** Defense interaction. Legacy generic/blunt/slash/magic values resolve as normal damage. */
+  damageType?: 'normal' | 'piercing' | 'true' | 'generic' | 'blunt' | 'slash' | 'magic';
   anyResourceCost?: number;
   targetsGridCell?: boolean;
   canSkipDeferred?: boolean;
@@ -135,6 +150,7 @@ export interface GameConfig {
   resources: ResourceDefinition[];
   buffs: BuffDefinition[];
   passives: PassiveDefinition[];
+  boardObjects: BoardObjectDefinition[];
   assets: AssetDefinition[];
   characters: CharacterDefinition[];
   actions: ActionDefinition[];
@@ -147,13 +163,14 @@ const handlers = new Set<string>(EFFECT_HANDLERS);
 export function validateGameConfig(input: unknown): GameConfig {
   if (!input || typeof input !== 'object') throw new Error('Game config must be an object.');
   const config = input as Partial<GameConfig>;
-  if (!Number.isInteger(config.version) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.passives) || !Array.isArray(config.assets)
+  if (!Number.isInteger(config.version) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.passives) || !Array.isArray(config.boardObjects) || !Array.isArray(config.assets)
     || !Array.isArray(config.characters) || !Array.isArray(config.actions)) {
     throw new Error('Game config is missing required collections or version.');
   }
   assertUnique(config.resources, 'resource');
   assertUnique(config.buffs, 'buff');
   assertUnique(config.passives, 'passive');
+  assertUnique(config.boardObjects, 'board object');
   assertUnique(config.assets, 'asset');
   assertUnique(config.characters, 'character');
   assertUnique(config.actions, 'action');
@@ -163,6 +180,10 @@ export function validateGameConfig(input: unknown): GameConfig {
   const assetIds = new Set(config.assets.map((item) => item.id));
   const actionIds = new Set(config.actions.map((item) => item.id));
   const passiveIds = new Set(config.passives.map((item) => item.id));
+  for (const object of config.boardObjects) {
+    if (!['terrain', 'summon'].includes(object.kind) || !['marker', 'stacks', 'health'].includes(object.displayMode) || typeof object.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(object.color)) throw new Error(`Board object ${object.id} is invalid.`);
+    if (object.defaultAssetId !== undefined && !assetIds.has(object.defaultAssetId)) throw new Error(`Board object ${object.id} references a missing asset.`);
+  }
   for (const asset of config.assets) {
     if (typeof asset.url !== 'string' || !asset.url.startsWith('/') || (asset.previewUrl !== undefined && (typeof asset.previewUrl !== 'string' || !asset.previewUrl.startsWith('/')))) {
       throw new Error(`Asset ${asset.id} has an invalid URL.`);
@@ -179,7 +200,8 @@ export function validateGameConfig(input: unknown): GameConfig {
   }
   for (const action of config.actions) {
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
-    if (action.damageType && !['generic', 'blunt', 'slash', 'magic', 'true'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
+    if (action.damageAttribute && !['physical', 'magic'].includes(action.damageAttribute)) throw new Error(`Action ${action.id} has an invalid damage attribute.`);
+    if (action.damageType && !['normal', 'piercing', 'true', 'generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
     if (!Number.isFinite(action.level) || action.level < 0
       || (action.skillLevel !== undefined && (!Number.isFinite(action.skillLevel) || action.skillLevel < 0))
       || (action.damageLevel !== undefined && (!Number.isFinite(action.damageLevel) || action.damageLevel < 0))) {
@@ -285,6 +307,7 @@ export const actionById = new Map(gameConfig.actions.map((action) => [action.id,
 export const resourceById = new Map(gameConfig.resources.map((resource) => [resource.id, resource]));
 export const buffById = new Map(gameConfig.buffs.map((buff) => [buff.id, buff]));
 export const passiveById = new Map(gameConfig.passives.map((passive) => [passive.id, passive]));
+export const boardObjectById = new Map(gameConfig.boardObjects.map((object) => [object.id, object]));
 export const characterById = new Map(gameConfig.characters.map((character) => [character.id, character]));
 export const assetById = new Map(gameConfig.assets.map((asset) => [asset.id, asset]));
 

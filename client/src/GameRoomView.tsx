@@ -16,6 +16,7 @@ import {
   type ResolutionStep,
   type RoundResolutionMessage,
   type SessionResponse,
+  type SyncedBoardObject,
   type SyncedGameState,
   type SyncedPlayer,
   type SyncedRoundLogEntry,
@@ -30,8 +31,9 @@ import PublicProfileDetails from './components/PublicProfileDetails';
 import { PerformancePanel } from './components/PerformancePanel';
 import FloatingWindow from './components/FloatingWindow';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
+import BoardObjectDetails from './components/BoardObjectDetails';
 import type { GuidePageId } from './content/gameGuide';
-import { readSyncedPlayers } from './roomState';
+import { readSyncedBoardObjects, readSyncedPlayers } from './roomState';
 import { fetchPlayerProfile } from './session';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
@@ -47,6 +49,7 @@ export default function GameRoomView(props: Props) {
 function RoomContent({ room, session, onLeave }: Props) {
   const [api, contextHolder] = message.useMessage();
   const [players, setPlayers] = useState<SyncedPlayer[]>([]);
+  const [boardObjects, setBoardObjects] = useState<SyncedBoardObject[]>([]);
   const [gameState, setGameState] = useState<SyncedGameState>({ phase: 'waiting', round: 0, gameNumber: 0, hostPlayerId: '', lastResult: '等待玩家准备。', roomMode: 'standard' });
   const [activeActorId, setActiveActorId] = useState<string>();
   const [battleLog, setBattleLog] = useState<SyncedRoundLogEntry[]>([]);
@@ -65,6 +68,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
+  const [inspectedBoardObject, setInspectedBoardObject] = useState<SyncedBoardObject>();
   const [profileViewer, setProfileViewer] = useState<SyncedPlayer>();
   const [profileCache, setProfileCache] = useState<Record<string, PlayerProfile>>({});
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
@@ -89,6 +93,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     const handleState = (state: DemoRoomState | undefined) => {
       if (!state) return;
       setPlayers(readSyncedPlayers(state.players?.values()));
+      setBoardObjects(readSyncedBoardObjects(state.boardObjects?.values()));
       setGameState({ phase: state.phase ?? 'waiting', round: state.round ?? 0, gameNumber: state.gameNumber ?? 0, hostPlayerId: state.hostPlayerId ?? '', lastResult: state.lastResult ?? '', roomMode: state.roomMode ?? 'standard' });
       setBattleLog(Array.from(state.roundLog?.values() ?? [], (entry) => ({ gameNumber: entry.gameNumber, round: entry.round, time: entry.time, text: entry.text })));
     };
@@ -285,6 +290,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     (activeActor.gridIndex - 1 + players.length * 2) % (players.length * 2),
     (activeActor.gridIndex + 1) % (players.length * 2),
   ].filter((cell) => !players.some((player) => player.alive && player.playerId !== activeActor.playerId && player.gridIndex === cell)) : [];
+  const gridDestinations = gridAction?.action.id === 'rule_the_world'
+    ? Array.from({ length: players.length * 2 }, (_, cell) => cell)
+    : adjacentDestinations;
   const chooseGridDestination = (cell: number | undefined) => {
     if (!gridAction) return;
     submit(gridAction.action, gridAction.targetIds, undefined, undefined, cell, pendingSpend);
@@ -343,7 +351,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={adjacentDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} />
+        <GameCanvas players={players} boardObjects={boardObjects} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(object) => { setHovered(undefined); setInspectedBoardObject(object); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
@@ -367,6 +375,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
     </section>
     <Drawer title="角色详情" placement="bottom" height="min(82dvh, 720px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <><PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} profile={profileCache[inspectedPlayer.accountId]} showPortrait onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />{!inspectedPlayer.isTrainingDummy && !profileCache[inspectedPlayer.accountId] && <p className={profileErrors[inspectedPlayer.accountId] ? 'error' : 'muted'}>{profileErrors[inspectedPlayer.accountId] || '正在读取基础个人资料…'}</p>}</>}</Drawer>
+    <Modal title="棋盘对象详情" footer={null} open={Boolean(inspectedBoardObject)} onCancel={() => setInspectedBoardObject(undefined)} destroyOnHidden>{inspectedBoardObject && <BoardObjectDetails object={boardObjects.find((object) => object.objectId === inspectedBoardObject.objectId) ?? inspectedBoardObject} owner={players.find((player) => player.playerId === inspectedBoardObject.ownerPlayerId)} />}</Modal>
     <Modal className="public-profile-modal" title="玩家详细资料" width="min(960px, calc(100vw - 24px))" footer={null} open={Boolean(profileViewer)} onCancel={() => setProfileViewer(undefined)} destroyOnHidden>{profileViewer && (profileCache[profileViewer.accountId] ? <PublicProfileDetails profile={profileCache[profileViewer.accountId]} /> : <div className={profileErrors[profileViewer.accountId] ? 'profile-load-error error' : 'profile-loading'}>{profileErrors[profileViewer.accountId] || '正在读取玩家资料…'}</div>)}</Modal>
     {compactLayout ? <Drawer title="战斗日志" placement="right" width="min(440px, 92vw)" open={logOpen} onClose={() => setLogOpen(false)}><BattleLog groups={battleLogGroups} /></Drawer> : logOpen && <FloatingWindow storageId="battle-log" title="战斗日志" initialPosition={{ x: Math.max(20, window.innerWidth - 500), y: 92 }} initialSize={{ width: 440, height: 520 }} onClose={() => setLogOpen(false)} className="battle-log-window"><BattleLog groups={battleLogGroups} /></FloatingWindow>}
     <Modal title="本局结算" open={gameState.phase === 'finished' && Boolean(me) && !me?.resultConfirmed} closable={false} maskClosable={false} okText="确认结算" cancelButtonProps={{ style: { display: 'none' } }} onOk={() => room.send('acknowledge_result', { requestId: requestId() })}><div className="result-summary">{gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>{ratingResult && <div className="rating-result"><header><span>本局表现分</span><strong>{ratingResult.breakdown.totalScore}</strong></header><div><span>结果 {ratingResult.breakdown.resultScore}</span><span>生存 {ratingResult.breakdown.survivalScore}</span><span>进攻 {ratingResult.breakdown.offenseScore}</span><span>防守恢复 {ratingResult.breakdown.defenseScore}</span><span>参与 {ratingResult.breakdown.participationScore}</span></div><footer><span>Rating</span><strong>{ratingResult.previousRating} → {ratingResult.rating}</strong><small>BEST 35：{ratingResult.best35Contribution} · RECENT 15：{ratingResult.recent15Contribution}</small></footer></div>}<p className="muted">所有玩家确认后，房间会返回准备阶段，可以直接开始下一局。</p></Modal>
@@ -381,7 +390,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       <p>若本次招式令其他玩家健康状态左移，将获得你选择的基础资源。</p>
       <div className="deferred-selection-actions"><Button type="primary" onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('energy'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'energy', null); }}>获得气</Button><Button onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('charge'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'charge', null); }}>获得蓄力</Button></div>
     </Modal>
-    {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={hovered.player} /></Card>}
+    {hovered && <Card className="hover-player-card" style={{ left: Math.min(hovered.x + 14, window.innerWidth - 300), top: Math.min(hovered.y + 14, window.innerHeight - 320) }}><PlayerDetails player={players.find((player) => player.playerId === hovered.player.playerId) ?? hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
     {tutorialRequest && <Suspense fallback={null}><Tutorial open initialPage={tutorialRequest.page} initialCharacterId={tutorialRequest.characterId} onClose={() => setTutorialRequest(undefined)} /></Suspense>}
   </main>;
@@ -403,7 +412,8 @@ function Roster({ players, gameState, viewer, onInspect }: { players: SyncedPlay
   return <div className="roster-list">{players.map((player) => {
     const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
     const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatNumber(resource.current)}`).join(' · ');
-    return <button className="roster-player" key={player.accountId} type="button" disabled={Boolean(obscured)} title={obscured ? '黑暗中无法查看资料' : player.isTrainingDummy ? '查看角色详情' : '查看玩家详细资料'} onClick={() => onInspect(player)}><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `HP ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
+    const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
+    return <button className="roster-player" key={player.accountId} type="button" disabled={Boolean(obscured)} title={obscured ? '黑暗中无法查看资料' : player.isTrainingDummy ? '查看角色详情' : '查看玩家详细资料'} onClick={() => onInspect(player)}><span className="color-chip" style={{ backgroundColor: `#${player.color.toString(16).padStart(6, '0')}` }} /><strong>{obscured ? '黑暗中的目标' : player.nickname}{player.playerId === gameState.hostPlayerId && !obscured ? ' 👑' : ''}</strong><small>{obscured ? '状态未知' : gameState.phase === 'waiting' ? (player.ready ? '已准备' : '未准备') : player.alive ? `${healthLabel} ${player.currentHp}/${player.maxHp} · ${resources}` : '已淘汰'}</small></button>;
   })}</div>;
 }
 

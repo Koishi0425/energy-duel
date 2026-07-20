@@ -112,6 +112,17 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 
 .hover-player-card { position: fixed; z-index: 40; width: 286px; pointer-events: none; box-shadow: 0 16px 50px rgba(0,0,0,.5); }
 .hover-player-card .ant-card-body { padding: 14px; }
+.board-object-details { display: grid; gap: 16px; }
+.board-object-details header { display: grid; grid-template-columns: 14px minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.board-object-details header div { display: grid; gap: 2px; }
+.board-object-details header strong { font-size: 18px; }
+.board-object-details header small, .board-object-details dt { color: #969fbd; }
+.board-object-swatch { width: 14px; height: 38px; border-radius: 4px; box-shadow: 0 0 18px color-mix(in srgb, currentColor 30%, transparent); }
+.board-object-details p { margin: 0; color: #d9def0; line-height: 1.7; }
+.board-object-details dl { display: grid; margin: 0; border-top: 1px solid #283150; }
+.board-object-details dl div { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 12px; padding: 11px 0; border-bottom: 1px solid #283150; }
+.board-object-details dt, .board-object-details dd { margin: 0; }
+.board-object-details dd { color: #f0f2ff; overflow-wrap: anywhere; }
 .player-details { display: grid; gap: 13px; }
 .player-details-heading { display: grid; grid-template-columns: 12px minmax(0,1fr) auto; align-items: center; gap: 9px; }
 .player-details-heading div { display: grid; min-width: 0; }

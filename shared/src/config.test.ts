@@ -4,10 +4,10 @@ import { canExecuteNapoleonStrategy, gameConfig, napoleonStrategyFromCommand, va
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(16);
-    expect(gameConfig.actions).toHaveLength(87);
+    expect(gameConfig.version).toBe(18);
+    expect(gameConfig.actions).toHaveLength(90);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
-    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku']);
+    expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku', 'inner_guard']);
     expect(gameConfig.characters[0].forms[0].unlockedActions).toEqual(['charge', 'gain_charge', 'defend', 'steal', 'double_steal', 'chop', 'super_defend', 'transform']);
     expect(gameConfig.actions.find((action) => action.id === 'transform')?.cost).toEqual({});
     expect(gameConfig.characters.slice(1).filter((character) => character.id !== 'napoleon').every((character) => character.forms[0].unlockedActions.includes('transform'))).toBe(true);
@@ -18,6 +18,7 @@ describe('game configuration', () => {
     expect(gameConfig.actions.find((action) => action.id === 'collect_light')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'collect_light_broken' });
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
+    expect(gameConfig.boardObjects.find((object) => object.id === 'dominion')).toMatchObject({ kind: 'terrain', displayMode: 'marker' });
     expect(gameConfig.assets.every((asset) => asset.url.endsWith('.webp') && asset.previewUrl?.endsWith('.webp'))).toBe(true);
     expect(gameConfig.characters.slice(4, 9).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
   });
@@ -29,7 +30,9 @@ describe('game configuration', () => {
     }
     expect(gameConfig.characters.find((character) => character.id === 'napoleon')?.forms[0].unlockedActions.slice(0, 3)).toEqual(['attack_order', 'defense_order', 'tactical_order']);
     expect(gameConfig.actions.filter((action) => action.napoleonSequence)).toHaveLength(29);
-    expect(gameConfig.characters.every((character) => !character.transformations.includes('star_god'))).toBe(true);
+    expect(gameConfig.characters.filter((character) => character.id !== 'star_god').every((character) => character.transformations.includes('star_god'))).toBe(true);
+    expect(gameConfig.characters.filter((character) => character.id !== 'inner_guard').every((character) => character.transformations.includes('inner_guard'))).toBe(true);
+    expect(gameConfig.characters.find((character) => character.id === 'star_god')?.forms[0].unlockedActions).toContain('hollow_fist');
     expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('axe_defend');

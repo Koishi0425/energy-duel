@@ -209,11 +209,11 @@ export const characterGuides: CharacterGuideDefinition[] = [
     featuredActionIds: ['attack_order', 'defense_order', 'tactical_order'],
   },
   {
-    characterId: 'star_god', role: '成长减伤与超脱（练功房测试）', difficulty: '专家',
-    summary: '仅在练功房开放；叠加神体与和光同尘，再通过创生星核测试超脱分支。',
+    characterId: 'star_god', role: '成长减伤与超脱', difficulty: '专家',
+    summary: '叠加神体与和光同尘，进入超脱持续恢复并成长，再以融合或引爆结束超脱。',
     gamePlan: ['先用和光同尘积累神体。', '超脱期间根据局势选择融合或引爆。'],
-    keyMechanics: [{ title: '练功房限定', description: '当前设计仍在调整，普通房间不能选择或变身为星神。' }],
-    featuredActionIds: ['harmony_with_light', 'nebula_shock', 'create_star_core', 'transcend_fuse', 'transcend_detonate'],
+    keyMechanics: [{ title: '神体与穿刺', description: '神体在技能对抗后、格挡前减免伤害；空心拳属于穿刺伤害，无视格挡与护甲。' }],
+    featuredActionIds: ['harmony_with_light', 'nebula_shock', 'create_star_core', 'hollow_fist', 'transcend_fuse', 'transcend_detonate'],
   },
   {
     characterId: 'ku', role: '预判反制与永久成长', difficulty: '专家',
@@ -221,6 +221,13 @@ export const characterGuides: CharacterGuideDefinition[] = [
     gamePlan: ['根据对手资源和局势选择杖责、看破或崩裂。', '成长后用裂空刺穿透普通防护。'],
     keyMechanics: [{ title: '应对成功', description: '成功阻止目标行动的预期效果时获得 0.5 气并提高一层成长，最多 4 层。' }],
     featuredActionIds: ['void_pierce', 'censure', 'redirect', 'see_through', 'shatter'],
+  },
+  {
+    characterId: 'inner_guard', role: '装置生存与场地控制', difficulty: '专家',
+    summary: '以三枚装置承受伤害并铺设国度，在锁血后的不破回合寻找坍缩恐惧的反击窗口。',
+    gamePlan: ['损失装置会在伤害来源及相邻地块生成国度；重复覆盖同一地块不会叠加或增强。', '只剩一个装置时坍缩恐惧费用降低且伤害提高，但下一次装置损失将不再触发锁血。'],
+    keyMechanics: [{ title: '装置锁定', description: '从至少两个装置降至一个或更少时锁定为一个，并在下回合获得不破；直接左移和脆弱同样适用。' }],
+    featuredActionIds: ['dissipation', 'collapsing_fear'],
   },
 ];
 

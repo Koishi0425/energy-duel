@@ -1,7 +1,8 @@
-import type { SyncedBuff, SyncedPlayer, SyncedResource } from '@energy-duel/shared';
+import type { SyncedBoardObject, SyncedBuff, SyncedPlayer, SyncedResource } from '@energy-duel/shared';
 
 interface RawResourceCollection { values(): IterableIterator<SyncedResource> }
 interface RawBuffCollection { values(): IterableIterator<SyncedBuff> }
+export interface RawBoardObjectCollection { values(): IterableIterator<SyncedBoardObject> }
 
 export interface RawSyncedPlayer extends Omit<SyncedPlayer, 'resources' | 'buffs' | 'controllerPlayerId' | 'isTrainingDummy' | 'commandBuffer'> {
   resources?: RawResourceCollection;
@@ -52,4 +53,21 @@ export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined
       commandBuffer: player.commandBuffer ?? '',
     };
   });
+}
+
+export function readSyncedBoardObjects(objects: Iterable<SyncedBoardObject> | undefined): SyncedBoardObject[] {
+  if (!objects) return [];
+  return Array.from(objects, (object) => ({
+    objectId: object.objectId,
+    definitionId: object.definitionId,
+    kind: object.kind,
+    ownerPlayerId: object.ownerPlayerId,
+    sourceCharacterId: object.sourceCharacterId ?? '',
+    gridIndex: object.gridIndex,
+    stacks: object.stacks,
+    currentHp: object.currentHp,
+    maxHp: object.maxHp,
+    remainingTurns: object.remainingTurns ?? 0,
+    permanent: object.permanent ?? true,
+  }));
 }

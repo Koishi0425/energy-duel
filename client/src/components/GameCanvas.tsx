@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { assetById, characterById, isResourceVisibleForCharacter, resourceById, type ResolutionStep, type SyncedPlayer } from '@energy-duel/shared';
+import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, type ResolutionStep, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 
 interface ScreenPoint { x: number; y: number }
 interface Props {
   players: SyncedPlayer[];
+  boardObjects: SyncedBoardObject[];
   targeting?: boolean;
   targetablePlayerIds?: string[];
   selectedTargetIds?: string[];
@@ -19,18 +20,34 @@ interface Props {
   onPlayerSelect?: (player: SyncedPlayer) => void;
   onPlayerInspect?: (player: SyncedPlayer) => void;
   onPlayerHover?: (player: SyncedPlayer | null, point?: ScreenPoint) => void;
+  onBoardObjectInspect?: (object: SyncedBoardObject) => void;
   onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
 interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
+interface BoardObjectView {
+  root: Container;
+  overlay: Container;
+  overlayHit: Graphics;
+  shape: Graphics;
+  ring: Graphics;
+  portrait: Sprite;
+  label: Text;
+  status: Text;
+  assetUrl: string;
+}
 
 export default function GameCanvas(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const mapRef = useRef<CircularMap | null>(null);
   const tokenLayerRef = useRef<Container | null>(null);
+  const boardObjectLayerRef = useRef<Container | null>(null);
+  const boardEntityLayerRef = useRef<Container | null>(null);
+  const boardObjectOverlayLayerRef = useRef<Container | null>(null);
   const effectLayerRef = useRef<Container | null>(null);
   const tokenViewsRef = useRef(new Map<string, TokenView>());
+  const boardObjectViewsRef = useRef(new Map<string, BoardObjectView>());
   const propsRef = useRef(props);
   propsRef.current = props;
 
@@ -42,6 +59,13 @@ export default function GameCanvas(props: Props) {
       if (!view) continue;
       const point = map.getGridCoordinates(player.gridIndex);
       view.root.position.set(point.x, point.y);
+    }
+    for (const object of propsRef.current.boardObjects) {
+      const view = boardObjectViewsRef.current.get(object.objectId);
+      if (!view) continue;
+      const point = map.getGridCoordinates(object.gridIndex);
+      view.root.position.set(point.x, point.y);
+      view.overlay.position.set(point.x, point.y);
     }
   };
 
@@ -60,6 +84,58 @@ export default function GameCanvas(props: Props) {
         tokenViewsRef.current.set(player.playerId, view); layer.addChild(view.root);
       }
       updateTokenView(view, player, players.length, propsRef.current);
+    }
+    positionViews();
+  };
+
+  const syncBoardObjects = () => {
+    const terrainLayer = boardObjectLayerRef.current;
+    const entityLayer = boardEntityLayerRef.current;
+    const overlayLayer = boardObjectOverlayLayerRef.current;
+    if (!terrainLayer || !entityLayer || !overlayLayer) return;
+    const activeIds = new Set(propsRef.current.boardObjects.map((object) => object.objectId));
+    for (const [objectId, view] of boardObjectViewsRef.current) if (!activeIds.has(objectId)) {
+      view.root.destroy({ children: true }); view.overlay.destroy({ children: true }); boardObjectViewsRef.current.delete(objectId);
+    }
+    for (const object of propsRef.current.boardObjects) {
+      let view = boardObjectViewsRef.current.get(object.objectId);
+      if (!view) {
+        view = createBoardObjectView(object.objectId, propsRef);
+        boardObjectViewsRef.current.set(object.objectId, view);
+        (object.kind === 'terrain' ? terrainLayer : entityLayer).addChild(view.root);
+        overlayLayer.addChild(view.overlay);
+      }
+      const definition = boardObjectById.get(object.definitionId); const color = Number.parseInt((definition?.color ?? '#94a3b8').slice(1), 16);
+      view.root.eventMode = propsRef.current.gridTargeting ? 'none' : 'static'; view.overlay.eventMode = propsRef.current.gridTargeting ? 'none' : 'static';
+      view.shape.clear(); view.ring.clear(); view.overlayHit.clear(); view.portrait.visible = object.kind === 'summon'; view.status.visible = object.kind === 'summon';
+      if (object.kind === 'terrain') {
+        view.shape.ellipse(0, 7, 31, 14).fill({ color, alpha: 0.3 }).stroke({ color, width: 3, alpha: 0.9 });
+        const occupied = propsRef.current.players.some((player) => player.alive && player.gridIndex === object.gridIndex)
+          || propsRef.current.boardObjects.some((candidate) => candidate.kind === 'summon' && candidate.gridIndex === object.gridIndex && candidate.currentHp > 0);
+        const terrainAtCell = propsRef.current.boardObjects.filter((candidate) => candidate.kind === 'terrain' && candidate.gridIndex === object.gridIndex).sort((left, right) => left.objectId.localeCompare(right.objectId));
+        const slot = Math.max(0, terrainAtCell.findIndex((candidate) => candidate.objectId === object.objectId));
+        const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
+        const amount = definition?.displayMode === 'stacks' && object.stacks > 1 ? ` ×${object.stacks}` : '';
+        view.label.anchor.set(0.5, 1); view.label.text = `${definition?.name ?? object.definitionId}${amount}`;
+        const labelY = occupied ? -portraitHeight - 7 - slot * 15 : -11 - slot * 15;
+        view.label.position.set(0, labelY); view.overlayHit.roundRect(-38, labelY - 16, 76, 19, 4).fill({ color: 0x000000, alpha: 0.001 });
+        view.root.alpha = 1;
+      } else {
+        const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
+        const owner = propsRef.current.players.find((player) => player.playerId === object.ownerPlayerId);
+        view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
+        view.ring.ellipse(0, 7, portraitHeight * 0.34, Math.max(7, portraitHeight * 0.11)).fill({ color: owner?.color ?? color, alpha: 0.3 }).stroke({ color, width: 3 });
+        const asset = definition?.defaultAssetId ? assetById.get(definition.defaultAssetId) : undefined;
+        const assetUrl = asset?.previewUrl ?? asset?.url ?? FALLBACK_PORTRAIT_URL;
+        if (assetUrl !== view.assetUrl) {
+          view.assetUrl = assetUrl;
+          void loadTrimmedTexture(assetUrl).then((texture) => { if (view?.assetUrl === assetUrl) view.portrait.texture = texture; }).catch(() => { view!.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
+        }
+        view.label.anchor.set(0.5, 0); view.label.text = definition?.name ?? object.definitionId; view.label.position.set(0, 11);
+        view.status.text = object.maxHp > 0 ? `HP ${formatResource(object.currentHp)}/${formatResource(object.maxHp)}${owner ? ` · ${truncate(owner.nickname, 8)}` : ''}` : owner ? `归属 ${truncate(owner.nickname, 8)}` : '召唤物';
+        view.status.position.set(0, propsRef.current.players.length > 12 ? 23 : 27);
+        view.root.alpha = object.maxHp > 0 && object.currentHp <= 0 ? 0.38 : 1;
+      }
     }
     positionViews();
   };
@@ -97,16 +173,16 @@ export default function GameCanvas(props: Props) {
       if (cancelled) { app.destroy(true); return; }
       host.appendChild(app.canvas); appRef.current = app;
       const map = new CircularMap(Math.max(1, propsRef.current.players.length));
-      const tokenLayer = new Container(); const effectLayer = new Container();
-      app.stage.addChild(map, tokenLayer, effectLayer);
+      const boardObjectLayer = new Container(); const boardEntityLayer = new Container(); const tokenLayer = new Container(); const boardObjectOverlayLayer = new Container(); const effectLayer = new Container();
+      app.stage.addChild(map, boardObjectLayer, boardEntityLayer, tokenLayer, boardObjectOverlayLayer, effectLayer);
       app.stage.eventMode = 'static'; app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
-      mapRef.current = map; tokenLayerRef.current = tokenLayer; effectLayerRef.current = effectLayer;
+      mapRef.current = map; boardObjectLayerRef.current = boardObjectLayer; boardEntityLayerRef.current = boardEntityLayer; tokenLayerRef.current = tokenLayer; boardObjectOverlayLayerRef.current = boardObjectOverlayLayer; effectLayerRef.current = effectLayer;
       installRotationGestures(app, map, positionViews);
-      map.resize(host.clientWidth, host.clientHeight); syncViews(); syncGridSelection(); observer.observe(host);
+      map.resize(host.clientWidth, host.clientHeight); syncBoardObjects(); syncViews(); syncGridSelection(); observer.observe(host);
       propsRef.current.onLoadProgress?.(100, '战场已就绪');
     });
     return () => {
-      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; tokenLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear();
+      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; boardObjectLayerRef.current = null; boardEntityLayerRef.current = null; tokenLayerRef.current = null; boardObjectOverlayLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear(); boardObjectViewsRef.current.clear();
       if (initialized) app.destroy(true, { children: true });
     };
   }, []);
@@ -114,8 +190,8 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPlayerCount(Math.max(1, props.players.length)); syncViews(); syncGridSelection();
-  }, [props.players, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
+    map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncGridSelection();
+  }, [props.players, props.boardObjects, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -130,6 +206,23 @@ export default function GameCanvas(props: Props) {
   }, [props.resolutionStep]);
 
   return <div className={`game-canvas${props.targeting || props.gridTargeting ? ' is-targeting' : ''}`} ref={hostRef} aria-label="可旋转圆形战棋地图，地块带有编号" />;
+}
+
+function createBoardObjectView(objectId: string, propsRef: React.MutableRefObject<Props>): BoardObjectView {
+  const root = new Container(); const overlay = new Container(); const overlayHit = new Graphics(); const shape = new Graphics(); const ring = new Graphics();
+  const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL)); portrait.anchor.set(0.5, 1);
+  const label = new Text({ style: { fill: 0xffffff, fontSize: 10, fontWeight: '700', dropShadow: true, align: 'center' } });
+  const status = new Text({ style: { fill: 0xcbd1ed, fontSize: 9, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
+  root.addChild(shape, ring, portrait); overlay.addChild(overlayHit, label, status);
+  const inspect = () => {
+    if (propsRef.current.gridTargeting) return;
+    const object = propsRef.current.boardObjects.find((candidate) => candidate.objectId === objectId);
+    if (object) propsRef.current.onBoardObjectInspect?.(object);
+  };
+  for (const target of [root, overlay]) {
+    target.eventMode = 'static'; target.cursor = 'pointer'; target.on('pointertap', inspect);
+  }
+  return { root, overlay, overlayHit, shape, ring, portrait, label, status, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {
@@ -169,7 +262,8 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   view.commandBuffer.text = `指令 ${player.commandBuffer}`; view.commandBuffer.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 9 : 11; view.commandBuffer.position.set(0, 4 - portraitHeight);
   view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
   const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
-  view.status.text = obscured ? '状态未知' : player.alive ? `HP ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
+  view.status.text = obscured ? '状态未知' : player.alive ? `${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : '已淘汰'; view.status.style.fontSize = playerCount > 12 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
 }
 
 function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readSyncedPlayers } from './roomState';
+import { readSyncedBoardObjects, readSyncedPlayers } from './roomState';
 
 describe('readSyncedPlayers', () => {
   it('returns an empty roster before the first Colyseus state frame', () => {
@@ -19,5 +19,10 @@ describe('readSyncedPlayers', () => {
     expect(result[0].buffs[0].buffId).toBe('frozen');
     expect(result[0].controllerPlayerId).toBe('player-1');
     expect(result[0].isTrainingDummy).toBe(false);
+  });
+
+  it('normalizes synchronized terrain and summon objects', () => {
+    const objects = [{ objectId: 'dominion:a:2', definitionId: 'dominion', kind: 'terrain' as const, ownerPlayerId: 'a', sourceCharacterId: 'inner_guard', gridIndex: 2, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true }];
+    expect(readSyncedBoardObjects(objects)).toEqual(objects);
   });
 });

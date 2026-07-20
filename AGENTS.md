@@ -150,6 +150,13 @@ Run commands from the repository root:
   player-scoped Cut action for the rest of that game.
 - Player combat state carries character/form IDs, HP, a general resource map,
   and a buff map. Do not reintroduce top-level resource fields such as `energy`.
+- Terrain and summons are first-class synchronized board objects. Their stable
+  definition IDs, ownership, source character, grid position, duration,
+  optional stacks, and optional HP are server authoritative and rendered
+  directly on the circular board; do not encode board positions inside Buff
+  IDs or client-only state. Dominion is a unique permanent marker per
+  owner/cell and never displays or gains stacks. Summons render as
+  character-like entities with portrait, name, ownership, and health state.
 - Room state synchronizes asset IDs only. Original imported art belongs under
   `art-source/runtime-imports/` and is excluded from the Docker context; only
   optimized, content-hashed WebP files and their manifest belong under
@@ -229,9 +236,8 @@ Run commands from the repository root:
   Cooldown progress is action-configured through `cooldownReduction`; do not
   infer it from the actor's current character. Shadow Blade progresses only from
   Nightmare-specific actions listed in gameplay configuration.
-  Star God is registered for training-room balance tests only and must never be
-  reachable through a standard-room transformation list or accepted by the
-  standard-room server. Napoleon replaces the normal skill tree with the three
+  Star God is available in standard rooms and follows the same transformation
+  rules as other non-training-only characters. Napoleon replaces the normal skill tree with the three
   command actions and synchronizes an ordered, six-command public buffer; never
   encode command order as unordered buff stacks. Strategy cards include both
   existing buffer sequences and the longest sequence formed by appending their

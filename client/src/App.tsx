@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import type { PublicRoomSummary, SessionResponse, SyncedGameState, SyncedRoundLogEntry } from '@energy-duel/shared';
 import { Client, type Room } from '@colyseus/sdk';
-import type { RawSyncedPlayer } from './roomState';
+import type { RawBoardObjectCollection, RawSyncedPlayer } from './roomState';
 import { authenticate, clearSession, fetchProfile, fetchPublicRooms, getServerUrl, loadSession } from './session';
 import AnnouncementLauncher from './components/AnnouncementLauncher';
 
@@ -9,6 +9,7 @@ interface PlayerCollection { values(): IterableIterator<RawSyncedPlayer> }
 interface RoundLogCollection { values(): IterableIterator<SyncedRoundLogEntry> }
 export interface DemoRoomState {
   players?: PlayerCollection;
+  boardObjects?: RawBoardObjectCollection;
   phase?: SyncedGameState['phase'];
   round?: number;
   gameNumber?: number;
