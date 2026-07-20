@@ -9,13 +9,18 @@ describe('announcements', () => {
     );
   });
 
-  it('publishes the combined v0.4.1 announcement first', () => {
+  it('publishes v0.4.2 before the stable v0.4.1 announcement', () => {
     expect(announcements[0]).toMatchObject({
+      id: '2026-07-20-v042-targeting-and-action-categories',
+      version: 'v0.4.2',
+      title: 'v0.4.2：角色状态、目标判定与技能修正',
+    });
+    expect(announcements[1]).toMatchObject({
       id: '2026-07-20-v041-damage-rules-and-star-god',
       version: 'v0.4.1',
       title: 'v0.4.1：伤害体系、星神、内卫与棋盘对象更新',
     });
-    expect(announcements[0].sections.map((section) => section.heading)).toEqual([
+    expect(announcements[1].sections.map((section) => section.heading)).toEqual([
       '伤害与防御体系',
       '3 级攻击回溯即死',
       '星神正式开放',

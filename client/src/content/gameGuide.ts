@@ -196,8 +196,8 @@ export const characterGuides: CharacterGuideDefinition[] = [
   },
   {
     characterId: 'ye_qingxian', role: '生命换取资源与收割', difficulty: '专家',
-    summary: '用祭道抵免最后一点资源缺口，再以掌仙术和君临天下触发吞天回收资源。',
-    gamePlan: ['资源合计达到 3 后才能用祭道补足一项恰好差 1 的费用。', '提交专属攻击时先选择吞天获得气或蓄力。'],
+    summary: '用祭道抵免最后一点资源缺口，并让任意招式造成的状态左移通过吞天回收资源。',
+    gamePlan: ['资源合计达到 3 后才能用祭道补足一项恰好差 1 的费用。', '提交招式时先选择吞天获得气或蓄力；只有实际令其他玩家左移才会获得。'],
     keyMechanics: [{ title: '祭道', description: '自伤不触发濒死获得气；濒死时再次祭道可能直接死亡。' }],
     featuredActionIds: ['immortal_palm', 'rule_the_world'],
   },

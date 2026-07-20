@@ -416,9 +416,8 @@ export class EnergyDuelRoom extends Room {
         const resource = synced.resources.get(resourceId);
         if (resource) resource.current = Math.max(0, current);
       }
-      if (previousCharacterId !== synced.characterId) this.ensureCharacterEntryState(playerId, synced.characterId);
+      if (previousCharacterId !== synced.characterId) { this.ensureCharacterEntryState(playerId, synced.characterId); this.restoreCharacterHealth(playerId, synced); }
       this.syncActiveBuffs(playerId, synced.characterId, synced.buffs);
-      if (previousCharacterId !== synced.characterId) this.restoreCharacterHealth(playerId, synced);
     }
     this.state.boardObjects.clear();
     for (const object of combatBoardObjects.values()) {
@@ -666,8 +665,11 @@ export class EnergyDuelRoom extends Room {
 
   private restoreCharacterHealth(playerId: string, player: PlayerState): void {
     player.maxHp = maxHpForCharacter(player.characterId);
-    if (player.characterId !== 'inner_guard') { player.currentHp = player.maxHp; return; }
-    player.currentHp = Math.max(1, Math.min(3, this.storedBuffs.get(playerId)?.get('inner_guard')?.get('inner_guard_devices')?.stacks ?? 3));
+    if (!player.alive) { player.currentHp = 0; return; }
+    if (player.characterId !== 'inner_guard') { player.currentHp = Math.max(1, Math.min(player.maxHp, player.currentHp)); return; }
+    const devices = this.storedBuffs.get(playerId)?.get('inner_guard')?.get('inner_guard_devices');
+    player.currentHp = player.currentHp === 1 ? 1 : Math.max(2, Math.min(3, devices?.stacks ?? 3));
+    if (devices) devices.stacks = player.currentHp;
   }
 
   private syncActiveBuffs(playerId: string, characterId: string, target: MapSchema<BuffState>): void {

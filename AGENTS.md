@@ -88,7 +88,8 @@ Run commands from the repository root:
   in its parent Pixi container after `resize()` has initialized the layout.
   View rotation is local to one client and never changes the authoritative
   `gridIndex` or gets synchronized to the room.
-  A normal move selects one clockwise or counterclockwise adjacent empty cell.
+  A normal move selects one clockwise or counterclockwise adjacent empty cell. Quick Attack keeps that limit with two players and may select any empty cell with three or more players.
+  Ordinary player-targeted attacks snapshot the selected player's cell before resolution and hit the occupant of that cell when they resolve; movement at the same speed resolves first and can dodge them. Explicitly locked attacks follow the selected player.
   Simultaneous attempts to occupy one cell resolve deterministically in the
   authoritative speed/ID order; later movers stay in place. Spatial attacks read
   positions when their effect resolves, not when actions are submitted.
@@ -120,11 +121,15 @@ Run commands from the repository root:
   server evaluate the same requirements. Gonggang's axe defense is the first
   example and requires the `axe_raised` buff.
   Transformation costs belong to target character definitions, not the generic
-  transform action. Players may normally switch repeatedly to any configured
-  non-training-only character other than the current one; Napoleon cannot leave
+  transform action. The initial character is a starting form, never a transform
+  target. Players may normally switch repeatedly to any configured non-training-only
+  transformed character other than the current one; Napoleon cannot leave
   until Elba Escape grants the transform action. Buffs default to character scope: inactive
   character buffs remain server-side and finite durations keep ticking; only
   explicitly player-scoped buffs follow across forms.
+  Transformation preserves the player's current healthy or near-death state;
+  it never heals by resetting HP. Inner Guard maps near-death to one device and
+  retains its two-or-three-device count while the player remains healthy.
   Regent unlocks the persistent `stars` resource and receives three Stars only
   on the first transformation each game. Stardust always spends every Star the
   actor currently holds; its authoritative power equals that full amount.
@@ -207,7 +212,9 @@ Run commands from the repository root:
   reconnect timeout becomes a permanent departure. A non-host departure during
   play ends the current game and leaves remaining clients on the result screen.
 - Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
-  while damage compares the incoming attack level with the target's selected
+  attack target sets always exclude the attacker; intentional self-damage uses
+  a dedicated effect instead of targeting the actor as an attack. Damage
+  compares the incoming attack level with the target's selected
   action level only when that action applies to the attacker. Defense and
   targetless actions apply generally; targeted/spatial actions apply only when
   the attacker is one of their actual targets. A difference below 0.5 cancels,

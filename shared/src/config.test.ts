@@ -16,6 +16,12 @@ describe('game configuration', () => {
     expect(gameConfig.actions.find((action) => action.id === 'defend')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'defend_broken' });
     expect(gameConfig.actions.find((action) => action.id === 'particle_wall')?.defenseBreak).toEqual({ mode: 'recreated' });
     expect(gameConfig.actions.find((action) => action.id === 'collect_light')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'collect_light_broken' });
+    expect(gameConfig.actions.find((action) => action.id === 'create_star_core')).toMatchObject({ category: 'special', skillLevel: 0, defenseLevel: 3 });
+    expect(gameConfig.actions.find((action) => action.id === 'create_star_core')?.defenseBreak).toEqual({ mode: 'recreated' });
+    expect(gameConfig.buffs.find((buff) => buff.id === 'transcendence_permanent')?.grantedActionIds).toBeUndefined();
+    expect(gameConfig.actions.find((action) => action.id === 'quick_attack')).toMatchObject({ movement: true });
+    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')).toMatchObject({ category: 'special', level: 3 });
+    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')?.damageType).toBeUndefined();
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
     expect(gameConfig.boardObjects.find((object) => object.id === 'dominion')).toMatchObject({ kind: 'terrain', displayMode: 'marker' });
@@ -32,6 +38,7 @@ describe('game configuration', () => {
     expect(gameConfig.actions.filter((action) => action.napoleonSequence)).toHaveLength(29);
     expect(gameConfig.characters.filter((character) => character.id !== 'star_god').every((character) => character.transformations.includes('star_god'))).toBe(true);
     expect(gameConfig.characters.filter((character) => character.id !== 'inner_guard').every((character) => character.transformations.includes('inner_guard'))).toBe(true);
+    expect(gameConfig.characters.slice(1).every((character) => !character.transformations.includes('default_character'))).toBe(true);
     expect(gameConfig.characters.find((character) => character.id === 'star_god')?.forms[0].unlockedActions).toContain('hollow_fist');
     expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');

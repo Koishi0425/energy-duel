@@ -430,16 +430,46 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')!.resources.energy).toBeCloseTo(2 / 3);
   });
 
-  it('moves Quick Attack to an adjacent empty cell and preserves its free Ten Volt', () => {
+  it('moves Quick Attack to any empty cell with at least three players and preserves its free Ten Volt', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 0]);
     players.get('a')!.characterId = 'pikachu'; players.get('a')!.resources.charge = 2;
     players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4;
-    resolveRound(players, actions(['a', { actionId: 'quick_attack', targetGridIndex: 1 }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
-    expect(players.get('a')!.gridIndex).toBe(1);
+    expect(() => validateAction(players.get('a')!, { actionId: 'quick_attack', targetGridIndex: 3 }, players)).not.toThrow();
+    expect(() => validateAction(players.get('a')!, { actionId: 'quick_attack', targetGridIndex: 2 }, players)).toThrow();
+    resolveRound(players, actions(['a', { actionId: 'quick_attack', targetGridIndex: 3 }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
+    expect(players.get('a')!.gridIndex).toBe(3);
     expect(players.get('a')!.buffs?.has('quick_attack_ready')).toBe(true);
     resolveRound(players, actions(['a', { actionId: 'ten_volt' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
     expect(players.get('a')!.resources.charge).toBe(1);
     expect(players.get('a')!.buffs?.has('quick_attack_ready')).toBe(false);
+  });
+
+  it('lets same-speed movement dodge an ordinary attack aimed at the original cell', () => {
+    const players = roster(['a', 2], ['b', 0], ['c', 0]);
+    players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4;
+    players.get('b')!.characterId = 'pikachu'; players.get('b')!.resources.charge = 1;
+    resolveRound(players, actions(
+      ['a', { actionId: 'hollow_fist', targetId: 'b' }],
+      ['b', { actionId: 'quick_attack', targetGridIndex: 3 }],
+      ['c', { actionId: 'defend' }],
+    ));
+    expect(players.get('b')!.gridIndex).toBe(3);
+    expect(players.get('b')!.alive).toBe(true);
+  });
+
+  it('does not dodge a faster attack or a locked attack by moving', () => {
+    const faster = roster(['a', 2], ['b', 0], ['c', 0]);
+    faster.get('a')!.gridIndex = 0; faster.get('b')!.gridIndex = 2; faster.get('c')!.gridIndex = 4;
+    faster.get('a')!.characterId = 'napoleon'; faster.get('a')!.buffs = new Set(['napoleon_speed']); faster.get('a')!.buffStacks = { napoleon_speed: 1 };
+    faster.get('b')!.characterId = 'pikachu'; faster.get('b')!.resources.charge = 1;
+    resolveRound(faster, actions(['a', { actionId: 'hollow_fist', targetId: 'b' }], ['b', { actionId: 'quick_attack', targetGridIndex: 3 }], ['c', { actionId: 'defend' }]));
+    expect(faster.get('b')!.alive).toBe(false);
+
+    const locked = roster(['a', 0], ['b', 0], ['c', 0]);
+    locked.get('a')!.gridIndex = 0; locked.get('b')!.gridIndex = 2; locked.get('c')!.gridIndex = 4;
+    locked.get('b')!.characterId = 'pikachu'; locked.get('b')!.resources.charge = 1;
+    resolveRound(locked, actions(['a', { actionId: 'nightmare_dash', targetId: 'b' }], ['b', { actionId: 'quick_attack', targetGridIndex: 3 }], ['c', { actionId: 'defend' }]));
+    expect(locked.get('b')!.alive).toBe(false);
   });
 
   it('grants Cut globally when Ao transforms and upgrades mastery from resource actions', () => {
@@ -613,6 +643,45 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.alive).toBe(false);
   });
 
+  it('lets Devour trigger when a base action shifts another player', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2; actor.resources.charge = 1;
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'slash', targetId: 'b', resourceChoice: 'energy' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(1);
+    expect(actor.resources.energy).toBe(1);
+  });
+
+  it('preserves near-death state across repeated transformations', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = 1; actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'star_god' }], ['b', { actionId: 'charge' }]));
+    expect(actor.currentHp).toBe(1);
+    expect(actor.maxHp).toBe(2);
+    resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'ye_qingxian' }], ['b', { actionId: 'charge' }]));
+    expect(actor.currentHp).toBe(1);
+    expect(actor.maxHp).toBe(2);
+  });
+
+  it('does not trigger the device lock when a near-death player transforms into Inner Guard', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = 1; actor.maxHp = 2;
+    resolveRound(players, actions(
+      ['a', { actionId: 'transform', transformCharacterId: 'inner_guard' }],
+      ['b', { actionId: 'fist', targetId: 'a' }],
+    ));
+    expect(actor.characterId).toBe('inner_guard');
+    expect(actor.currentHp).toBe(0);
+    expect(actor.alive).toBe(false);
+    expect(actor.buffs?.has('unbroken')).toBe(false);
+  });
+
+  it('never accepts the initial character as a transformation target', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2;
+    expect(() => validateAction(actor, { actionId: 'transform', transformCharacterId: 'default_character' }, players)).toThrow(/有效的变身角色/);
+  });
+
   it('centers Rule the World on its selected grid cell', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 0], ['d', 0]); const actor = players.get('a')!;
     actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
@@ -622,8 +691,12 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(actor, action, players)).not.toThrow();
     resolveRound(players, actions(['a', action], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }], ['d', { actionId: 'charge' }]));
     expect(players.get('b')!.alive).toBe(true);
-    expect(players.get('c')!.alive).toBe(false);
-    expect(players.get('d')!.alive).toBe(false);
+    expect(players.get('c')!.alive).toBe(true);
+    expect(players.get('d')!.alive).toBe(true);
+    expect(players.get('c')!.currentHp).toBe(1);
+    expect(players.get('d')!.currentHp).toBe(1);
+    expect(players.get('c')!.buffs?.has('fear')).toBe(true);
+    expect(players.get('d')!.buffs?.has('fear')).toBe(true);
   });
 
   it('applies Star Body after skill clash rather than before it', () => {
@@ -692,6 +765,16 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.resources.energy).toBe(0.5);
   });
 
+  it('keeps the special-category Transcendence action as a level-3 temporary block', () => {
+    const players = roster(['a', 2], ['b', 2]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1;
+    target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.resources.charge = 2;
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'b' }], ['b', { actionId: 'create_star_core' }]));
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('transcendence')).toBe(true);
+  });
+
   it('consumes Star God transcendence instead of dying', () => {
     const players = roster(['a', 2], ['b', 0]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.characterId = 'star_god'; target.currentHp = target.maxHp = 2; target.buffs = new Set(['transcendence']); target.buffStacks = { transcendence: 1 };
@@ -741,6 +824,17 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(Array.from(boardObjects.values()).map((object) => [object.gridIndex, object.stacks])).toEqual([[0, 1], [1, 1], [3, 1]]);
   });
 
+  it('makes a level-3 damage source remove two Inner Guard devices after a skill clash', () => {
+    const players = roster(['a', 2], ['b', 1]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1; target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3;
+    resolveRound(players, actions(
+      ['a', { actionId: 'atomic_breath', targetId: 'b' }],
+      ['b', { actionId: 'slash', targetId: 'a' }],
+    ));
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('unbroken')).toBe(true);
+  });
+
   it('lets fragile Inner Guard trigger the one-device lock instead of dying', () => {
     const players = roster(['a', 2], ['b', 1]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3;
@@ -780,7 +874,20 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(actor, { actionId: 'collapsing_fear' }, players)).not.toThrow();
     resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }]), boardObjects);
     expect(actor.resources.energy).toBe(0);
-    expect(actor.alive).toBe(false);
+    expect(actor.alive).toBe(true);
+    expect(actor.currentHp).toBe(1);
     expect(players.get('c')!.alive).toBe(false);
+  });
+
+  it('never targets the Inner Guard itself with Collapsing Fear in a two-player game', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'inner_guard'; actor.currentHp = 1; actor.maxHp = 3; actor.gridIndex = 0;
+    players.get('b')!.currentHp = players.get('b')!.maxHp = 2; players.get('b')!.gridIndex = 2;
+    const actorDominion = dominion('a', 0); const targetDominion = dominion('a', 2);
+    const boardObjects = new Map<string, CombatBoardObject>([[actorDominion.objectId, actorDominion], [targetDominion.objectId, targetDominion]]);
+    resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }]), boardObjects);
+    expect(actor.alive).toBe(true);
+    expect(actor.currentHp).toBe(1);
+    expect(players.get('b')!.alive).toBe(false);
   });
 });

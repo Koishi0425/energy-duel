@@ -112,6 +112,10 @@ export interface ActionDefinition {
   damageType?: 'normal' | 'piercing' | 'true' | 'generic' | 'blunt' | 'slash' | 'magic';
   anyResourceCost?: number;
   targetsGridCell?: boolean;
+  /** Resolves before attacks at the same speed and can leave a planned target cell. */
+  movement?: boolean;
+  /** Follows the selected player instead of resolving against their planned cell. */
+  locksTarget?: boolean;
   canSkipDeferred?: boolean;
   defenseBreak?: DefenseBreakDefinition;
   cooldownReduction?: CooldownReductionDefinition;
@@ -202,6 +206,8 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
     if (action.damageAttribute && !['physical', 'magic'].includes(action.damageAttribute)) throw new Error(`Action ${action.id} has an invalid damage attribute.`);
     if (action.damageType && !['normal', 'piercing', 'true', 'generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
+    if (action.movement !== undefined && typeof action.movement !== 'boolean') throw new Error(`Action ${action.id} has an invalid movement flag.`);
+    if (action.locksTarget !== undefined && typeof action.locksTarget !== 'boolean') throw new Error(`Action ${action.id} has an invalid target lock flag.`);
     if (!Number.isFinite(action.level) || action.level < 0
       || (action.skillLevel !== undefined && (!Number.isFinite(action.skillLevel) || action.skillLevel < 0))
       || (action.damageLevel !== undefined && (!Number.isFinite(action.damageLevel) || action.damageLevel < 0))) {

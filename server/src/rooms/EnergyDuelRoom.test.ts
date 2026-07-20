@@ -20,6 +20,15 @@ describe('EnergyDuelRoom submitted targets', () => {
 });
 
 describe('EnergyDuelRoom character-scoped buffs', () => {
+  it('does not heal a near-death player while restoring the transformed character', () => {
+    const room = new EnergyDuelRoom() as any;
+    const player = new PlayerState(); player.playerId = 'p'; player.characterId = 'star_god'; player.currentHp = 1; player.maxHp = 2;
+    room.storedBuffs.set('p', new Map());
+    room.restoreCharacterHealth('p', player);
+    expect(player.currentHp).toBe(1);
+    expect(player.maxHp).toBe(2);
+  });
+
   it('hides a Gonggang buff after switching away and restores it after switching back', () => {
     const room = new EnergyDuelRoom() as any;
     const current = new MapSchema<BuffState>();
