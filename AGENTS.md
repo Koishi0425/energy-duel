@@ -190,6 +190,9 @@ Run commands from the repository root:
   state are synchronized and displayed consistently in the roster and on the
   board. Room emotes use a server-validated fixed ID set with rate limiting;
   they are transient broadcast messages, not authoritative room state or chat.
+  Keep the emote entry in the operation panel so it remains close to repeated
+  battle controls. Render the Pixi board at device-aware high density (capped
+  for performance) with pixel rounding so board text stays crisp.
   Finished games remain in the result phase until every remaining player
   acknowledges the result, then reset to the waiting/ready phase for another game.
   Starting and post-result resets must restore authoritative grid positions to

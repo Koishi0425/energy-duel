@@ -353,6 +353,7 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 
 .control-panel-drag-handle { display: flex; align-items: center; justify-content: space-between; min-height: 28px; margin: -8px -4px 6px; padding: 2px 4px; color: #7f89aa; font-size: 11px; cursor: grab; user-select: none; touch-action: none; }
 .control-panel-drag-handle:active { cursor: grabbing; }
+.control-panel-header-actions { display: flex; align-items: center; gap: 4px; cursor: default; }
 .action-panel-tools { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; color: #aeb7d8; font-size: 12px; }
 .action-panel-tools > div { display: flex; gap: 4px; }
 .action-panel-content.is-editing { outline: 1px dashed rgba(123,137,255,.48); outline-offset: 7px; }

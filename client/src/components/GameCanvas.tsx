@@ -164,7 +164,8 @@ export default function GameCanvas(props: Props) {
       app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
       positionViews();
     });
-    void Promise.all([app.init({ antialias: true, backgroundAlpha: 0, resizeTo: host }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(async () => {
+    const canvasResolution = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    void Promise.all([app.init({ antialias: true, autoDensity: true, backgroundAlpha: 0, resizeTo: host, resolution: canvasResolution, roundPixels: true }), Assets.load<Texture>(FALLBACK_PORTRAIT_URL)]).then(async () => {
       propsRef.current.onLoadProgress?.(55, '正在准备角色资源');
       const portraitUrls = Array.from(new Set(propsRef.current.players.map((player) => resolvePortraitPreviewUrl(player.characterId, player.currentFormId)).filter((url) => url !== FALLBACK_PORTRAIT_URL)));
       let loadedPortraits = 0;
