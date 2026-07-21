@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RoomEmoteId, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
+import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RoomEmoteMessage, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 import { playerRoomStatus } from '../playerRoomStatus';
@@ -10,7 +10,7 @@ interface Props {
   players: SyncedPlayer[];
   phase: GamePhase;
   boardObjects: SyncedBoardObject[];
-  emotesByPlayerId?: Record<string, RoomEmoteId>;
+  emoteEvents?: RoomEmoteMessage[];
   targeting?: boolean;
   targetablePlayerIds?: string[];
   selectedTargetIds?: string[];
@@ -27,7 +27,7 @@ interface Props {
   onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
-interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; emoteBubble: Graphics; emote: Text; assetUrl: string }
+interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
 interface BoardObjectView {
   root: Container;
   overlay: Container;
@@ -51,6 +51,7 @@ export default function GameCanvas(props: Props) {
   const effectLayerRef = useRef<Container | null>(null);
   const tokenViewsRef = useRef(new Map<string, TokenView>());
   const boardObjectViewsRef = useRef(new Map<string, BoardObjectView>());
+  const animatedEmoteIdsRef = useRef(new Set<string>());
   const propsRef = useRef(props);
   propsRef.current = props;
 
@@ -89,6 +90,21 @@ export default function GameCanvas(props: Props) {
       updateTokenView(view, player, players.length, propsRef.current);
     }
     positionViews();
+  };
+
+  const syncEmoteAnimations = () => {
+    const app = appRef.current;
+    if (!app) return;
+    const activeIds = new Set((propsRef.current.emoteEvents ?? []).map((event) => event.eventId));
+    for (const eventId of animatedEmoteIdsRef.current) if (!activeIds.has(eventId)) animatedEmoteIdsRef.current.delete(eventId);
+    for (const event of propsRef.current.emoteEvents ?? []) {
+      if (animatedEmoteIdsRef.current.has(event.eventId)) continue;
+      const view = tokenViewsRef.current.get(event.playerId);
+      const emote = roomEmotes.find((candidate) => candidate.id === event.emoteId);
+      if (!view || !emote) continue;
+      animatedEmoteIdsRef.current.add(event.eventId);
+      animatePlayerEmote(app, view.root, emote.emoji, event.eventId);
+    }
   };
 
   const syncBoardObjects = () => {
@@ -182,11 +198,11 @@ export default function GameCanvas(props: Props) {
       app.stage.eventMode = 'static'; app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
       mapRef.current = map; boardObjectLayerRef.current = boardObjectLayer; boardEntityLayerRef.current = boardEntityLayer; tokenLayerRef.current = tokenLayer; boardObjectOverlayLayerRef.current = boardObjectOverlayLayer; effectLayerRef.current = effectLayer;
       installRotationGestures(app, map, positionViews);
-      map.resize(host.clientWidth, host.clientHeight); syncBoardObjects(); syncViews(); syncGridSelection(); observer.observe(host);
+      map.resize(host.clientWidth, host.clientHeight); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection(); observer.observe(host);
       propsRef.current.onLoadProgress?.(100, '战场已就绪');
     });
     return () => {
-      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; boardObjectLayerRef.current = null; boardEntityLayerRef.current = null; tokenLayerRef.current = null; boardObjectOverlayLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear(); boardObjectViewsRef.current.clear();
+      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; boardObjectLayerRef.current = null; boardEntityLayerRef.current = null; tokenLayerRef.current = null; boardObjectOverlayLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear(); boardObjectViewsRef.current.clear(); animatedEmoteIdsRef.current.clear();
       if (initialized) app.destroy(true, { children: true });
     };
   }, []);
@@ -194,8 +210,8 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncGridSelection();
-  }, [props.players, props.phase, props.boardObjects, props.emotesByPlayerId, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
+    map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection();
+  }, [props.players, props.phase, props.boardObjects, props.emoteEvents, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -235,9 +251,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
   const commandBuffer = new Text({ style: { fill: 0xffdf68, fontWeight: '700', dropShadow: true, align: 'center' } }); commandBuffer.anchor.set(0.5, 1);
   const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } }); name.anchor.set(0.5, 0);
   const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
-  const emoteBubble = new Graphics();
-  const emote = new Text({ style: { fontSize: 23, align: 'center' } }); emote.anchor.set(0.5);
-  root.addChild(ring, portrait, commandBuffer, name, status, emoteBubble, emote); root.eventMode = 'static'; root.cursor = 'pointer';
+  root.addChild(ring, portrait, commandBuffer, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
   const currentPlayer = () => propsRef.current.players.find((candidate) => candidate.playerId === playerId);
   root.on('pointerover', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
   root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
@@ -247,7 +261,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
     if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
     else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
   });
-  return { root, portrait, ring, commandBuffer, name, status, emoteBubble, emote, assetUrl: FALLBACK_PORTRAIT_URL };
+  return { root, portrait, ring, commandBuffer, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
@@ -271,12 +285,6 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
   const roomStatus = playerRoomStatus(player, props.phase).label;
   view.status.text = obscured ? '状态未知' : player.alive ? `${roomStatus} · ${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : roomStatus; view.status.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
-  const emoteDefinition = roomEmotes.find((candidate) => candidate.id === props.emotesByPlayerId?.[player.playerId]);
-  const emoteX = portraitHeight * 0.38; const emoteY = 3 - portraitHeight * 0.62;
-  view.emoteBubble.visible = Boolean(emoteDefinition); view.emote.visible = Boolean(emoteDefinition);
-  view.emoteBubble.clear();
-  if (emoteDefinition) view.emoteBubble.roundRect(emoteX - 20, emoteY - 17, 40, 34, 9).fill({ color: 0xf7f8ff, alpha: 0.96 }).stroke({ color: player.color, width: 2 });
-  view.emote.text = emoteDefinition?.emoji ?? ''; view.emote.position.set(emoteX, emoteY);
 }
 
 function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {
@@ -320,6 +328,24 @@ function loadTrimmedTexture(url: string): Promise<Texture> {
     image.onerror = reject; image.src = url;
   });
   trimmedTextureCache.set(url, promise); return promise;
+}
+
+function animatePlayerEmote(app: Application, root: Container, emoji: string, eventId: string): void {
+  const lane = Array.from(eventId).reduce((hash, character) => Math.imul(hash ^ character.charCodeAt(0), 16_777_619), 2_166_136_261) % 3 - 1;
+  const startX = 36 + lane * 13;
+  const display = new Text({ text: emoji, style: { fontSize: 27, dropShadow: true, align: 'center' } });
+  display.anchor.set(0.5); display.position.set(startX, -24); display.scale.set(0.82); display.eventMode = 'none';
+  root.addChild(display);
+  const startedAt = performance.now();
+  const update = () => {
+    if (display.destroyed) { app.ticker.remove(update); return; }
+    const progress = Math.min(1, (performance.now() - startedAt) / 1_500);
+    display.position.set(startX + lane * progress * 5, -24 - progress * 74);
+    display.scale.set(0.82 + Math.min(1, progress / 0.18) * 0.18);
+    display.alpha = progress < 0.12 ? progress / 0.12 : progress > 0.58 ? (1 - progress) / 0.42 : 1;
+    if (progress >= 1) { app.ticker.remove(update); display.destroy(); }
+  };
+  app.ticker.add(update);
 }
 
 function animateResolutionStep(app: Application, layer: Container, step: ResolutionStep, players: SyncedPlayer[], map: CircularMap | null, views: Map<string, TokenView>): () => void {

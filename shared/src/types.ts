@@ -236,7 +236,7 @@ export const roomEmotes = [
 ] as const;
 
 export type RoomEmoteId = typeof roomEmotes[number]['id'];
-export interface RoomEmoteMessage { playerId: string; emoteId: RoomEmoteId; sentAt: number }
+export interface RoomEmoteMessage { eventId: string; playerId: string; emoteId: RoomEmoteId; sentAt: number }
 
 export function isRoomEmoteId(value: unknown): value is RoomEmoteId {
   return typeof value === 'string' && roomEmotes.some((emote) => emote.id === value);

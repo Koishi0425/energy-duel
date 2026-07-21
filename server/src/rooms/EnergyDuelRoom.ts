@@ -22,7 +22,6 @@ const NICKNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{1,16}$/;
 const DEFAULT_CHARACTER_ID = 'default_character';
 const DEFAULT_FORM_ID = 'base';
 const PLAYER_BUFF_SCOPE = '*';
-const EMOTE_COOLDOWN_MS = 1_200;
 
 export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
@@ -120,7 +119,6 @@ export class EnergyDuelRoom extends Room {
   private destroying = false;
   private claimedRoomCode = '';
   private readonly storedBuffs = new Map<string, Map<string, Map<string, StoredBuff>>>();
-  private readonly lastEmoteAt = new Map<string, number>();
   private nextDummyId = 1;
   private readonly gamePerformance = new Map<string, GamePerformance>();
   private currentGameId = '';
@@ -224,7 +222,6 @@ export class EnergyDuelRoom extends Room {
       return;
     }
     this.actions.cancel(client.sessionId);
-    this.lastEmoteAt.delete(client.sessionId);
     this.storedBuffs.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     assignGridIndices(this.state.players.values());
@@ -403,11 +400,10 @@ export class EnergyDuelRoom extends Room {
       return this.sendError(client, '表情无效', payload?.requestId, 'send_emote');
     }
     const now = Date.now();
-    if (now - (this.lastEmoteAt.get(client.sessionId) ?? 0) < EMOTE_COOLDOWN_MS) {
-      return this.sendError(client, '表情发送太频繁', payload?.requestId, 'send_emote');
-    }
-    this.lastEmoteAt.set(client.sessionId, now);
-    this.broadcast('room_emote', { playerId: player.playerId, emoteId: payload.emoteId, sentAt: now });
+    const eventId = typeof payload.requestId === 'string' && payload.requestId.length <= 80
+      ? payload.requestId
+      : `emote-${player.playerId}-${now}`;
+    this.broadcast('room_emote', { eventId, playerId: player.playerId, emoteId: payload.emoteId, sentAt: now });
   }
 
   private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, combatBoardObjects: Map<string, CombatBoardObject>, result: RoundResult): void {

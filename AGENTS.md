@@ -188,11 +188,16 @@ Run commands from the repository root:
   final living player submits; the final submission resolves synchronously.
   Player readiness, action submission, result confirmation, and connection
   state are synchronized and displayed consistently in the roster and on the
-  board. Room emotes use a server-validated fixed ID set with rate limiting;
-  they are transient broadcast messages, not authoritative room state or chat.
+  board. Room emotes use a server-validated fixed ID set without a send
+  interval. They render optimistically for the sender, deduplicate the server
+  echo by event ID, and remain transient broadcast messages rather than
+  authoritative room state or chat.
   Keep the emote entry in the operation panel so it remains close to repeated
-  battle controls. Render the Pixi board at device-aware high density (capped
-  for performance) with pixel rounding so board text stays crisp.
+  battle controls. Desktop players may hold V to open a cursor-centered emote
+  wheel, move to select, and release to send; releasing without movement sends
+  the locally remembered last wheel selection. Normal picker clicks do not
+  replace that shortcut memory. Render the Pixi board at device-aware high
+  density (capped for performance) with pixel rounding so board text stays crisp.
   Finished games remain in the result phase until every remaining player
   acknowledges the result, then reset to the waiting/ready phase for another game.
   Starting and post-result resets must restore authoritative grid positions to

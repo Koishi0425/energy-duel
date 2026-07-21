@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   actionById,
   canExecuteNapoleonStrategy,
@@ -40,8 +40,17 @@ import type { GuidePageId } from './content/gameGuide';
 import { readSyncedBoardObjects, readSyncedPlayers } from './roomState';
 import { fetchPlayerProfile } from './session';
 import { playerRoomStatus } from './playerRoomStatus';
+import { clampEmoteWheelCenter, emoteWheelSelection, movedBeyondEmoteThreshold, type EmoteWheelPoint } from './emoteWheel';
 
 interface Props { room: Room<DemoRoomState>; session: SessionResponse; onLeave: () => void }
+interface EmoteWheelState {
+  center: EmoteWheelPoint;
+  origin: EmoteWheelPoint;
+  selectedId: RoomEmoteId;
+  moved: boolean;
+}
+const LAST_EMOTE_STORAGE_KEY = 'energy-duel-last-wheel-emote';
+const EMOTE_ANIMATION_MS = 1_600;
 const Tutorial = lazy(() => import('./components/Tutorial'));
 const GameCanvas = lazy(() => import('./components/GameCanvas'));
 
@@ -84,8 +93,9 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [activeStep, setActiveStep] = useState<ResolutionStep>();
   const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
   const [ratingResult, setRatingResult] = useState<GameRatingResultMessage>();
-  const [emotesByPlayerId, setEmotesByPlayerId] = useState<Record<string, RoomEmoteId>>({});
+  const [emoteEvents, setEmoteEvents] = useState<RoomEmoteMessage[]>([]);
   const [emotePickerOpen, setEmotePickerOpen] = useState(false);
+  const [emoteWheel, setEmoteWheel] = useState<EmoteWheelState>();
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
   const [tutorialRequest, setTutorialRequest] = useState<{ page: GuidePageId; characterId?: string }>();
@@ -95,6 +105,34 @@ function RoomContent({ room, session, onLeave }: Props) {
   const mounted = useRef(true);
   const profileRequests = useRef(new Set<string>());
   const emoteTimers = useRef(new Map<string, number>());
+  const seenEmoteIds = useRef(new Map<string, number>());
+  const pointerPosition = useRef<EmoteWheelPoint>({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  const emoteWheelRef = useRef<EmoteWheelState>();
+  const lastWheelEmoteRef = useRef<RoomEmoteId>(readLastWheelEmote());
+  const localPlayerId = players.find((player) => player.accountId === session.accountId)?.playerId ?? room.sessionId;
+
+  const enqueueEmote = useCallback((event: RoomEmoteMessage) => {
+    const now = Date.now();
+    for (const [eventId, seenAt] of seenEmoteIds.current) if (now - seenAt > 60_000) seenEmoteIds.current.delete(eventId);
+    if (seenEmoteIds.current.has(event.eventId)) return;
+    seenEmoteIds.current.set(event.eventId, now);
+    setEmoteEvents((current) => current.some((candidate) => candidate.eventId === event.eventId) ? current : [...current, event]);
+    const timer = window.setTimeout(() => {
+      setEmoteEvents((current) => current.filter((candidate) => candidate.eventId !== event.eventId));
+      emoteTimers.current.delete(event.eventId);
+    }, EMOTE_ANIMATION_MS);
+    emoteTimers.current.set(event.eventId, timer);
+  }, []);
+
+  const sendRoomEmote = useCallback((emoteId: RoomEmoteId, rememberWheelSelection: boolean) => {
+    const eventId = requestId();
+    enqueueEmote({ eventId, playerId: localPlayerId, emoteId, sentAt: Date.now() });
+    room.send('send_emote', { requestId: eventId, emoteId });
+    if (rememberWheelSelection) {
+      lastWheelEmoteRef.current = emoteId;
+      localStorage.setItem(LAST_EMOTE_STORAGE_KEY, emoteId);
+    }
+  }, [enqueueEmote, localPlayerId, room]);
 
   useEffect(() => {
     mounted.current = true;
@@ -123,16 +161,8 @@ function RoomContent({ room, session, onLeave }: Props) {
     });
     const removeRatingResult = room.onMessage('game_rating_result', (payload: GameRatingResultMessage) => setRatingResult(payload));
     const removeEmote = room.onMessage('room_emote', (payload: RoomEmoteMessage) => {
-      if (typeof payload?.playerId !== 'string' || !isRoomEmoteId(payload.emoteId)) return;
-      window.clearTimeout(emoteTimers.current.get(payload.playerId));
-      setEmotesByPlayerId((current) => ({ ...current, [payload.playerId]: payload.emoteId }));
-      const timer = window.setTimeout(() => {
-        setEmotesByPlayerId((current) => {
-          const next = { ...current }; delete next[payload.playerId]; return next;
-        });
-        emoteTimers.current.delete(payload.playerId);
-      }, 3_000);
-      emoteTimers.current.set(payload.playerId, timer);
+      if (typeof payload?.eventId !== 'string' || typeof payload.playerId !== 'string' || !isRoomEmoteId(payload.emoteId)) return;
+      enqueueEmote(payload);
     });
     const handleDrop = () => setNetworkState('reconnecting');
     const handleReconnect = () => { setNetworkState('online'); void api.success({ content: '已重新连接', duration: 1 }); };
@@ -142,7 +172,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     room.send('ping', { sentAt: performance.now() });
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
-      for (const timer of emoteTimers.current.values()) window.clearTimeout(timer); emoteTimers.current.clear();
+      for (const timer of emoteTimers.current.values()) window.clearTimeout(timer); emoteTimers.current.clear(); seenEmoteIds.current.clear();
       room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult(); removeEmote();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
@@ -156,7 +186,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       }
       if (mounted.current) setActiveStep(undefined);
     }
-  }, [api, onLeave, room]);
+  }, [api, enqueueEmote, onLeave, room]);
 
   useEffect(() => {
     const query = window.matchMedia('(pointer: coarse)');
@@ -164,6 +194,56 @@ function RoomContent({ room, session, onLeave }: Props) {
     update(); query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
+  useEffect(() => {
+    const emoteIds = roomEmotes.map((emote) => emote.id);
+    const updateWheel = (next: EmoteWheelState | undefined) => {
+      emoteWheelRef.current = next;
+      setEmoteWheel(next);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const pointer = { x: event.clientX, y: event.clientY };
+      pointerPosition.current = pointer;
+      const current = emoteWheelRef.current;
+      if (!current || (!current.moved && !movedBeyondEmoteThreshold(current.origin, pointer))) return;
+      updateWheel({
+        ...current,
+        selectedId: emoteWheelSelection(current.center, pointer, emoteIds) ?? current.selectedId,
+        moved: true,
+      });
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyV' || event.repeat || event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target) || emoteWheelRef.current) return;
+      event.preventDefault();
+      const origin = pointerPosition.current;
+      updateWheel({
+        center: clampEmoteWheelCenter(origin, window.innerWidth, window.innerHeight),
+        origin,
+        selectedId: lastWheelEmoteRef.current,
+        moved: false,
+      });
+      setEmotePickerOpen(false);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const current = emoteWheelRef.current;
+      if (event.code !== 'KeyV' || !current) return;
+      event.preventDefault();
+      const selectedId = current.moved ? current.selectedId : lastWheelEmoteRef.current;
+      updateWheel(undefined);
+      sendRoomEmote(selectedId, current.moved);
+    };
+    const cancelWheel = () => updateWheel(undefined);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', cancelWheel);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', cancelWheel);
+      emoteWheelRef.current = undefined;
+    };
+  }, [sendRoomEmote]);
   useEffect(() => {
     const query = window.matchMedia('(max-width: 900px)');
     const update = () => setCompactLayout(query.matches);
@@ -360,6 +440,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
   return <main className="game-shell">
     {contextHolder}
+    {emoteWheel && <EmoteWheel state={emoteWheel} />}
     <header className="game-header">
       <div><p className="eyebrow">CIRCULAR GRID</p><h1>{phaseTitle(gameState)}</h1></div>
       <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
@@ -370,7 +451,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} phase={gameState.phase} boardObjects={boardObjects} emotesByPlayerId={emotesByPlayerId} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(object) => { setHovered(undefined); setInspectedBoardObject(object); }} />
+        <GameCanvas players={players} phase={gameState.phase} boardObjects={boardObjects} emoteEvents={emoteEvents} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) setHovered(undefined); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(object) => { setHovered(undefined); setInspectedBoardObject(object); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       <Button className="reset-view" size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button>
@@ -381,7 +462,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     <Collapse className="mobile-roster" items={[{ key: 'players', label: `玩家列表（${players.length}）`, children: roster }]} />
 
     <section className="game-control-panel" style={panelPosition ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' } : undefined}>
-      <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动操作面板</span><div className="control-panel-header-actions" onPointerDown={(event) => event.stopPropagation()}><Popover open={emotePickerOpen} onOpenChange={setEmotePickerOpen} trigger="click" placement="topRight" content={<EmotePicker onSelect={(emoteId) => { room.send('send_emote', { requestId: requestId(), emoteId }); setEmotePickerOpen(false); }} />}><Button size="small" className="emote-trigger" aria-label="发表情" title="发表情">☺</Button></Popover>{panelPosition && <Button size="small" type="text" onClick={() => { setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div></div>
+      <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动操作面板</span><div className="control-panel-header-actions" onPointerDown={(event) => event.stopPropagation()}><Popover open={emotePickerOpen} onOpenChange={setEmotePickerOpen} trigger="click" placement="topRight" content={<EmotePicker onSelect={(emoteId) => { sendRoomEmote(emoteId, false); setEmotePickerOpen(false); }} />}><Button size="small" className="emote-trigger" aria-label="发表情" title="发表情">☺</Button></Popover>{panelPosition && <Button size="small" type="text" onClick={() => { setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div></div>
       <div className="round-result">{darknessActive ? <p>黑暗笼罩战场，无法获知其他地块的状态变化。</p> : gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
       {gameState.roomMode === 'training' && gameState.phase === 'waiting' && <TrainingSetup actors={controlledActors} room={room} />}
       {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
@@ -433,6 +514,21 @@ function EmotePicker({ onSelect }: { onSelect: (emoteId: RoomEmoteId) => void })
   </div>;
 }
 
+function EmoteWheel({ state }: { state: EmoteWheelState }) {
+  const selected = roomEmotes.find((emote) => emote.id === state.selectedId) ?? roomEmotes[0];
+  return <div className="emote-wheel" style={{ left: state.center.x, top: state.center.y }} aria-hidden="true">
+    {roomEmotes.map((emote, index) => {
+      const angle = -Math.PI / 2 + index * Math.PI * 2 / roomEmotes.length;
+      return <span
+        className={`emote-wheel-option${emote.id === state.selectedId ? ' selected' : ''}`}
+        style={{ left: `calc(50% + ${Math.cos(angle) * 82}px)`, top: `calc(50% + ${Math.sin(angle) * 82}px)` }}
+        key={emote.id}
+      >{emote.emoji}</span>;
+    })}
+    <span className="emote-wheel-center"><kbd>V</kbd><small>{selected.label}</small></span>
+  </div>;
+}
+
 function Roster({ players, gameState, viewer, onInspect }: { players: SyncedPlayer[]; gameState: SyncedGameState; viewer?: SyncedPlayer; onInspect: (player: SyncedPlayer) => void }) {
   return <div className="roster-list">{players.map((player) => {
     const obscured = viewer?.buffs.some((buff) => buff.buffId === 'darkness') && player.gridIndex !== viewer.gridIndex;
@@ -469,6 +565,13 @@ function phaseTitle(state: SyncedGameState): string {
 
 function requestId(): string { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 function delay(milliseconds: number): Promise<void> { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
+function readLastWheelEmote(): RoomEmoteId {
+  const stored = localStorage.getItem(LAST_EMOTE_STORAGE_KEY);
+  return isRoomEmoteId(stored) ? stored : roomEmotes[0].id;
+}
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+}
 function formatNumber(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
 function formatTargetAllocation(targetIds: string[], players: SyncedPlayer[]): string {
   const counts = new Map<string, number>();

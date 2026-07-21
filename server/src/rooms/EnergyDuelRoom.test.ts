@@ -95,18 +95,18 @@ describe('EnergyDuelRoom training actors', () => {
 });
 
 describe('EnergyDuelRoom emotes', () => {
-  it('broadcasts only validated, rate-limited emotes for the sending player', () => {
+  it('broadcasts every validated emote without a send interval', () => {
     const room = new EnergyDuelRoom() as any;
     const player = new PlayerState(); player.playerId = 'p'; player.accountId = 'account';
     room.state.players.set(player.playerId, player);
     room.broadcast = vi.fn();
     const client = { sessionId: 'p', send: vi.fn() };
 
-    room.sendEmote(client, { emoteId: 'laugh' });
-    expect(room.broadcast).toHaveBeenCalledWith('room_emote', expect.objectContaining({ playerId: 'p', emoteId: 'laugh' }));
+    room.sendEmote(client, { emoteId: 'laugh', requestId: 'emote-1' });
+    expect(room.broadcast).toHaveBeenCalledWith('room_emote', expect.objectContaining({ eventId: 'emote-1', playerId: 'p', emoteId: 'laugh' }));
     room.sendEmote(client, { emoteId: 'not-an-emote' });
-    room.sendEmote(client, { emoteId: 'laugh' });
-    expect(room.broadcast).toHaveBeenCalledTimes(1);
+    room.sendEmote(client, { emoteId: 'laugh', requestId: 'emote-2' });
+    expect(room.broadcast).toHaveBeenCalledTimes(2);
     expect(client.send).toHaveBeenCalledWith('command_result', expect.objectContaining({ ok: false, command: 'send_emote' }));
   });
 });

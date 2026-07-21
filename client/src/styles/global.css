@@ -97,6 +97,12 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .emote-picker { display: grid; grid-template-columns: repeat(4, 42px); gap: 6px; }
 .emote-picker button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 1px solid #35405f; border-radius: 6px; color: #fff; background: #121a31; font-size: 24px; cursor: pointer; }
 .emote-picker button:hover, .emote-picker button:focus-visible { border-color: #7b89ff; outline: none; background: #202b52; }
+.emote-wheel { position: fixed; z-index: 90; width: 236px; height: 236px; transform: translate(-50%,-50%); border: 1px solid rgba(123,137,255,.64); border-radius: 50%; background: rgba(8,12,26,.94); box-shadow: 0 18px 55px rgba(0,0,0,.52); pointer-events: none; }
+.emote-wheel-option { position: absolute; display: grid; width: 46px; height: 46px; place-items: center; transform: translate(-50%,-50%); border: 2px solid #35405f; border-radius: 50%; background: #121a31; font-size: 25px; transition: border-color 80ms ease, background-color 80ms ease, transform 80ms ease; }
+.emote-wheel-option.selected { border-color: #55f2b0; background: #19473d; transform: translate(-50%,-50%) scale(1.14); box-shadow: 0 0 18px rgba(85,242,176,.28); }
+.emote-wheel-center { position: absolute; inset: 50% auto auto 50%; display: grid; min-width: 68px; place-items: center; gap: 2px; transform: translate(-50%,-50%); color: #dce2fa; }
+.emote-wheel-center kbd { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #59658d; border-radius: 6px; background: #1b2441; font: 700 14px/1 system-ui,sans-serif; }
+.emote-wheel-center small { color: #9da8ca; font-size: 11px; }
 
 .game-control-panel { position: absolute; z-index: 9; right: 24px; bottom: 24px; width: min(430px, calc(100vw - 48px)); min-width: 330px; min-height: 150px; max-width: calc(100vw - 48px); max-height: min(82vh, 760px); overflow: auto; resize: both; padding: 16px; border: 1px solid #303b60; border-radius: 16px; background: rgba(10,14,29,.93); box-shadow: 0 20px 50px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
 .round-result { max-height: 100px; margin-bottom: 10px; overflow-y: auto; color: #c8cee6; font-size: 13px; line-height: 1.45; }
