@@ -167,7 +167,7 @@
     },
     {
       "id": "inner_guard", "name": "内卫", "defaultAssetId": "portrait_default", "passiveIds": ["command_demon"],
-      "forms": [{ "id": "base", "name": "邪魔护卫", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "dissipation", "collapsing_fear", "transform"] }],
+      "forms": [{ "id": "base", "name": "邪魔护卫", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "dissipation", "collapsing_fear", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku"], "transformationCost": {}
     }
   ],
@@ -230,7 +230,7 @@
     { "id": "see_through", "name": "看破", "category": "attack", "description": "若目标使用攻击或特殊行动，取消该行动并按成长等级攻击；否则仅造成 0.5 级攻击。", "cost": { "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "damageType": "blunt", "effects": [{ "handler": "see_through" }], "vfxId": "see_through" },
     { "id": "shatter", "name": "崩裂", "category": "attack", "description": "成长攻击；对防御行动额外提高等级并施加 2 回合禁防。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "blunt", "effects": [{ "handler": "shatter" }], "vfxId": "shatter" },
     { "id": "dissipation", "name": "溃散", "category": "attack", "description": "不参与技能对抗的 1.5 级魔法攻击；伤害来源视为目标自身，防御仍可抵消。", "cost": { "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "damageType": "magic", "effects": [{ "handler": "dissipation" }], "vfxId": "dissipation" },
-    { "id": "collapsing_fear", "name": "坍缩恐惧", "category": "attack", "description": "攻击相邻玩家与所有国度地块上的其他玩家；濒死时消耗降低且伤害提高。", "cost": { "energy": 3 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 2, "damageType": "magic", "effects": [{ "handler": "collapsing_fear" }], "vfxId": "collapsing_fear" },
+    { "id": "collapsing_fear", "name": "坍缩恐惧", "category": "attack", "description": "攻击顺、逆时针方向遇到的第一名玩家与所有国度地块上的其他玩家；濒死时消耗降低且伤害提高。", "cost": { "energy": 3 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 2, "damageType": "magic", "effects": [{ "handler": "collapsing_fear" }], "vfxId": "collapsing_fear" },
     { "id": "nap_strategy_aa", "name": "集中炮击·AA", "category": "attack", "description": "2级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AA" },
     { "id": "nap_strategy_ad", "name": "攻守交替·AD", "category": "attack", "description": "1级钝击并提供1.5级格挡。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "defenseLevel": 1.5, "defenseBreak": { "mode": "recreated" }, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AD" },
     { "id": "nap_strategy_at", "name": "校准射击·AT", "category": "attack", "description": "1.5级钝击；目标下回合受到攻击时攻击方等级+1；获得1层战术优势。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 2, "level": 1.5, "damageType": "blunt", "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "attack_order", "napoleonSequence": "AT" },

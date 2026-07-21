@@ -876,7 +876,18 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.resources.energy).toBe(0);
     expect(actor.alive).toBe(true);
     expect(actor.currentHp).toBe(1);
+    expect(players.get('b')!.alive).toBe(false);
     expect(players.get('c')!.alive).toBe(false);
+  });
+
+  it('targets the first player in each direction even when neither stands on Dominion', () => {
+    const players = roster(['a', 3], ['b', 0], ['c', 0]); const actor = players.get('a')!;
+    actor.characterId = 'inner_guard'; actor.currentHp = 2; actor.maxHp = 3; actor.gridIndex = 0;
+    players.get('b')!.currentHp = players.get('b')!.maxHp = 2; players.get('b')!.gridIndex = 2;
+    players.get('c')!.currentHp = players.get('c')!.maxHp = 2; players.get('c')!.gridIndex = 4;
+    resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }]));
+    expect(players.get('b')!.currentHp).toBe(1);
+    expect(players.get('c')!.currentHp).toBe(1);
   });
 
   it('never targets the Inner Guard itself with Collapsing Fear in a two-player game', () => {

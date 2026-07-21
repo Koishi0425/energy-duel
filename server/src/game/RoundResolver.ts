@@ -574,7 +574,9 @@ function potentialTargets(actor: CombatPlayer, action: SubmittedAction, players:
   if (effect === 'rockfall_hammer') return playersOnCells(actor, cellsAround(actor.gridIndex ?? 0, count, 2), players);
   if (effect === 'collapsing_fear') {
     const dominionCells = new Set(Array.from(roundBoardObjects.get(actor)?.values() ?? []).filter((object) => object.definitionId === 'dominion' && object.ownerPlayerId === actor.id).map((object) => object.gridIndex));
-    return Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id && (cellsAround(actor.gridIndex ?? 0, count, 1).includes(target.gridIndex ?? -1) || dominionCells.has(target.gridIndex ?? -1))).map((target) => target.id);
+    const sideTargets = firstPlayersInBothDirections(actor, players);
+    const dominionTargets = Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id && dominionCells.has(target.gridIndex ?? -1)).map((target) => target.id);
+    return [...new Set([...sideTargets, ...dominionTargets])];
   }
   if (effect === 'dream_path') { const target = players.get(actionTargets(action)[0]); return target ? playersOnCells(actor, clockwiseCells(actor.gridIndex ?? 0, target.gridIndex ?? 0, count), players) : []; }
   if (effect === 'hangup') return Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id).map((target) => target.id);
@@ -698,10 +700,10 @@ function validateQuickAttackDestination(player: CombatPlayer, destination: numbe
 
 function resolveCollapsingFear(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, players: Map<string, CombatPlayer>, boardObjects: Map<string, CombatBoardObject>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const nearDeath = actor.currentHp === 1;
-  const adjacentTargets = playersOnCells(actor, cellsAround(actor.gridIndex ?? 0, players.size * 2, 1), players);
+  const sideTargets = firstPlayersInBothDirections(actor, players);
   const dominionCells = new Set(Array.from(boardObjects.values()).filter((object) => object.definitionId === 'dominion' && object.ownerPlayerId === actor.id).map((object) => object.gridIndex));
   const dominionTargets = Array.from(players.values()).filter((target) => target.alive && target.id !== actor.id && dominionCells.has(target.gridIndex ?? -1)).map((target) => target.id);
-  resolveAttackTargets(actor, submitted, definition, adjacentTargets, nearDeath ? 3 : 2, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
+  resolveAttackTargets(actor, submitted, definition, sideTargets, nearDeath ? 3 : 2, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
   resolveAttackTargets(actor, submitted, definition, dominionTargets, nearDeath ? 4 : 3, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
 }
 

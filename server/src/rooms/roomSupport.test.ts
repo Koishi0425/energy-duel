@@ -58,6 +58,11 @@ describe('room support', () => {
     expect(isActionUnlocked('jiaosila', 'base', 'fist', [], { energy: 1 })).toBe(true);
   });
 
+  it('never unlocks Fist or Slash for Inner Guard', () => {
+    expect(isActionUnlocked('inner_guard', 'base', 'fist', [], { energy: 3 })).toBe(false);
+    expect(isActionUnlocked('inner_guard', 'base', 'slash', [], { energy: 3 })).toBe(false);
+  });
+
   it('requires an active forged blade only for the sovereign blade action', () => {
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [{ buffId: 'sovereign_blade_forged', stacks: 1 }])).toBe(false);
     expect(isActionUnlocked('regent', 'base', 'sovereign_blade', [

@@ -120,6 +120,8 @@ Run commands from the repository root:
   remain visible in a locked state and use JSON `unlockRequirements`; client and
   server evaluate the same requirements. Gonggang's axe defense is the first
   example and requires the `axe_raised` buff.
+  Inner Guard is an explicit restricted-tree character: its form never grants
+  Fist, Slash, or Heal.
   Transformation costs belong to target character definitions, not the generic
   transform action. The initial character is a starting form, never a transform
   target. Players may normally switch repeatedly to any configured non-training-only
@@ -184,6 +186,10 @@ Run commands from the repository root:
   Actions remain private on the server until every living player submits. A
   submitted player may send `cancel_action` and replace their choice before the
   final living player submits; the final submission resolves synchronously.
+  Player readiness, action submission, result confirmation, and connection
+  state are synchronized and displayed consistently in the roster and on the
+  board. Room emotes use a server-validated fixed ID set with rate limiting;
+  they are transient broadcast messages, not authoritative room state or chat.
   Finished games remain in the result phase until every remaining player
   acknowledges the result, then reset to the waiting/ready phase for another game.
   Starting and post-result resets must restore authoritative grid positions to

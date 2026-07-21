@@ -40,6 +40,7 @@ describe('game configuration', () => {
     expect(gameConfig.characters.filter((character) => character.id !== 'inner_guard').every((character) => character.transformations.includes('inner_guard'))).toBe(true);
     expect(gameConfig.characters.slice(1).every((character) => !character.transformations.includes('default_character'))).toBe(true);
     expect(gameConfig.characters.find((character) => character.id === 'star_god')?.forms[0].unlockedActions).toContain('hollow_fist');
+    expect(gameConfig.characters.find((character) => character.id === 'inner_guard')?.forms[0].unlockedActions).not.toEqual(expect.arrayContaining(['fist', 'slash']));
     expect(gameConfig.characters[1].forms[0].unlockedActions).toContain('atomic_breath');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('raise_axe');
     expect(gameConfig.characters[2].forms[0].unlockedActions).toContain('axe_defend');
