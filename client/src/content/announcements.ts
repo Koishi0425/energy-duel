@@ -18,6 +18,39 @@ export interface Announcement {
 /** Newest announcements must stay first. IDs are persistent unread cursors. */
 export const announcements: readonly Announcement[] = [
   {
+    id: '2026-07-21-v043-emote-wheel-and-board-clarity',
+    title: 'v0.4.3：表情轮盘与棋盘显示优化',
+    summary: '优化房间内的表情入口与即时反馈，加入 V 键表情轮盘，并改善高分屏上的棋盘文字清晰度。',
+    publishedAt: '2026-07-21',
+    version: 'v0.4.3',
+    pinned: true,
+    tags: ['版本更新', '房间体验', '表情轮盘', '棋盘显示'],
+    sections: [
+      {
+        heading: '表情入口调整',
+        items: [
+          '表情按钮从页面顶部移至右下角操作面板，等待、选招、已提交和结算阶段均可就近使用。',
+          '普通表情面板仍提供全部预设表情；从面板点击发送不会覆盖表情轮盘保存的快捷选择。',
+        ],
+      },
+      {
+        heading: '即时表情反馈',
+        items: [
+          '表情不再设置发送间隔，连续发送的每个表情都会独立展示。',
+          '发送后会优先在本地立即播放，再由服务端同步给其他玩家；服务端回传通过事件编号去重，不会让发送者重复看到同一表情。',
+          '表情不再使用固定气泡，而是从角色身旁浮现、向上飘动并逐渐消失；连续表情可以同时播放，不会相互覆盖。',
+        ],
+      },
+      {
+        heading: '棋盘显示清晰度',
+        items: [
+          '棋盘画布现在会根据设备像素密度提高渲染分辨率，并为性能设置合理上限。',
+          '角色名称、状态信息和地块编号启用像素对齐，改善高分屏或系统缩放环境下文字发虚的问题。',
+        ],
+      },
+    ],
+  },
+  {
     id: '2026-07-20-v042-targeting-and-action-categories',
     title: 'v0.4.2：角色状态、目标判定与技能修正',
     summary: '修正变身状态继承、攻击目标与位移、练功房撤回，以及内卫、星神和叶倾仙的技能结算。',
