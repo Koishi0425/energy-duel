@@ -3,8 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineRoom, defineServer, matchMaker } from '@colyseus/core';
 import express from 'express';
+import { lobbyFeed } from './lobby/LobbyFeed.js';
+import { LobbyFeedRoom } from './lobby/LobbyFeedRoom.js';
 import { EnergyDuelRoom } from './rooms/EnergyDuelRoom.js';
 import { summarizeJoinableRooms } from './rooms/roomDirectory.js';
+import { presenceService } from './presence.js';
 import { sessionService } from './services.js';
 import { staticCacheControlForPath } from './staticAssets.js';
 
@@ -15,6 +18,7 @@ const avatarDirectory = path.resolve(directory, '../data/avatars');
 const server = defineServer({
   rooms: {
     energy_duel_demo: defineRoom(EnergyDuelRoom),
+    lobby_feed: defineRoom(LobbyFeedRoom),
   },
   express: (app) => {
     app.set('trust proxy', 1);
@@ -22,7 +26,7 @@ const server = defineServer({
     app.use((_request, response, next) => {
       response.setHeader('Access-Control-Allow-Origin', '*');
       response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, OPTIONS');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
       if (_request.method === 'OPTIONS') return response.sendStatus(204);
       next();
     });
@@ -46,6 +50,29 @@ const server = defineServer({
       } catch {
         response.status(503).json({ error: '暂时无法读取房间列表' });
       }
+    });
+
+    app.post('/api/presence', (request, response) => {
+      const identity = authenticatedIdentity(request.headers.authorization);
+      if (!identity) return response.status(401).json({ error: '会话无效或已过期' });
+      if (presenceService.touch(identity, request.body ?? {})) lobbyFeed.publish();
+      response.json({ ok: true, updatedAt: new Date().toISOString() });
+    });
+
+    app.delete('/api/presence', (request, response) => {
+      const identity = authenticatedIdentity(request.headers.authorization);
+      if (identity && presenceService.remove(identity.accountId)) lobbyFeed.publish();
+      response.json({ ok: true });
+    });
+
+    app.get('/api/players/online', (request, response) => {
+      const identity = authenticatedIdentity(request.headers.authorization);
+      if (!identity) return response.status(401).json({ error: '会话无效或已过期' });
+      response.setHeader('Cache-Control', 'no-store');
+      response.json({
+        players: presenceService.list(sessionService),
+        generatedAt: new Date().toISOString(),
+      });
     });
 
     app.post('/api/auth/register', (request, response) => {
@@ -85,7 +112,10 @@ const server = defineServer({
     app.patch('/api/profile', (request, response) => {
       const identity = authenticatedIdentity(request.headers.authorization);
       if (!identity) return response.status(401).json({ error: '会话无效或已过期' });
-      try { response.json(sessionService.updateProfile(identity, request.body ?? {})); }
+      try {
+        response.json(sessionService.updateProfile(identity, request.body ?? {}));
+        lobbyFeed.publish();
+      }
       catch (reason) { response.status(400).json({ error: reason instanceof Error ? reason.message : '资料更新失败' }); }
     });
 
@@ -101,6 +131,7 @@ const server = defineServer({
         if (!existsSync(avatarDirectory)) mkdirSync(avatarDirectory, { recursive: true });
         writeFileSync(path.join(avatarDirectory, `${identity.accountId}.webp`), contents);
         response.json(sessionService.markAvatarUpdated(identity));
+        lobbyFeed.publish();
       } catch (reason) { response.status(400).json({ error: reason instanceof Error ? reason.message : '头像保存失败' }); }
     });
 
@@ -115,7 +146,7 @@ const server = defineServer({
       app.use(express.static(clientDist, {
         setHeaders: (response, filePath) => response.setHeader('Cache-Control', staticCacheControlForPath(filePath)),
       }));
-      app.get('/', (_request, response) => response.sendFile(path.join(clientDist, 'index.html')));
+      app.get(/^\/(?:login|profile|rooms\/[A-Z0-9]+|profiles\/[0-9a-f-]+)?\/?$/i, (_request, response) => response.sendFile(path.join(clientDist, 'index.html')));
     }
   },
 });

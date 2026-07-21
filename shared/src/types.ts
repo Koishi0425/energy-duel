@@ -164,6 +164,37 @@ export interface PublicRoomListResponse {
   generatedAt: string;
 }
 
+export type OnlinePlayerStatus = 'idle' | 'public_room' | 'training_room';
+
+export interface PublicOnlinePlayerSummary {
+  accountId: string;
+  username: string;
+  nickname: string;
+  avatarUrl?: string;
+  nameplateId: string;
+  titleId: string;
+  rankId: RankId;
+  level: number;
+  rating: number;
+  status: OnlinePlayerStatus;
+  roomId?: string;
+  roomClients?: number;
+  roomMaxClients?: number;
+  updatedAt: string;
+}
+
+export interface PublicOnlinePlayerListResponse {
+  players: PublicOnlinePlayerSummary[];
+  generatedAt: string;
+}
+
+export interface LobbySnapshotMessage {
+  version: number;
+  rooms: PublicRoomSummary[];
+  players: PublicOnlinePlayerSummary[];
+  generatedAt: string;
+}
+
 export interface SyncedResource {
   resourceId: string;
   current: number;
@@ -237,6 +268,15 @@ export const roomEmotes = [
 
 export type RoomEmoteId = typeof roomEmotes[number]['id'];
 export interface RoomEmoteMessage { eventId: string; playerId: string; emoteId: RoomEmoteId; sentAt: number }
+
+export type RoomNoticeType = 'join' | 'leave' | 'disconnect' | 'reconnect';
+export interface RoomNoticeMessage {
+  eventId: string;
+  type: RoomNoticeType;
+  playerId: string;
+  nickname: string;
+  sentAt: number;
+}
 
 export function isRoomEmoteId(value: unknown): value is RoomEmoteId {
   return typeof value === 'string' && roomEmotes.some((emote) => emote.id === value);

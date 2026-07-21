@@ -19,6 +19,21 @@ describe('EnergyDuelRoom submitted targets', () => {
   });
 });
 
+describe('EnergyDuelRoom host reconnection', () => {
+  it('keeps a host seat for an unexpected waiting-room disconnect', async () => {
+    const room = new EnergyDuelRoom() as any;
+    const host = new PlayerState(); host.playerId = 'host'; host.connected = true;
+    room.state.hostPlayerId = 'host'; room.state.phase = 'waiting'; room.state.players.set('host', host);
+    room.emitRoomNotice = vi.fn(); room.allowReconnection = vi.fn().mockResolvedValue(undefined);
+
+    await room.onDrop({ sessionId: 'host' });
+
+    expect(host.connected).toBe(false);
+    expect(room.emitRoomNotice).toHaveBeenCalledWith('disconnect', host);
+    expect(room.allowReconnection).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'host' }), 30);
+  });
+});
+
 describe('EnergyDuelRoom character-scoped buffs', () => {
   it('does not heal a near-death player while restoring the transformed character', () => {
     const room = new EnergyDuelRoom() as any;

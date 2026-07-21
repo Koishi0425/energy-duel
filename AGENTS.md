@@ -6,6 +6,10 @@ interfaces, directory responsibilities, or architecture invariants change.
 ## Architecture
 
 - `client/` is the React + Vite + PixiJS 8 browser application.
+  The browser shell owns lightweight client-side routes for `/login`, `/`,
+  `/rooms/:roomId`, `/profile`, and `/profiles/:accountId`. Room URLs expose
+  only shareable room codes; per-browser Colyseus reconnection tokens stay in
+  localStorage and must not be placed in URLs.
 - `client/src/content/announcements.ts` is the newest-first, versioned source
   for project announcements. Keep announcement IDs stable because the latest
   read ID is a localStorage cursor; the announcement dialog stays lazy-loaded
@@ -33,6 +37,14 @@ interfaces, directory responsibilities, or architecture invariants change.
   Authenticated clients may read another account's display profile through
   `GET /api/profiles/:accountId`; profile updates remain owner-only under
   `/api/profile` and `/api/profile/avatar`.
+  Online player presence is process-local and heartbeat-based:
+  clients update it through `/api/presence`. Authenticated lobby clients subscribe
+  to the Colyseus `lobby_feed` room and receive versioned `lobby_snapshot` messages
+  containing room and online-player summaries; `GET /api/rooms` and
+  `GET /api/players/online` remain manual/low-frequency recovery paths. The server
+  broadcasts snapshots only after authoritative room or visible Presence changes,
+  never for an unchanged heartbeat. Public-room presence may expose a room code and
+  occupancy; training-room presence exposes only that the player is in a training room.
   Passwords are salted and hashed with Node.js scrypt. Uploaded avatars live
   under `server/data/avatars/` as validated WebP files and are user data, not
   client assets.
@@ -175,9 +187,9 @@ Run commands from the repository root:
 - Players explicitly create or join rooms by room ID. Rooms support at most 20
   players. Waiting rooms require every player to be ready and only the host may start.
   `/api/rooms` exposes only non-empty, unlocked, non-private rooms with public
-  room ID, host nickname, occupancy, and creation time. The lobby is join-first:
-  its primary room-code form and Enter key always join, while creation stays in
-  a separate, explicitly expanded section.
+  room ID, host nickname, occupancy, and creation time. The lobby is directory-first:
+  players join from the room list or a room URL, while creation is opened from the
+  room-list toolbar.
   The lobby also creates private single-client training rooms. A training room
   synchronizes server-owned dummy actors with an explicit controller player ID;
   the host may add/remove and configure actors while waiting, then submit each
@@ -220,11 +232,13 @@ Run commands from the repository root:
   1,500 EXP.
   The client progress bar must subtract the current-level threshold and show
   progress within that level.
-- The room creator is the permanent host. A permanent host departure destroys
-  the room. Only active matches reserve an unexpectedly disconnected seat for
-  30 seconds; lobby and result-screen disconnects are immediate departures. A
-  reconnect timeout becomes a permanent departure. A non-host departure during
-  play ends the current game and leaves remaining clients on the result screen.
+- The room creator is the permanent host. A host's explicit departure destroys
+  the room, but an unexpected host disconnect reserves that host seat for 30
+  seconds in every phase so a browser refresh can reconnect safely. Non-host
+  reconnect seats remain limited to active matches; lobby and result-screen
+  disconnects are immediate departures. A reconnect timeout becomes a permanent
+  departure. A non-host departure during play ends the current game and leaves
+  remaining clients on the result screen.
 - Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
   attack target sets always exclude the attacker; intentional self-damage uses
   a dedicated effect instead of targeting the actor as an attack. Damage

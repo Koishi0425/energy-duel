@@ -5,6 +5,7 @@ import {
   gameConfig,
   isRoomEmoteId,
   type SessionIdentity,
+  type RoomNoticeType,
   type ConfigureTrainingActorMessage,
   type SubmitDeferredTargetsMessage,
   type SubmitActionMessage,
@@ -15,6 +16,7 @@ import { Client, Room, ServerError, matchMaker } from '@colyseus/core';
 import { resolveRound, validateAction, type CombatBoardObject, type CombatPlayer, type RoundResult, type SubmittedAction } from '../game/RoundResolver.js';
 import { calculateGameScore, type GamePerformanceInput } from '../game/RatingCalculator.js';
 import { ActionSubmissionStore } from '../game/ActionSubmissionStore.js';
+import { lobbyFeed } from '../lobby/LobbyFeed.js';
 import { sessionService } from '../services.js';
 import { assertAccountAvailable, assignGridIndices, claimRoomCode, colorForAccount, isActionUnlocked, normalizeRoomCode, releaseRoomCode, tickScopedBuffs } from './roomSupport.js';
 
@@ -22,6 +24,7 @@ const NICKNAME_PATTERN = /^[a-zA-Z0-9_\u4e00-\u9fff]{1,16}$/;
 const DEFAULT_CHARACTER_ID = 'default_character';
 const DEFAULT_FORM_ID = 'base';
 const PLAYER_BUFF_SCOPE = '*';
+const RECONNECTION_WINDOW_SECONDS = 30;
 
 export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
@@ -161,6 +164,7 @@ export class EnergyDuelRoom extends Room {
 
   onDispose(): void {
     if (this.claimedRoomCode) releaseRoomCode(this.claimedRoomCode);
+    lobbyFeed.publish();
   }
 
   onJoin(client: Client, options: { nickname?: unknown }, identity: SessionIdentity): void {
@@ -190,23 +194,29 @@ export class EnergyDuelRoom extends Room {
     this.storedBuffs.set(client.sessionId, new Map());
     if (!this.state.hostPlayerId) {
       this.state.hostPlayerId = client.sessionId;
-      void this.setMetadata({ hostNickname: nickname });
+      void this.setMetadata({ hostNickname: nickname }).then(() => lobbyFeed.publish(), () => undefined);
       if (this.state.roomMode === 'training') this.createTrainingDummy(client.sessionId);
     }
     assignGridIndices(this.state.players.values());
+    this.emitRoomNotice('join', player);
+    lobbyFeed.publish();
   }
 
   async onDrop(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
-    if (!player || !['choosing', 'deferred', 'resolving'].includes(this.state.phase)) return;
+    const isHost = client.sessionId === this.state.hostPlayerId;
+    const activeMatch = ['choosing', 'deferred', 'resolving'].includes(this.state.phase);
+    if (!player || (!isHost && !activeMatch)) return;
     player.connected = false;
-    try { await this.allowReconnection(client, 30); } catch { /* onLeave completes departure */ }
+    this.emitRoomNotice('disconnect', player);
+    try { await this.allowReconnection(client, RECONNECTION_WINDOW_SECONDS); } catch { /* onLeave completes departure */ }
   }
 
   onReconnect(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (player) {
       player.connected = true;
+      this.emitRoomNotice('reconnect', player);
       if (this.state.phase === 'deferred') this.sendDeferredPrompt(client);
     }
   }
@@ -219,12 +229,15 @@ export class EnergyDuelRoom extends Room {
       this.destroying = true;
       this.broadcast('room_closed', { message: '房主已离开，房间已销毁。' });
       void this.disconnect();
+      lobbyFeed.publish();
       return;
     }
     this.actions.cancel(client.sessionId);
     this.storedBuffs.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     assignGridIndices(this.state.players.values());
+    this.emitRoomNotice('leave', leavingPlayer);
+    lobbyFeed.publish();
     if (this.state.phase === 'choosing' || this.state.phase === 'deferred' || this.state.phase === 'resolving') {
       this.actions.clear();
       this.state.phase = 'finished';
@@ -245,7 +258,7 @@ export class EnergyDuelRoom extends Room {
     this.actions.clear();
     this.gamePerformance.clear();
     this.currentGameId = randomUUID();
-    void this.lock();
+    void this.lock().then(() => lobbyFeed.publish(), () => undefined);
     this.state.round = 1;
     this.state.gameNumber += 1;
     this.state.phase = 'choosing';
@@ -406,6 +419,17 @@ export class EnergyDuelRoom extends Room {
     this.broadcast('room_emote', { eventId, playerId: player.playerId, emoteId: payload.emoteId, sentAt: now });
   }
 
+  private emitRoomNotice(type: RoomNoticeType, player: PlayerState): void {
+    const now = Date.now();
+    this.broadcast('room_notice', {
+      eventId: `notice-${player.playerId}-${type}-${now}`,
+      type,
+      playerId: player.playerId,
+      nickname: player.nickname,
+      sentAt: now,
+    });
+  }
+
   private applyRoundResult(combatPlayers: Map<string, CombatPlayer>, combatBoardObjects: Map<string, CombatBoardObject>, result: RoundResult): void {
     for (const [playerId, delta] of Object.entries(result.performance)) {
       const totals = this.gamePerformance.get(playerId); const synced = this.state.players.get(playerId); if (!totals) continue;
@@ -501,7 +525,7 @@ export class EnergyDuelRoom extends Room {
 
   private resetToWaiting(): void {
     this.actions.clear();
-    void this.unlock();
+    void this.unlock().then(() => lobbyFeed.publish(), () => undefined);
     this.state.phase = 'waiting';
     this.state.round = 0;
     this.state.lastResult = '上一局已结束，可以重新准备。';

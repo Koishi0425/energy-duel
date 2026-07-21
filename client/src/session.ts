@@ -1,4 +1,4 @@
-import type { PlayerProfile, ProfileUpdateRequest, PublicRoomListResponse, SessionResponse } from '@energy-duel/shared';
+import type { OnlinePlayerStatus, PlayerProfile, ProfileUpdateRequest, PublicOnlinePlayerListResponse, PublicRoomListResponse, SessionResponse } from '@energy-duel/shared';
 
 const STORAGE_KEY = 'energy-duel-session-v2';
 
@@ -66,4 +66,27 @@ export async function fetchPublicRooms(signal?: AbortSignal): Promise<PublicRoom
   const body = await response.json() as PublicRoomListResponse & { error?: string };
   if (!response.ok) throw new Error(body.error || '无法读取房间列表');
   return body;
+}
+
+export async function fetchOnlinePlayers(session: SessionResponse, signal?: AbortSignal): Promise<PublicOnlinePlayerListResponse> {
+  const response = await fetch(`${getServerUrl()}/api/players/online`, { signal, cache: 'no-store', headers: { Authorization: `Bearer ${session.token}` } });
+  const body = await response.json() as PublicOnlinePlayerListResponse & { error?: string };
+  if (!response.ok) throw new Error(body.error || '无法读取在线玩家');
+  return body;
+}
+
+export async function updatePresence(session: SessionResponse, update: { status: OnlinePlayerStatus; roomId?: string; roomClients?: number; roomMaxClients?: number }, signal?: AbortSignal): Promise<void> {
+  await fetch(`${getServerUrl()}/api/presence`, {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+    body: JSON.stringify(update),
+  });
+}
+
+export async function clearPresence(session: SessionResponse): Promise<void> {
+  await fetch(`${getServerUrl()}/api/presence`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${session.token}` },
+  }).catch(() => undefined);
 }

@@ -18,6 +18,7 @@ import {
   type ResolutionStep,
   type RoomEmoteId,
   type RoomEmoteMessage,
+  type RoomNoticeMessage,
   type RoundResolutionMessage,
   type SessionResponse,
   type SyncedBoardObject,
@@ -51,6 +52,9 @@ interface EmoteWheelState {
 }
 const LAST_EMOTE_STORAGE_KEY = 'energy-duel-last-wheel-emote';
 const EMOTE_ANIMATION_MS = 1_600;
+const ROOM_NOTICE_VISIBLE_MS = 2_800;
+const ROOM_NOTICE_EXIT_MS = 360;
+type VisibleRoomNotice = RoomNoticeMessage & { isLeaving: boolean };
 const Tutorial = lazy(() => import('./components/Tutorial'));
 const GameCanvas = lazy(() => import('./components/GameCanvas'));
 
@@ -94,6 +98,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [battleLoad, setBattleLoad] = useState({ progress: 0, label: '正在准备战场' });
   const [ratingResult, setRatingResult] = useState<GameRatingResultMessage>();
   const [emoteEvents, setEmoteEvents] = useState<RoomEmoteMessage[]>([]);
+  const [roomNotices, setRoomNotices] = useState<VisibleRoomNotice[]>([]);
   const [emotePickerOpen, setEmotePickerOpen] = useState(false);
   const [emoteWheel, setEmoteWheel] = useState<EmoteWheelState>();
   const [coarsePointer, setCoarsePointer] = useState(false);
@@ -105,6 +110,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const mounted = useRef(true);
   const profileRequests = useRef(new Set<string>());
   const emoteTimers = useRef(new Map<string, number>());
+  const noticeTimers = useRef(new Map<string, number[]>());
   const seenEmoteIds = useRef(new Map<string, number>());
   const pointerPosition = useRef<EmoteWheelPoint>({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const emoteWheelRef = useRef<EmoteWheelState>();
@@ -122,6 +128,31 @@ function RoomContent({ room, session, onLeave }: Props) {
       emoteTimers.current.delete(event.eventId);
     }, EMOTE_ANIMATION_MS);
     emoteTimers.current.set(event.eventId, timer);
+  }, []);
+
+  const enqueueRoomNotice = useCallback((notice: RoomNoticeMessage) => {
+    if (noticeTimers.current.has(notice.eventId)) return;
+    setRoomNotices((current) => current.some((candidate) => candidate.eventId === notice.eventId)
+      ? current
+      : [...current.slice(-3), { ...notice, isLeaving: false }]);
+    const exitTimer = window.setTimeout(() => {
+      setRoomNotices((current) => current.map((candidate) => candidate.eventId === notice.eventId
+        ? { ...candidate, isLeaving: true }
+        : candidate));
+      const removeTimer = window.setTimeout(() => {
+        setRoomNotices((current) => current.filter((candidate) => candidate.eventId !== notice.eventId));
+        noticeTimers.current.delete(notice.eventId);
+      }, ROOM_NOTICE_EXIT_MS);
+      noticeTimers.current.get(notice.eventId)?.push(removeTimer);
+    }, ROOM_NOTICE_VISIBLE_MS);
+    noticeTimers.current.set(notice.eventId, [exitTimer]);
+  }, []);
+
+  useEffect(() => () => {
+    for (const timers of noticeTimers.current.values()) {
+      for (const timer of timers) window.clearTimeout(timer);
+    }
+    noticeTimers.current.clear();
   }, []);
 
   const sendRoomEmote = useCallback((emoteId: RoomEmoteId, rememberWheelSelection: boolean) => {
@@ -164,6 +195,11 @@ function RoomContent({ room, session, onLeave }: Props) {
       if (typeof payload?.eventId !== 'string' || typeof payload.playerId !== 'string' || !isRoomEmoteId(payload.emoteId)) return;
       enqueueEmote(payload);
     });
+    const removeNotice = room.onMessage('room_notice', (payload: RoomNoticeMessage) => {
+      if (typeof payload?.eventId !== 'string' || typeof payload.nickname !== 'string') return;
+      if (!['join', 'leave', 'disconnect', 'reconnect'].includes(payload.type)) return;
+      enqueueRoomNotice(payload);
+    });
     const handleDrop = () => setNetworkState('reconnecting');
     const handleReconnect = () => { setNetworkState('online'); void api.success({ content: '已重新连接', duration: 1 }); };
     const handleLeave = () => { setNetworkState('offline'); onLeave(); };
@@ -173,7 +209,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
       for (const timer of emoteTimers.current.values()) window.clearTimeout(timer); emoteTimers.current.clear(); seenEmoteIds.current.clear();
-      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult(); removeEmote();
+      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult(); removeEmote(); removeNotice();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
 
@@ -186,7 +222,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       }
       if (mounted.current) setActiveStep(undefined);
     }
-  }, [api, enqueueEmote, onLeave, room]);
+  }, [api, enqueueEmote, enqueueRoomNotice, onLeave, room]);
 
   useEffect(() => {
     const query = window.matchMedia('(pointer: coarse)');
@@ -445,6 +481,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       <div><p className="eyebrow">CIRCULAR GRID</p><h1>{phaseTitle(gameState)}</h1></div>
       <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
     </header>
+    {roomNotices.length > 0 && <div className="room-notice-stack">{roomNotices.map((notice) => <div key={notice.eventId} className={`room-notice ${notice.type}${notice.isLeaving ? ' is-leaving' : ''}`}>{roomNoticeText(notice)}</div>)}</div>}
     {networkState === 'reconnecting' && <div className="reconnecting-banner">连接中断，正在保留席位并自动重连…</div>}
     {submittedLabel && activeActor?.submitted && <div className="selection-toast">{activeActor.nickname}：{submittedLabel}</div>}
     {activeStep && <div className="timeline-chip">动作 {activeStep.sequence + 1} · 速度 {activeStep.speedPriority} · {activeStep.actors.map((actor) => actionById.get(actor.actionId)?.name ?? actor.actionId).join(' + ')}</div>}
@@ -561,6 +598,13 @@ function phaseTitle(state: SyncedGameState): string {
   if (state.phase === 'deferred') return `第 ${state.round} 回合 · 后发选择`;
   if (state.phase === 'resolving') return `第 ${state.round} 回合 · 结算`;
   return `第 ${state.round} 回合`;
+}
+
+function roomNoticeText(notice: RoomNoticeMessage): string {
+  if (notice.type === 'leave') return `${notice.nickname} 离开房间`;
+  if (notice.type === 'disconnect') return `${notice.nickname} 连接中断`;
+  if (notice.type === 'reconnect') return `${notice.nickname} 重新连接`;
+  return `${notice.nickname} 进入房间`;
 }
 
 function requestId(): string { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
