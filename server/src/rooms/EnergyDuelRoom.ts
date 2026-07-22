@@ -633,12 +633,14 @@ export class EnergyDuelRoom extends Room {
     for (const player of this.state.players.values()) this.storedBuffs.get(player.playerId)?.get(PLAYER_BUFF_SCOPE)?.delete('resentment_mark');
     if (!source || living.length === 0) { for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs); return; }
     const count = this.state.players.size * 2; const origin = source.gridIndex;
-    living.sort((left, right) => {
+    const candidates = living.filter((player) => player.playerId !== source.playerId);
+    if (candidates.length === 0) { for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs); return; }
+    candidates.sort((left, right) => {
       const total = (player: PlayerState) => Array.from(player.resources.values()).reduce((sum, resource) => sum + resource.current, 0);
       return total(right) - total(left) || (right.resources.get('energy')?.current ?? 0) - (left.resources.get('energy')?.current ?? 0)
         || ((left.gridIndex - origin + count) % count) - ((right.gridIndex - origin + count) % count) || left.playerId.localeCompare(right.playerId);
     });
-    const target = living[0]; const scopes = this.storedBuffs.get(target.playerId) ?? new Map<string, Map<string, StoredBuff>>(); this.storedBuffs.set(target.playerId, scopes);
+    const target = candidates[0]; const scopes = this.storedBuffs.get(target.playerId) ?? new Map<string, Map<string, StoredBuff>>(); this.storedBuffs.set(target.playerId, scopes);
     const playerScope = scopes.get(PLAYER_BUFF_SCOPE) ?? new Map<string, StoredBuff>(); scopes.set(PLAYER_BUFF_SCOPE, playerScope);
     playerScope.set('resentment_mark', { buffId: 'resentment_mark', stacks: 1, remainingTurns: 0, permanent: true, sourcePlayerId: source.playerId });
     for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs);

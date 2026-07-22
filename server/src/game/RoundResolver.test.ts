@@ -1044,12 +1044,25 @@ describe('RoundResolver JSON-driven actions', () => {
   it('summons Nilu Fire and lets it protect Quilon from an incoming attack', () => {
     const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
     actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.resources.charge = 1; actor.gridIndex = 0;
-    players.get('b')!.gridIndex = 1;
+    players.get('b')!.gridIndex = 2;
     const boardObjects = new Map<string, CombatBoardObject>();
+    expect(() => validateAction(actor, { actionId: 'breathing_method', targetGridIndex: 1 }, players, boardObjects)).not.toThrow();
     resolveRound(players, actions(['a', { actionId: 'breathing_method', targetGridIndex: 1 }], ['b', { actionId: 'charge' }]), boardObjects);
     expect(boardObjects.get('nilu_fire:a:1')).toMatchObject({ definitionId: 'nilu_fire', kind: 'terrain', gridIndex: 1, currentHp: 0 });
+    expect(actor.buffs?.has('nilu_resistance')).toBe(true);
     resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'fist', targetId: 'a' }]), boardObjects);
     expect(actor.currentHp).toBe(2);
+  });
+
+  it('allows Breathing Method on any empty unit cell and rejects players or summons', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.resources.charge = 1; actor.gridIndex = 0;
+    players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4;
+    const lotus: CombatBoardObject = { objectId: 'lotus_seat:b', definitionId: 'lotus_seat', kind: 'summon', ownerPlayerId: 'b', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 10, maxHp: 10, remainingTurns: 0, permanent: true };
+    const boardObjects = new Map([[lotus.objectId, lotus]]);
+    expect(() => validateAction(actor, { actionId: 'breathing_method', targetGridIndex: 3 }, players, boardObjects)).not.toThrow();
+    expect(() => validateAction(actor, { actionId: 'breathing_method', targetGridIndex: 2 }, players, boardObjects)).toThrow(/没有单位/);
+    expect(() => validateAction(actor, { actionId: 'breathing_method', targetGridIndex: 1 }, players, boardObjects)).toThrow(/没有单位/);
   });
 
   it('revives Quilon once and grants Bodhisattva Debate after lethal damage', () => {
@@ -1214,6 +1227,51 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(chimei.resources.soul).toBe(1);
     expect(target.buffs).toEqual(expect.objectContaining(new Set(['soul_reap_debuff', 'hellwalker'])));
     expect(target.buffRemainingTurns).toMatchObject({ soul_reap_debuff: 3, hellwalker: 3 });
+    expect(chimei.buffs?.has('hellwalker') ?? false).toBe(false);
+  });
+
+  it('applies targetless Hellwalker to only the two nearest other players without duplicates', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0], ['d', 0]); const chimei = players.get('a')!;
+    chimei.characterId = 'chimei'; chimei.currentHp = chimei.maxHp = 2; chimei.gridIndex = 0;
+    players.get('b')!.gridIndex = 1; players.get('c')!.gridIndex = 2; players.get('d')!.gridIndex = 4;
+    resolveRound(players, actions(['a', { actionId: 'soul_capture' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }], ['d', { actionId: 'charge' }]));
+    const marked = Array.from(players.values()).filter((player) => player.buffs?.has('hellwalker')).map((player) => player.id);
+    expect(marked).toEqual(['b', 'c']);
+    expect(chimei.buffs?.has('hellwalker') ?? false).toBe(false);
+  });
+
+  it('allows one Chimei to apply Hellwalker to another Chimei', () => {
+    const players = roster(['a', 1], ['b', 0]); const source = players.get('a')!; const otherChimei = players.get('b')!;
+    source.characterId = 'chimei'; source.currentHp = source.maxHp = 2; source.gridIndex = 0;
+    otherChimei.characterId = 'chimei'; otherChimei.currentHp = otherChimei.maxHp = 2; otherChimei.gridIndex = 2;
+    resolveRound(players, actions(['a', { actionId: 'soul_reap', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(source.buffs?.has('hellwalker') ?? false).toBe(false);
+    expect(otherChimei.buffs?.has('hellwalker')).toBe(true);
+    expect(otherChimei.buffSourcePlayerIds?.hellwalker).toBe('a');
+  });
+
+  it('keeps Tremble on its selected stationary target and carries three layers into the next round', () => {
+    const players = roster(['a', 1], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'tremble', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.buffs?.has('vulnerability')).toBe(true);
+    expect(target.buffStacks?.vulnerability).toBe(3);
+  });
+
+  it('does not let an inactive Quilon fire make another character resist Tremble', () => {
+    const players = roster(['a', 1], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; target.characterId = 'warrior'; target.currentHp = target.maxHp = 2;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:b:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'b', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    resolveRound(players, actions(['a', { actionId: 'tremble', targetId: 'b' }], ['b', { actionId: 'charge' }]), new Map([[fire.objectId, fire]]));
+    expect(target.buffStacks?.vulnerability).toBe(3);
+    expect(target.buffs?.has('nilu_resistance') ?? false).toBe(false);
+  });
+
+  it('allows zero-cost Bully while Regain Spirit blocks non-attack actions at zero energy', () => {
+    const players = roster(['a', 0], ['b', 0]); const warrior = players.get('a')!;
+    warrior.characterId = 'warrior'; warrior.buffs = new Set(['regain_spirit_lock']);
+    expect(() => validateAction(warrior, { actionId: 'bully', targetId: 'b' }, players)).not.toThrow();
+    expect(() => validateAction(warrior, { actionId: 'charge' }, players)).toThrow(/只能使用攻击技能/);
   });
 
   it('makes Soul Capture immune to attacks and grants at most one extra Soul', () => {

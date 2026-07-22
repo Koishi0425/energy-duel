@@ -157,7 +157,7 @@ export function validateAction(player: CombatPlayer, action: SubmittedAction, pl
   }
   if (definition.targetsGridCell && action.actionId === 'quick_attack') validateQuickAttackDestination(player, action.targetGridIndex, players, boardObjects);
   else if (action.actionId === 'breathing_method') {
-    validateAdjacentDestination(player, action.targetGridIndex, players, boardObjects);
+    validateEmptyUnitGridTarget(action.targetGridIndex, players, boardObjects);
     if (Array.from(boardObjects.values()).some((object) => object.definitionId === 'nilu_fire' && object.ownerPlayerId === player.id && object.gridIndex === action.targetGridIndex)) throw new Error('该地块已有你的尼卢火');
   }
   else if (action.actionId === 'three_bodies') validateDirectionTarget(player, action.targetGridIndex, players);
@@ -225,7 +225,10 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       .map((targetId) => players.get(targetId)?.gridIndex)
       .filter((cell): cell is number => cell !== undefined);
   }
-  for (const player of aliveAtStart) { roundDamageStates.delete(player); pendingWuyouRevives.delete(player); roundBoardObjects.set(player, boardObjects); roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); }
+  for (const player of aliveAtStart) {
+    roundDamageStates.delete(player); pendingWuyouRevives.delete(player); roundBoardObjects.set(player, boardObjects);
+    roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); syncNiluResistance(player);
+  }
   const hpAtStart = new Map(aliveAtStart.map((player) => [player.id, player.currentHp]));
   for (const player of aliveAtStart) if (player.characterId === 'napoleon') {
     if (player.buffs?.has('napoleon_emperor')) addTacticalAdvantage(player, 2, Math.max(1, player.buffRemainingTurns?.napoleon_emperor ?? 1));
@@ -360,7 +363,11 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       if (buffStacks(actor, 'ao_mastery') >= 4 && targetId) resolveAttackTargets(actor, submitted, definition, [targetId], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     } else if (effect === 'heal') {
       const fire = Array.from(boardObjects.values()).find((object) => object.definitionId === 'nilu_fire' && object.gridIndex === submitted.targetGridIndex);
-      if (fire) { boardObjects.delete(fire.objectId); fragile.delete(actor.id); summary.push(`${actor.nickname} 熄灭了 ${players.get(fire.ownerPlayerId)?.nickname ?? fire.ownerPlayerId} 的尼卢火。`); }
+      if (fire) {
+        boardObjects.delete(fire.objectId); fragile.delete(actor.id);
+        const owner = players.get(fire.ownerPlayerId); if (owner) syncNiluResistance(owner);
+        summary.push(`${actor.nickname} 熄灭了 ${owner?.nickname ?? fire.ownerPlayerId} 的尼卢火。`);
+      }
       else { const before = actor.currentHp; actor.currentHp = Math.min(actor.maxHp, actor.currentHp + 1); performance[actor.id].recoveryStates += actor.currentHp - before; summary.push(`${actor.nickname} 使用治疗，进入${healthStateName(actor)}。`); }
     }
     else if (effect === 'breathing_method') { summonNiluFire(actor, submitted.targetGridIndex, players, summary); }
@@ -399,15 +406,15 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       } else summary.push(`${actor.nickname} 使用${definition.name}后死亡，未获得后续收益。`);
     }
     else if (effect === 'taunt') {
-      const target = players.get(directTargets(actor, submitted, players)[0]);
-      if (target) applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 2);
-      summary.push(target ? `${actor.nickname} 挑衅 ${target.nickname}，施加 2 层易伤。` : `${actor.nickname} 的挑衅没有有效目标。`);
+      const target = players.get(actionTargets(submitted)[0]);
+      const applied = target ? applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 2) : false;
+      summary.push(!target ? `${actor.nickname} 的挑衅没有有效目标。` : applied ? `${actor.nickname} 挑衅 ${target.nickname}，施加 2 层易伤。` : `${target.nickname} 抵抗了 ${actor.nickname} 的挑衅易伤。`);
     }
     else if (effect === 'tremble') {
-      const target = players.get(directTargets(actor, submitted, players)[0]);
-      if (target) applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 4);
+      const target = players.get(actionTargets(submitted)[0]);
+      const applied = target ? applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 4) : false;
       setBuff(actor, 'tremble_cooldown', 1, 2);
-      summary.push(target ? `${actor.nickname} 令 ${target.nickname} 战栗，施加 4 层易伤。` : `${actor.nickname} 的战栗没有有效目标。`);
+      summary.push(!target ? `${actor.nickname} 的战栗没有有效目标。` : applied ? `${actor.nickname} 令 ${target.nickname} 战栗，施加 4 层易伤。` : `${target.nickname} 抵抗了 ${actor.nickname} 的战栗易伤。`);
     }
     else if (effect === 'regain_spirit') {
       const armor = (submitted.power ?? 0) * 2;
@@ -416,13 +423,14 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       summary.push(`${actor.nickname} 重振精神，获得 ${formatLevel(armor)} 级护甲；之后两回合只能攻击。`);
     }
     else if (effect === 'dominate') {
-      const target = players.get(directTargets(actor, submitted, players)[0]);
+      const target = players.get(actionTargets(submitted)[0]);
+      let applied = false;
       if (target) {
-        applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 1);
+        applied = applyDebuff(actor, target, 'vulnerability', buffStacks(target, 'vulnerability') + 1);
         setBuff(actor, 'strength', buffStacks(actor, 'strength') + buffStacks(target, 'vulnerability'));
       }
       setBuff(actor, 'dominate_cooldown', 1, 2);
-      summary.push(target ? `${actor.nickname} 主宰 ${target.nickname}，其易伤变为 ${formatLevel(buffStacks(target, 'vulnerability'))} 层。` : `${actor.nickname} 的主宰没有有效目标。`);
+      summary.push(!target ? `${actor.nickname} 的主宰没有有效目标。` : applied ? `${actor.nickname} 主宰 ${target.nickname}，其易伤变为 ${formatLevel(buffStacks(target, 'vulnerability'))} 层。` : `${target.nickname} 抵抗了 ${actor.nickname} 的主宰易伤。`);
     }
     else if (effect === 'molten_fist') {
       const targetId = directTargets(actor, submitted, players)[0];
@@ -939,12 +947,13 @@ function clearArmorOnDeath(player: CombatPlayer): void { if (player.currentHp <=
 
 function applyHellwalker(source: CombatPlayer, center: CombatPlayer, players: Map<string, CombatPlayer>, summary: string[]): void {
   const count = players.size * 2; const origin = center.gridIndex ?? 0;
-  const affected = Array.from(players.values()).filter((player) => player.alive).sort((left, right) => {
+  const candidates = Array.from(players.values()).filter((player) => player.alive && player.id !== source.id).sort((left, right) => {
     const leftClockwise = ((left.gridIndex ?? 0) - origin + count) % count; const rightClockwise = ((right.gridIndex ?? 0) - origin + count) % count;
     const leftDistance = Math.min(leftClockwise, count - leftClockwise); const rightDistance = Math.min(rightClockwise, count - rightClockwise);
     return leftDistance - rightDistance || leftClockwise - rightClockwise || left.id.localeCompare(right.id);
-  }).slice(0, 3);
-  for (const target of affected) { setBuff(target, 'hellwalker', 1, 3); target.buffSourcePlayerIds ??= {}; target.buffSourcePlayerIds.hellwalker = source.id; }
+  }).slice(0, center.id === source.id ? 2 : 3);
+  const affected = candidates.filter((target) => applyDebuff(source, target, 'hellwalker', 1, 3));
+  for (const target of affected) { target.buffSourcePlayerIds ??= {}; target.buffSourcePlayerIds.hellwalker = source.id; }
   if (affected.length) summary.push(`${source.nickname} 的地狱行者影响了${affected.map((player) => player.nickname).join('、')}。`);
 }
 
@@ -998,10 +1007,15 @@ function niluFires(owner: CombatPlayer): CombatBoardObject[] {
   return Array.from(roundBoardObjects.get(owner)?.values() ?? []).filter((object) => object.definitionId === 'nilu_fire' && object.ownerPlayerId === owner.id);
 }
 
-function niluFireMitigation(player: CombatPlayer): number { return niluFires(player).length * 0.5; }
+function niluFireMitigation(player: CombatPlayer): number { return player.characterId === 'quilon' ? niluFires(player).length * 0.5 : 0; }
 function applyDebuff(source: CombatPlayer, target: CombatPlayer, buffId: string, stacks = 1, remainingTurns?: number): boolean {
-  if (source.id !== target.id && niluFires(target).length > 0) return false;
+  if (source.id !== target.id && target.buffs?.has('nilu_resistance')) return false;
   setBuff(target, buffId, stacks, remainingTurns); return true;
+}
+
+function syncNiluResistance(player: CombatPlayer): void {
+  if (player.characterId === 'quilon' && niluFires(player).length > 0) setBuff(player, 'nilu_resistance');
+  else removeBuff(player, 'nilu_resistance');
 }
 
 function summonNiluFire(actor: CombatPlayer, gridIndex: number | undefined, players: Map<string, CombatPlayer>, summary: string[]): void {
@@ -1012,6 +1026,7 @@ function summonNiluFire(actor: CombatPlayer, gridIndex: number | undefined, play
     return;
   }
   objects.set(objectId, { objectId, definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: actor.id, sourceCharacterId: 'quilon', gridIndex, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true });
+  syncNiluResistance(actor);
   summary.push(`${actor.nickname} 在 ${gridIndex} 号地块布置了尼卢火。`);
 }
 
@@ -1129,12 +1144,15 @@ function refundLotusCargo(lotus: CombatBoardObject, players: Map<string, CombatP
 }
 
 function removeQuilonObjectsForDeadOwners(boardObjects: Map<string, CombatBoardObject>, players: Map<string, CombatPlayer>, summary: string[]): void {
+  const removedOwnerIds = new Set<string>();
   for (const object of Array.from(boardObjects.values())) {
     if (object.sourceCharacterId !== 'quilon' || players.get(object.ownerPlayerId)?.alive) continue;
     if (object.definitionId === 'lotus_seat') refundLotusCargo(object, players);
+    removedOwnerIds.add(object.ownerPlayerId);
     boardObjects.delete(object.objectId);
     if (object.definitionId === 'lotus_seat') summary.push('奎隆死亡，托生莲座消失并返还了携带资源。');
   }
+  for (const ownerId of removedOwnerIds) { const owner = players.get(ownerId); if (owner) removeBuff(owner, 'nilu_resistance'); }
 }
 
 function removeOwnedQuilonObjectsImmediately(owner: CombatPlayer): void {
@@ -1145,6 +1163,7 @@ function removeOwnedQuilonObjectsImmediately(owner: CombatPlayer): void {
     if (object.definitionId === 'lotus_seat') refundLotusCargo(object, players);
     boardObjects.delete(object.objectId);
   }
+  removeBuff(owner, 'nilu_resistance');
 }
 
 function addDominion(owner: CombatPlayer, sourceGridIndex: number): string[] {
@@ -1331,6 +1350,13 @@ const NEGATIVE_BUFF_IDS = ['fragile', 'fear', 'darkness', 'shock', 'defense_forb
 function validateGridTarget(destination: number | undefined, players: ReadonlyMap<string, CombatPlayer>): void {
   const cellCount = players.size * 2;
   if (!Number.isInteger(destination) || destination! < 0 || destination! >= cellCount) throw new Error('请选择有效地块');
+}
+
+function validateEmptyUnitGridTarget(destination: number | undefined, players: ReadonlyMap<string, CombatPlayer>, boardObjects: ReadonlyMap<string, CombatBoardObject>): void {
+  validateGridTarget(destination, players);
+  const occupiedByPlayer = Array.from(players.values()).some((player) => player.alive && player.gridIndex === destination);
+  const occupiedBySummon = Array.from(boardObjects.values()).some((object) => object.kind === 'summon' && object.currentHp > 0 && object.gridIndex === destination);
+  if (occupiedByPlayer || occupiedBySummon) throw new Error('请选择没有单位的地块');
 }
 
 function redirectAttackTarget(attacker: CombatPlayer, targetId: string, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, summary: string[]): string {

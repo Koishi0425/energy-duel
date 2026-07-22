@@ -239,7 +239,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     gamePlan: ['优先把尼卢火布在能覆盖多名玩家的地块，并用火焰数量抬高惩五戒的技能等级。', '无忧觉累计达到门槛后，还需保留足够资源才能使用承三身；濒死时仍要为第一次死亡后的反击预留空间。'],
     keyMechanics: [
       { title: '无忧觉', description: '第一次受到致死伤害后，先完成本回合剩余伤害，最后恢复至健康并进入菩萨辩；等待复生期间不能继续出招。' },
-      { title: '尼卢火', description: '尼卢火是可与单位同格的地块效果，同时提供范围引燃、伤害减免与负面状态抵抗；治疗可改为熄灭一团火。' },
+      { title: '尼卢火', description: '呼吸法可在任意没有单位的地块布置尼卢火；每团火提供伤害减免，场上有火时获得负面状态抵抗，治疗可改为熄灭一团火。' },
       { title: '托生莲座', description: '莲座沿所选方向逐格移动，吸收途经玩家一半的气与蓄力；它可以被攻击，返回起点后把资源交给奎隆。' },
     ],
     featuredActionIds: ['breathing_method', 'five_precepts', 'fire_purification', 'three_bodies'],

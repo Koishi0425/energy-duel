@@ -453,6 +453,10 @@ function RoomContent({ room, session, onLeave }: Props) {
   ] : [];
   const gridDestinations = gridAction?.action.id === 'heal'
     ? boardObjects.filter((object) => object.definitionId === 'nilu_fire').map((object) => object.gridIndex)
+    : gridAction?.action.id === 'breathing_method'
+      ? Array.from({ length: players.length * 2 }, (_, cell) => cell).filter((cell) =>
+        !players.some((player) => player.alive && player.gridIndex === cell)
+        && !boardObjects.some((object) => object.kind === 'summon' && object.currentHp > 0 && object.gridIndex === cell))
     : gridAction?.action.id === 'three_bodies'
       ? activeActor ? [(activeActor.gridIndex - 1 + players.length * 2) % (players.length * 2), (activeActor.gridIndex + 1) % (players.length * 2)] : []
     : gridAction?.action.id === 'rule_the_world'

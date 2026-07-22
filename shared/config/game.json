@@ -61,6 +61,7 @@
     ,{ "id": "wuyou_awareness", "name": "无忧觉", "description": "层数记录本局累计获得的气与蓄力；达到 7 后解锁承三身。", "color": "#fbbf24", "scope": "character" }
     ,{ "id": "wuyou_used", "name": "无忧觉已应验", "description": "本局已经触发过无忧觉的复生。", "color": "#92400e", "scope": "character" }
     ,{ "id": "bodhisattva_debate", "name": "菩萨辩", "description": "攻击等级提高 0.5；拳与斩触发双段攻击。", "color": "#f97316", "scope": "character" }
+    ,{ "id": "nilu_resistance", "name": "抵抗", "description": "场上存在自己的尼卢火时，不受其他玩家施加的负面 Buff 影响。", "color": "#ef4444", "scope": "character" }
     ,{ "id": "soul_reap_debuff", "name": "夺魂", "description": "攻击伤害等级降低 0.5，行动速度降低 1。", "color": "#7e22ce", "scope": "player", "durationTurns": 2 }
     ,{ "id": "resentment_mark", "name": "幽怨标记", "description": "魑魅攻击该玩家时等级提高，并强化从该玩家处取得的资源。", "color": "#db2777", "scope": "player" }
     ,{ "id": "hellwalker", "name": "地狱行者", "description": "使用攻击分类招式时必须额外支付 1 点任意资源。", "color": "#991b1b", "scope": "player", "durationTurns": 2 }
@@ -89,8 +90,8 @@
     ,{ "id": "command_demon", "name": "使役邪魔", "description": "以三枚装置替代生命；损失装置会在伤害来源及相邻地块生成永久国度，濒危时获得一回合不破。" }
     ,{ "id": "wuyou_awareness", "name": "无忧觉", "description": "累计获得气与蓄力，达成后可承三身；首次死亡时复生并获得菩萨辩。" }
     ,{ "id": "bodhisattva_debate", "name": "菩萨辩", "description": "复生后攻击提高，拳与斩成为双段攻击。" }
-    ,{ "id": "hellwalker_passive", "name": "地狱行者", "description": "不造成伤害的非基础招式会令目标及其附近玩家在之后两回合提高攻击费用。" }
-    ,{ "id": "resentment_passive", "name": "幽怨", "description": "每回合标记资源最多的玩家；魑魅攻击或从标记者取得资源时获得强化。" }
+    ,{ "id": "hellwalker_passive", "name": "地狱行者", "description": "不造成伤害的非基础招式会令目标及其附近玩家在之后两回合提高攻击费用，但不影响触发该效果的魑魅本人；其他魑魅仍可受到影响。" }
+    ,{ "id": "resentment_passive", "name": "幽怨", "description": "每回合标记除产生该标记的魑魅本人外资源最多的玩家，其他魑魅仍可被标记；魑魅攻击或从标记者取得资源时获得强化。" }
     ,{ "id": "tear_passive", "name": "撕裂", "description": "自身每左移一个健康状态，永久获得 1 层力量并令扯碎增加一段；力量每层令攻击技能等级提高 0.5，且扯碎的每段伤害固定等于技能等级。" }
   ],
   "boardObjects": [
@@ -297,7 +298,7 @@
     { "id": "nap_strategy_ddddd", "name": "永恒要塞·DDDDD", "category": "defense", "description": "4级格挡并获得3回合不落要塞。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 4, "defenseLevel": 4, "defenseBreak": { "mode": "recreated" }, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "defense_order", "napoleonSequence": "DDDDD" },
     { "id": "nap_strategy_ttttt", "name": "加冕称帝·TTTTT", "category": "special", "description": "获得5层战术优势，持续5回合；获得5回合皇帝。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TTTTT" },
     { "id": "nap_strategy_tatat", "name": "厄尔巴逃逸·TATAT", "category": "special", "description": "永久解锁变身并获得百日王朝。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "napoleon_strategy" }], "vfxId": "tactical_order", "napoleonSequence": "TATAT" },
-    { "id": "breathing_method", "name": "呼吸法", "category": "special", "description": "消耗 1 蓄力，在相邻地块布置一团永久尼卢火；单位与其他玩家的尼卢火不妨碍布置。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 1, "level": 0, "effects": [{ "handler": "breathing_method" }], "vfxId": "breathing_method" },
+    { "id": "breathing_method", "name": "呼吸法", "category": "special", "description": "消耗 1 蓄力，在任意没有单位的地块布置一团永久尼卢火；其他地块效果不妨碍布置。", "cost": { "charge": 1 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 1, "level": 0, "effects": [{ "handler": "breathing_method" }], "vfxId": "breathing_method" },
     { "id": "five_precepts", "name": "惩五戒", "category": "attack", "description": "以目标攻击的更高速度和等级出招；若技能对抗获胜，依次造成五段伤害，每段都会引燃尼卢火。", "cost": { "energy": 3 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "damageType": "slash", "effects": [{ "handler": "five_precepts" }], "vfxId": "five_precepts" },
     { "id": "fire_purification", "name": "清火执", "category": "attack", "description": "令所有尼卢火对周围两格内的其他玩家造成 1.5 级真实伤害；不触发普通引燃。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "damageType": "true", "effects": [{ "handler": "fire_purification" }], "vfxId": "fire_purification" },
     { "id": "three_bodies", "name": "承三身", "category": "special", "description": "达到无忧觉门槛且当前拥有至少 2 气时，消耗 2 气选择顺时针或逆时针方向，在自身地块召唤拥有 10 点生命的托生莲座。", "cost": { "energy": 2 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 1, "level": 0, "effects": [{ "handler": "three_bodies" }], "vfxId": "three_bodies", "unlockRequirements": { "minBuffStacks": { "wuyou_awareness": 7 }, "minResources": { "energy": 2 }, "description": "需要无忧觉累计至少 7 点，且当前拥有至少 2 气" } },
@@ -310,7 +311,7 @@
     { "id": "tremble", "name": "战栗", "category": "special", "description": "消耗 1 气，向目标施加 4 层易伤；下一回合不可使用。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "tremble" }], "vfxId": "tremble", "unlockRequirements": { "noneBuffs": ["tremble_cooldown"], "description": "战栗未处于冷却" } },
     { "id": "molten_fist", "name": "熔融之拳", "category": "attack", "description": "消耗 1 蓄力的 2 级钝击；结算后将目标的易伤层数翻倍。", "cost": { "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "damageType": "blunt", "effects": [{ "handler": "molten_fist" }], "vfxId": "molten_fist" },
     { "id": "dismantle", "name": "拆卸", "category": "attack", "description": "消耗 1 气的 1.5 级钝击；目标持有易伤时攻击两段。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1.5, "damageType": "blunt", "effects": [{ "handler": "dismantle" }], "vfxId": "dismantle", "repeatAttack": { "baseHits": 1, "targetBuffId": "vulnerability", "extraHitsWhenTargetBuffed": 1 } },
-    { "id": "bully", "name": "欺凌", "category": "attack", "description": "技能等级为 0.5 + 0.5×力量 + 0.5×目标易伤；伤害等级为 0.5 + 0.5×目标易伤。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "damageType": "blunt", "effects": [{ "handler": "bully" }], "vfxId": "bully", "unlockRequirements": { "minResources": { "energy": 1 }, "description": "拥有至少 1 气" } },
+    { "id": "bully", "name": "欺凌", "category": "attack", "description": "技能等级为 0.5 + 0.5×力量 + 0.5×目标易伤；伤害等级为 0.5 + 0.5×目标易伤。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0.5, "damageType": "blunt", "effects": [{ "handler": "bully" }], "vfxId": "bully" },
     { "id": "regain_spirit", "name": "重振精神", "category": "defense", "description": "消耗所选整数气，获得其两倍等级的护甲；之后两回合只能使用攻击技能。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "regain_spirit" }], "vfxId": "regain_spirit", "variable": { "resourceId": "energy", "costPerPower": 1, "levelPerPower": 0, "minPower": 1 } },
     { "id": "dominate", "name": "主宰", "category": "special", "description": "消耗 1 气，施加 1 层易伤，再获得等于目标当前易伤层数的力量；下一回合不可使用。", "cost": { "energy": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 2, "effects": [{ "handler": "dominate" }], "vfxId": "dominate", "unlockRequirements": { "noneBuffs": ["dominate_cooldown"], "description": "主宰未处于冷却" } },
     { "id": "blood_wall", "name": "血墙", "category": "defense", "description": "自身左移一个健康状态；若存活则获得 2.5 级护甲，并触发撕裂。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 2, "level": 0, "effects": [{ "handler": "blood_wall" }], "vfxId": "blood_wall" },

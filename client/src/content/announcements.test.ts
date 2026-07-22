@@ -9,23 +9,28 @@ describe('announcements', () => {
     );
   });
 
-  it('publishes v0.4.3 before the stable v0.4.2 and v0.4.1 announcements', () => {
+  it('publishes v0.5.0 before the stable v0.4.3, v0.4.2 and v0.4.1 announcements', () => {
     expect(announcements[0]).toMatchObject({
+      id: '2026-07-22-v050-room-routing-live-lobby-and-new-characters',
+      version: 'v0.5.0',
+      title: 'v0.5.0：房间重构、实时大厅与三名新角色',
+    });
+    expect(announcements[1]).toMatchObject({
       id: '2026-07-21-v043-emote-wheel-and-board-clarity',
       version: 'v0.4.3',
       title: 'v0.4.3：表情轮盘与棋盘显示优化',
     });
-    expect(announcements[1]).toMatchObject({
+    expect(announcements[2]).toMatchObject({
       id: '2026-07-20-v042-targeting-and-action-categories',
       version: 'v0.4.2',
       title: 'v0.4.2：角色状态、目标判定与技能修正',
     });
-    expect(announcements[2]).toMatchObject({
+    expect(announcements[3]).toMatchObject({
       id: '2026-07-20-v041-damage-rules-and-star-god',
       version: 'v0.4.1',
       title: 'v0.4.1：伤害体系、星神、内卫与棋盘对象更新',
     });
-    expect(announcements[2].sections.map((section) => section.heading)).toEqual([
+    expect(announcements[3].sections.map((section) => section.heading)).toEqual([
       '伤害与防御体系',
       '3 级攻击回溯即死',
       '星神正式开放',

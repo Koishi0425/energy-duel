@@ -54,6 +54,15 @@ describe('EnergyDuelRoom character-scoped buffs', () => {
     expect(restored.get('p:regain_spirit_lock')).toMatchObject({ permanent: false, remainingTurns: 1 });
   });
 
+  it('keeps layer-based Vulnerability when combat state returns to the room', () => {
+    const room = new EnergyDuelRoom() as any; const player = new PlayerState();
+    player.playerId = 'target'; player.characterId = 'warrior'; room.storedBuffs.set(player.playerId, new Map());
+    room.captureActiveBuffs(player.playerId, player.characterId, new Set(['vulnerability']), player.buffs, { vulnerability: 3 });
+    room.tickStoredBuffs(player.playerId);
+    room.syncActiveBuffs(player.playerId, player.characterId, player.buffs);
+    expect(player.buffs.get('target:vulnerability')).toMatchObject({ stacks: 3, permanent: true });
+  });
+
   it('does not heal a near-death player while restoring the transformed character', () => {
     const room = new EnergyDuelRoom() as any;
     const player = new PlayerState(); player.playerId = 'p'; player.characterId = 'star_god'; player.currentHp = 1; player.maxHp = 2;
@@ -143,6 +152,28 @@ describe('EnergyDuelRoom Chimei control', () => {
       { converted: 3, conversion_threshold: 3 }, {}, { converted: 'chimei', conversion_threshold: 'chimei' });
     const restored = new MapSchema<BuffState>(); room.syncActiveBuffs('target', 'jiaosila', restored);
     expect(restored.get('target:converted')).toMatchObject({ stacks: 3, sourcePlayerId: 'chimei' });
+  });
+
+  it('never assigns the Resentment mark to the Chimei source', () => {
+    const room = new EnergyDuelRoom() as any;
+    const chimei = new PlayerState(); chimei.playerId = 'chimei'; chimei.characterId = 'chimei'; chimei.alive = true; chimei.gridIndex = 0;
+    const target = new PlayerState(); target.playerId = 'target'; target.characterId = 'warrior'; target.alive = true; target.gridIndex = 2;
+    room.state.players.set(chimei.playerId, chimei); room.state.players.set(target.playerId, target);
+    room.storedBuffs.set(chimei.playerId, new Map()); room.storedBuffs.set(target.playerId, new Map());
+    room.assignResentmentMark();
+    expect(Array.from(chimei.buffs.values()).some((buff: BuffState) => buff.buffId === 'resentment_mark')).toBe(false);
+    expect(Array.from(target.buffs.values()).some((buff: BuffState) => buff.buffId === 'resentment_mark')).toBe(true);
+  });
+
+  it('allows the Resentment source to mark another Chimei', () => {
+    const room = new EnergyDuelRoom() as any;
+    const source = new PlayerState(); source.playerId = 'source'; source.characterId = 'chimei'; source.alive = true; source.gridIndex = 0;
+    const otherChimei = new PlayerState(); otherChimei.playerId = 'other'; otherChimei.characterId = 'chimei'; otherChimei.alive = true; otherChimei.gridIndex = 2;
+    room.state.players.set(source.playerId, source); room.state.players.set(otherChimei.playerId, otherChimei);
+    room.storedBuffs.set(source.playerId, new Map()); room.storedBuffs.set(otherChimei.playerId, new Map());
+    room.assignResentmentMark();
+    expect(Array.from(source.buffs.values()).some((buff: BuffState) => buff.buffId === 'resentment_mark')).toBe(false);
+    expect(Array.from(otherChimei.buffs.values()).find((buff: BuffState) => buff.buffId === 'resentment_mark')).toMatchObject({ sourcePlayerId: 'source' });
   });
 });
 

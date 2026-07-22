@@ -170,10 +170,12 @@ Run commands from the repository root:
   Quilon tracks gross Energy and Charge gains in character-scoped Wuyou Awareness,
   unlocks Three Bodies at seven, and receives one full-health revival into
   Bodhisattva Debate only after every damaging effect in that round has resolved;
-  lethal damage never consumes the revival mid-round. Nilu Fire is a terrain object like Dominion; its pulses,
-  overlap, mitigation, debuff immunity, and
-  cleanup are authoritative; any player may use Heal on a visible fire cell to
-  remove it without healing or becoming Fragile. Lotus Seats synchronize origin,
+  lethal damage never consumes the revival mid-round. Nilu Fire is a terrain object
+  like Dominion. Breathing Method may place it on any board cell without a living
+  player or summon, regardless of distance or other terrain; units may enter and
+  coexist with it after placement. Its pulses, overlap, Quilon-only mitigation,
+  visible resistance Buff, and cleanup are authoritative; any player may use Heal
+  on a visible fire cell to remove it without healing or becoming Fragile. Lotus Seats synchronize origin,
   direction, speed, HP, and per-player resource cargo. They coexist with other units, move once
   per round, may be attacked through `targetBoardObjectId`, deliver cargo on return,
   and refund it when destroyed or when their owner dies.
