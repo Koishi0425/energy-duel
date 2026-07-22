@@ -29,6 +29,16 @@ export class ActionSubmissionStore {
     return true;
   }
 
+  setDeferredSelection(playerId: string, targetIds: string[], power?: number, resourceSpend?: Record<string, number>): boolean {
+    const action = this.actions.get(playerId);
+    if (!action) return false;
+    action.targetIds = [...targetIds];
+    action.targetId = undefined;
+    action.power = power ?? action.power;
+    action.resourceSpend = resourceSpend ?? action.resourceSpend;
+    return true;
+  }
+
   allSubmitted(playerIds: Iterable<string>): boolean {
     for (const playerId of playerIds) if (!this.actions.has(playerId)) return false;
     return true;

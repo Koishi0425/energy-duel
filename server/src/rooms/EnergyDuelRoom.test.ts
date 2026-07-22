@@ -35,6 +35,25 @@ describe('EnergyDuelRoom host reconnection', () => {
 });
 
 describe('EnergyDuelRoom character-scoped buffs', () => {
+  it('keeps permanent Warrior buffs while finite buffs continue ticking', () => {
+    const room = new EnergyDuelRoom() as any;
+    const player = new PlayerState(); player.playerId = 'p'; player.characterId = 'warrior';
+    const armor = new BuffState(); armor.instanceId = 'p:armor'; armor.buffId = 'armor'; armor.stacks = 2.5; armor.permanent = true; armor.sourcePlayerId = 'p';
+    const strength = new BuffState(); strength.instanceId = 'p:strength'; strength.buffId = 'strength'; strength.stacks = 3; strength.permanent = true; strength.sourcePlayerId = 'p';
+    const lock = new BuffState(); lock.instanceId = 'p:regain_spirit_lock'; lock.buffId = 'regain_spirit_lock'; lock.stacks = 1; lock.remainingTurns = 2; lock.permanent = false; lock.sourcePlayerId = 'p';
+    player.buffs.set(armor.instanceId, armor); player.buffs.set(strength.instanceId, strength); player.buffs.set(lock.instanceId, lock);
+
+    const combat = room.toCombatPlayer(player);
+    expect(combat.buffRemainingTurns).toEqual({ regain_spirit_lock: 2 });
+    room.captureActiveBuffs('p', 'warrior', combat.buffs, player.buffs, combat.buffStacks, combat.buffRemainingTurns, combat.buffSourcePlayerIds);
+    room.tickStoredBuffs('p');
+
+    const restored = new MapSchema<BuffState>(); room.syncActiveBuffs('p', 'warrior', restored);
+    expect(restored.get('p:armor')).toMatchObject({ stacks: 2.5, permanent: true, remainingTurns: 0 });
+    expect(restored.get('p:strength')).toMatchObject({ stacks: 3, permanent: true, remainingTurns: 0 });
+    expect(restored.get('p:regain_spirit_lock')).toMatchObject({ permanent: false, remainingTurns: 1 });
+  });
+
   it('does not heal a near-death player while restoring the transformed character', () => {
     const room = new EnergyDuelRoom() as any;
     const player = new PlayerState(); player.playerId = 'p'; player.characterId = 'star_god'; player.currentHp = 1; player.maxHp = 2;
@@ -106,6 +125,24 @@ describe('EnergyDuelRoom training actors', () => {
     const dummy = new PlayerState(); dummy.playerId = 'dummy'; dummy.controllerPlayerId = 'host'; room.state.players.set(dummy.playerId, dummy);
     expect(room.authorizedActor({ sessionId: 'host' }, 'dummy')).toBe(dummy);
     expect(room.authorizedActor({ sessionId: 'intruder' }, 'dummy')).toBeUndefined();
+  });
+});
+
+describe('EnergyDuelRoom Chimei control', () => {
+  it('authorizes a converted standard-room actor only for the synchronized Chimei controller', () => {
+    const room = new EnergyDuelRoom() as any;
+    const actor = new PlayerState(); actor.playerId = 'target'; actor.controllerPlayerId = 'chimei'; room.state.players.set(actor.playerId, actor);
+    expect(room.authorizedActor({ sessionId: 'chimei' }, 'target')).toBe(actor);
+    expect(room.authorizedActor({ sessionId: 'target' }, 'target')).toBeUndefined();
+  });
+
+  it('preserves the source of a player-scoped conversion buff', () => {
+    const room = new EnergyDuelRoom() as any; const current = new MapSchema<BuffState>();
+    room.storedBuffs.set('target', new Map());
+    room.captureActiveBuffs('target', 'jiaosila', new Set(['converted', 'conversion_threshold']), current,
+      { converted: 3, conversion_threshold: 3 }, {}, { converted: 'chimei', conversion_threshold: 'chimei' });
+    const restored = new MapSchema<BuffState>(); room.syncActiveBuffs('target', 'jiaosila', restored);
+    expect(restored.get('target:converted')).toMatchObject({ stacks: 3, sourcePlayerId: 'chimei' });
   });
 });
 

@@ -69,5 +69,9 @@ export function readSyncedBoardObjects(objects: Iterable<SyncedBoardObject> | un
     maxHp: object.maxHp,
     remainingTurns: object.remainingTurns ?? 0,
     permanent: object.permanent ?? true,
+    originGridIndex: object.originGridIndex ?? object.gridIndex,
+    movementDirection: object.movementDirection ?? 0,
+    moveSpeed: object.moveSpeed ?? 0,
+    cargo: Object.fromEntries(Array.from((object.cargo as unknown as { entries?: () => IterableIterator<[string, { energy: number; charge: number }]> })?.entries?.() ?? [], ([playerId, carried]) => [playerId, { energy: carried.energy, charge: carried.charge }])),
   }));
 }

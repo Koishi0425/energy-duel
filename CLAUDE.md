@@ -1,6 +1,42 @@
-# Claude 项目指令
+# CLAUDE.md
 
-进入仓库后先阅读根目录 `AGENTS.md`。其中的架构、规则来源和变更纪律始终有效。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## 项目简介
+
+《娇斯拉大战贡刚》（Energy Duel）是一款多人回合制对战游戏。仓库是一个 npm monorepo，包含三个 workspace。
+
+## 技术栈与架构
+
+- `client/` — React 18 + Vite + PixiJS 8 浏览器端。轻量客户端路由：`/login`、`/`（大厅）、`/rooms/:roomId`、`/profile`、`/profiles/:accountId`。战斗 UI 和 Pixi 画布通过 `React.lazy` 按需加载，登录/大厅壳不依赖 Ant Design 和 PixiJS。
+- `server/` — Colyseus 0.17（`@colyseus/core` + `@colyseus/ws-transport`）+ Express 5 服务端。权威游戏状态、HTTP API、会话管理和在线状态。**不要引入 `colyseus` 聚合包**——其中未使用的 transport peer 会拉取仅 GitHub 的原生包。
+- `shared/` — `@energy-duel/shared` workspace。导出 wire 类型、几何辅助函数、经验证的 gameplay JSON 配置和两端的配置查询。**构建客户端或服务端前必须先构建 shared。**
+- `shared/config/game.json` — 可执行规则的单一来原：角色、招式、资源、Buff、被动配置。
+- `server/src/game/RoundResolver.ts` — 权威结算逻辑，用于核对规则一致性。
+- `docs/` — 人类可读的规则手册（`基础规则手册.md`、`角色信息手册.md`、`角色/*.md`、`附录/`）。
+- `server/data/` — 运行时账号数据，不可提交。
+
+## 命令
+
+所有命令在仓库根目录执行：
+
+| 命令 | 说明 |
+|---|---|
+| `npm install` | 安装所有 workspace 依赖 |
+| `npm run dev` | 构建 shared 配置，然后同时启动 Vite 客户端和 Colyseus 服务端 |
+| `npm run build` | 构建全部三个 workspace |
+| `npm run assets:optimize` | 从 `art-source/runtime-imports/` 重建 content-hashed WebP 资源及 manifest |
+| `npm run typecheck` | 类型检查全部 workspace（不产出文件） |
+| `npm test` | 运行全部 Vitest 测试套件 |
+| `npm run docker:build` / `docker:up` / `docker:down` / `docker:logs` | 管理本地 Compose 部署 |
+
+- 本地及容器构建需要 **Node.js 22 或更新版本**。
+- 客户端 optionalDependencies 中固定了 Linux x64 Rollup 原生包，其版本必须与客户端直接 devDependency 的 Rollup 一致——Windows 上生成的 lockfile 可能遗漏该平台包，导致 Linux Docker 构建在 Vite 启动时失败。
+- 运行单个测试文件：`npx vitest run path/to/file.test.ts`（在对应 workspace 目录下，或使用 `-w` 指定 workspace）。
+
+## 入口文件
+
+进入仓库后先阅读根目录 `AGENTS.md`。其中的架构细节、核心不变量、规则来源和变更纪律始终有效。AGENTS.md 是所有开发工作的权威参考；本文档（CLAUDE.md）补充设计角色的职责边界和项目索引。
 
 ## 默认身份与职责边界
 

@@ -82,6 +82,11 @@ export class PlayerState extends Schema {
   @type('string') commandBuffer = '';
 }
 
+export class BoardObjectCargoState extends Schema {
+  @type('float32') energy = 0;
+  @type('float32') charge = 0;
+}
+
 export class BoardObjectState extends Schema {
   @type('string') objectId = '';
   @type('string') definitionId = '';
@@ -94,6 +99,10 @@ export class BoardObjectState extends Schema {
   @type('float32') maxHp = 0;
   @type('uint16') remainingTurns = 0;
   @type('boolean') permanent = true;
+  @type('uint8') originGridIndex = 0;
+  @type('int8') movementDirection: -1 | 0 | 1 = 0;
+  @type('uint8') moveSpeed = 0;
+  @type({ map: BoardObjectCargoState }) cargo = new MapSchema<BoardObjectCargoState>();
 }
 
 export class RoundLogEntryState extends Schema {
@@ -272,10 +281,12 @@ export class EnergyDuelRoom extends Room {
       player.submitted = false;
       player.resultConfirmed = false;
       player.commandBuffer = '';
+      if (!player.isTrainingDummy) player.controllerPlayerId = player.playerId;
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
       if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
     }
+    this.assignResentmentMark();
     this.sendSuccess(client, requestId, 'start_game', '游戏开始');
   }
 
@@ -295,8 +306,14 @@ export class EnergyDuelRoom extends Room {
       transformCharacterId: typeof payload.transformCharacterId === 'string' ? payload.transformCharacterId : undefined,
       power: typeof payload.power === 'number' ? payload.power : undefined,
       targetGridIndex: typeof payload.targetGridIndex === 'number' ? payload.targetGridIndex : undefined,
+      targetBoardObjectId: typeof payload.targetBoardObjectId === 'string' ? payload.targetBoardObjectId : undefined,
       resourceSpend: payload.resourceSpend && typeof payload.resourceSpend === 'object'
         && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : undefined,
+      extraResourceSpend: payload.extraResourceSpend && typeof payload.extraResourceSpend === 'object'
+        && Object.values(payload.extraResourceSpend).every((amount) => typeof amount === 'number') ? payload.extraResourceSpend : undefined,
+      controllerResourceGrant: payload.controllerResourceGrant && typeof payload.controllerResourceGrant === 'object'
+        && Object.values(payload.controllerResourceGrant).every((amount) => typeof amount === 'number') ? payload.controllerResourceGrant : undefined,
+      capturedSpeed: payload.actionId === 'deify' ? player.resources.get('soul')?.current ?? 0 : undefined,
       resourceChoice: payload.resourceChoice === 'energy' || payload.resourceChoice === 'charge' ? payload.resourceChoice : undefined,
       napoleonStrategySource: payload.napoleonStrategySource === 'buffer' || payload.napoleonStrategySource === 'command' ? payload.napoleonStrategySource : undefined,
       napoleonCommand: payload.napoleonCommand === 'A' || payload.napoleonCommand === 'D' || payload.napoleonCommand === 'T' ? payload.napoleonCommand : undefined,
@@ -311,7 +328,15 @@ export class EnergyDuelRoom extends Room {
         if ((player.resources.get(resourceId)?.current ?? 0) < amount) return this.sendError(client, `变身所需的${resourceId}资源不足`, requestId, 'submit_action');
       }
     }
-    try { validateAction(this.toCombatPlayer(player), action, this.combatPlayers()); }
+    const combatPlayers = this.combatPlayers();
+    try {
+      this.validateControllerResourceGrant(client, player, action, combatPlayers);
+      if (player.playerId === client.sessionId) {
+        const reservedSoul = Array.from(this.actions.asReadonlyMap().values()).reduce((sum, submitted) => sum + Object.values(submitted.controllerResourceGrant ?? {}).reduce((part, amount) => part + amount, 0), 0);
+        combatPlayers.get(player.playerId)!.resources.soul = Math.max(0, (combatPlayers.get(player.playerId)!.resources.soul ?? 0) - reservedSoul);
+      }
+      validateAction(combatPlayers.get(player.playerId)!, action, combatPlayers, this.combatBoardObjects());
+    }
     catch (reason) { return this.sendError(client, reason instanceof Error ? reason.message : '行动无效', requestId, 'submit_action'); }
     if (!this.actions.submit(player.playerId, action)) return this.sendError(client, '请先撤销已经提交的行动', requestId, 'submit_action');
     player.submitted = true;
@@ -350,6 +375,9 @@ export class EnergyDuelRoom extends Room {
       power: action.power ?? 1,
       allocationCount: definition.target.maxTargetsByPower ? action.power ?? 1 : definition.target.maxTargets ?? 1,
       allowSkip: definition.canSkipDeferred === true,
+      flexibleResourceIds: definition.deferredFlexibleCost?.resourceIds,
+      minPower: definition.deferredFlexibleCost?.minPower,
+      maxPower: definition.deferredFlexibleCost ? Math.floor(definition.deferredFlexibleCost.resourceIds.reduce((sum, resourceId) => sum + (this.state.players.get(actorId)?.resources.get(resourceId)?.current ?? 0), 0)) : undefined,
       revealedActions: Array.from(this.actions.asReadonlyMap(), ([playerId, submitted]) => ({
         playerId, actionId: submitted.actionId, power: submitted.power,
       })),
@@ -366,13 +394,18 @@ export class EnergyDuelRoom extends Room {
       return this.sendError(client, '没有可提交的后发目标', requestId, 'submit_deferred_targets');
     }
     const targetIds = Array.isArray(payload.targetIds) && payload.targetIds.every((id) => typeof id === 'string') ? payload.targetIds : [];
+    const power = typeof payload.power === 'number' ? payload.power : action.power;
+    const resourceSpend = payload.resourceSpend && typeof payload.resourceSpend === 'object' && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : action.resourceSpend;
     const expected = definition.target.maxTargetsByPower ? action.power ?? 0 : definition.target.maxTargets ?? 1;
     if (targetIds.length !== expected && !(definition.canSkipDeferred && targetIds.length === 0)) return this.sendError(client, `请选择 ${expected} 次目标`, requestId, 'submit_deferred_targets');
     for (const targetId of targetIds) {
       const target = this.state.players.get(targetId);
       if (!target?.alive || target.playerId === player.playerId) return this.sendError(client, '请选择其他存活玩家作为目标', requestId, 'submit_deferred_targets');
     }
-    this.actions.setTargets(player.playerId, targetIds);
+    const completed = { ...action, targetIds, targetId: undefined, power, resourceSpend };
+    try { validateAction(this.toCombatPlayer(player), completed, this.combatPlayers(), this.combatBoardObjects()); }
+    catch (reason) { return this.sendError(client, reason instanceof Error ? reason.message : '后发选择无效', requestId, 'submit_deferred_targets'); }
+    this.actions.setDeferredSelection(player.playerId, targetIds, power, resourceSpend);
     this.sendSuccess(client, requestId, 'submit_deferred_targets', '后发目标已提交');
     const waiting = Array.from(this.actions.asReadonlyMap().entries()).some(([playerId, submitted]) => this.isDeferredAction(playerId, submitted)
       && submitted.targetIds === undefined && submitted.targetId === undefined);
@@ -440,7 +473,7 @@ export class EnergyDuelRoom extends Room {
       const synced = this.state.players.get(playerId);
       if (!synced) continue;
       const previousCharacterId = synced.characterId;
-      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs, combatPlayer.buffStacks, combatPlayer.buffRemainingTurns);
+      this.captureActiveBuffs(playerId, previousCharacterId, combatPlayer.buffs ?? new Set(), synced.buffs, combatPlayer.buffStacks, combatPlayer.buffRemainingTurns, combatPlayer.buffSourcePlayerIds);
       this.tickStoredBuffs(playerId);
       synced.currentHp = combatPlayer.currentHp;
       synced.maxHp = combatPlayer.maxHp;
@@ -460,10 +493,15 @@ export class EnergyDuelRoom extends Room {
     this.state.boardObjects.clear();
     for (const object of combatBoardObjects.values()) {
       const synced = new BoardObjectState();
-      Object.assign(synced, object);
+      const { cargo, ...plain } = object;
+      Object.assign(synced, plain);
+      for (const [playerId, carried] of Object.entries(cargo ?? {})) {
+        const syncedCargo = new BoardObjectCargoState(); Object.assign(syncedCargo, carried); synced.cargo.set(playerId, syncedCargo);
+      }
       this.state.boardObjects.set(object.objectId, synced);
     }
-    if (Array.from(combatPlayers.values()).filter((player) => player.alive).length > 1) this.applyNextRoundStartEffects(result);
+    this.syncConvertedControllers();
+    if (Array.from(combatPlayers.values()).filter((player) => player.alive).length > 1) { this.applyNextRoundStartEffects(result); this.assignResentmentMark(); }
     this.state.lastResult = result.summary.join('\n');
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     for (const text of result.summary) {
@@ -536,6 +574,7 @@ export class EnergyDuelRoom extends Room {
       player.resultConfirmed = false;
       player.submitted = false;
       player.alive = true;
+      if (!player.isTrainingDummy) player.controllerPlayerId = player.playerId;
       if (this.state.roomMode === 'standard') {
         player.characterId = DEFAULT_CHARACTER_ID;
         player.currentFormId = DEFAULT_FORM_ID;
@@ -549,9 +588,60 @@ export class EnergyDuelRoom extends Room {
   }
 
   private authorizedActor(client: Client, requestedActorId?: string): PlayerState | undefined {
-    const actorId = this.state.roomMode === 'training' && typeof requestedActorId === 'string' ? requestedActorId : client.sessionId;
+    const actorId = typeof requestedActorId === 'string' ? requestedActorId : client.sessionId;
     const actor = this.state.players.get(actorId);
     return actor?.controllerPlayerId === client.sessionId ? actor : undefined;
+  }
+
+  private validateControllerResourceGrant(client: Client, actor: PlayerState, action: SubmittedAction, combatPlayers: Map<string, CombatPlayer>): void {
+    const grant = action.controllerResourceGrant;
+    if (!grant) return;
+    const converted = Array.from(actor.buffs.values()).find((buff) => buff.buffId === 'converted');
+    const controller = this.state.players.get(client.sessionId);
+    if (actor.playerId === client.sessionId || converted?.sourcePlayerId !== client.sessionId || controller?.characterId !== 'chimei' || !controller.alive) throw new Error('当前不能为该玩家补充资源');
+    const validIds = new Set(gameConfig.resources.map((resource) => resource.id));
+    let requested = 0;
+    for (const [resourceId, amount] of Object.entries(grant)) {
+      if (!validIds.has(resourceId) || !Number.isInteger(amount) || amount < 0) throw new Error('补充资源必须使用非负整数');
+      requested += amount;
+    }
+    const reserved = Array.from(this.actions.asReadonlyMap().values()).reduce((sum, submitted) => sum + Object.values(submitted.controllerResourceGrant ?? {}).reduce((part, amount) => part + amount, 0), 0);
+    if (requested <= 0 || requested + reserved > (controller.resources.get('soul')?.current ?? 0)) throw new Error('魑魅的魂不足以补充这些资源');
+    const combatActor = combatPlayers.get(actor.playerId)!;
+    for (const [resourceId, amount] of Object.entries(grant)) combatActor.resources[resourceId] = (combatActor.resources[resourceId] ?? 0) + amount;
+  }
+
+  private syncConvertedControllers(): void {
+    for (const player of this.state.players.values()) {
+      const converted = Array.from(player.buffs.values()).find((buff) => buff.buffId === 'converted');
+      const source = converted && this.state.players.get(converted.sourcePlayerId);
+      if (converted && source?.alive && source.characterId === 'chimei') player.controllerPlayerId = source.playerId;
+      else {
+        player.controllerPlayerId = player.isTrainingDummy ? player.controllerPlayerId : player.playerId;
+        if (converted) {
+          const playerScope = this.storedBuffs.get(player.playerId)?.get(PLAYER_BUFF_SCOPE);
+          playerScope?.delete('converted'); playerScope?.delete('conversion_threshold');
+          this.syncActiveBuffs(player.playerId, player.characterId, player.buffs);
+        }
+      }
+    }
+  }
+
+  private assignResentmentMark(): void {
+    const living = Array.from(this.state.players.values()).filter((player) => player.alive);
+    const source = living.find((player) => player.characterId === 'chimei');
+    for (const player of this.state.players.values()) this.storedBuffs.get(player.playerId)?.get(PLAYER_BUFF_SCOPE)?.delete('resentment_mark');
+    if (!source || living.length === 0) { for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs); return; }
+    const count = this.state.players.size * 2; const origin = source.gridIndex;
+    living.sort((left, right) => {
+      const total = (player: PlayerState) => Array.from(player.resources.values()).reduce((sum, resource) => sum + resource.current, 0);
+      return total(right) - total(left) || (right.resources.get('energy')?.current ?? 0) - (left.resources.get('energy')?.current ?? 0)
+        || ((left.gridIndex - origin + count) % count) - ((right.gridIndex - origin + count) % count) || left.playerId.localeCompare(right.playerId);
+    });
+    const target = living[0]; const scopes = this.storedBuffs.get(target.playerId) ?? new Map<string, Map<string, StoredBuff>>(); this.storedBuffs.set(target.playerId, scopes);
+    const playerScope = scopes.get(PLAYER_BUFF_SCOPE) ?? new Map<string, StoredBuff>(); scopes.set(PLAYER_BUFF_SCOPE, playerScope);
+    playerScope.set('resentment_mark', { buffId: 'resentment_mark', stacks: 1, remainingTurns: 0, permanent: true, sourcePlayerId: source.playerId });
+    for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs);
   }
 
   private createTrainingDummy(controllerPlayerId: string): PlayerState {
@@ -635,13 +725,16 @@ export class EnergyDuelRoom extends Room {
       resources: Object.fromEntries(Array.from(player.resources.entries(), ([id, resource]) => [id, resource.current])),
       buffs: new Set(Array.from(player.buffs.values(), (buff) => buff.buffId)),
       buffStacks: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.stacks])),
-      buffRemainingTurns: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.remainingTurns])),
+      buffRemainingTurns: Object.fromEntries(Array.from(player.buffs.values())
+        .filter((buff) => !buff.permanent)
+        .map((buff) => [buff.buffId, buff.remainingTurns])),
+      buffSourcePlayerIds: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.sourcePlayerId])),
       gridIndex: player.gridIndex,
       commandBuffer: player.commandBuffer,
     };
   }
 
-  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>, activeBuffStacks: Readonly<Record<string, number>> = {}, activeRemainingTurns: Readonly<Record<string, number>> = {}): void {
+  private captureActiveBuffs(playerId: string, characterId: string, activeBuffIds: ReadonlySet<string>, syncedBuffs: MapSchema<BuffState>, activeBuffStacks: Readonly<Record<string, number>> = {}, activeRemainingTurns: Readonly<Record<string, number>> = {}, activeSources: Readonly<Record<string, string>> = {}): void {
     const scopes = this.storedBuffs.get(playerId) ?? new Map<string, Map<string, StoredBuff>>();
     this.storedBuffs.set(playerId, scopes);
     const priorById = new Map(Array.from(syncedBuffs.values(), (buff) => [buff.buffId, buff]));
@@ -658,9 +751,10 @@ export class EnergyDuelRoom extends Room {
         stacks: activeBuffStacks[buffId] ?? synced?.stacks ?? 1,
         remainingTurns: initialRemainingTurns ?? 0,
         permanent: synced?.permanent ?? initialRemainingTurns === undefined,
-        sourcePlayerId: synced?.sourcePlayerId || playerId,
+        sourcePlayerId: activeSources[buffId] || synced?.sourcePlayerId || playerId,
       };
       stored.stacks = activeBuffStacks[buffId] ?? stored.stacks;
+      stored.sourcePlayerId = activeSources[buffId] || stored.sourcePlayerId;
       if (activeRemainingTurns[buffId] !== undefined) { stored.remainingTurns = activeRemainingTurns[buffId]; stored.permanent = false; }
       (scopeId === PLAYER_BUFF_SCOPE ? nextPlayer : nextCharacter).set(buffId, stored);
     }
@@ -688,6 +782,10 @@ export class EnergyDuelRoom extends Room {
       maxHp: object.maxHp,
       remainingTurns: object.remainingTurns,
       permanent: object.permanent,
+      originGridIndex: object.originGridIndex,
+      movementDirection: object.movementDirection,
+      moveSpeed: object.moveSpeed,
+      cargo: Object.fromEntries(Array.from(object.cargo.entries(), ([playerId, carried]) => [playerId, { energy: carried.energy, charge: carried.charge }])),
     }]));
   }
 

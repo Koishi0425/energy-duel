@@ -18,6 +18,10 @@ export const EFFECT_HANDLERS = [
   'hollow_fist',
   'void_pierce', 'censure', 'redirect', 'see_through', 'shatter',
   'dissipation', 'collapsing_fear',
+  'breathing_method', 'five_precepts', 'fire_purification', 'three_bodies',
+  'soul_reap', 'soul_capture', 'intimidate', 'deify',
+  'bleed', 'taunt', 'tremble', 'molten_fist', 'dismantle', 'bully',
+  'regain_spirit', 'dominate', 'blood_wall', 'shred', 'body_slam',
 ] as const;
 export type EffectHandlerId = typeof EFFECT_HANDLERS[number];
 
@@ -58,7 +62,14 @@ export interface BoardObjectDefinition {
   sourceLabel?: string;
   defaultAssetId?: string;
 }
-export interface EffectDefinition { handler: EffectHandlerId }
+export type EffectKind = 'attack' | 'defense' | 'movement' | 'non_attack';
+export interface EffectDefinition {
+  handler: EffectHandlerId;
+  /** Required on every component of a compound action. */
+  kind?: EffectKind;
+  /** Omit to inherit the action's speed; declare only a different base speed. */
+  speedPriority?: number;
+}
 export interface TargetDefinition {
   mode: TargetMode;
   range?: number;
@@ -76,6 +87,20 @@ export interface VariableActionDefinition {
   damageLevelPerPower?: number;
   minPower: number;
   maxPower?: number;
+}
+
+export interface DeferredFlexibleCostDefinition {
+  resourceIds: string[];
+  minPower: number;
+  skillLevelOffset: number;
+}
+
+export interface RepeatAttackDefinition {
+  baseHits: number;
+  targetBuffId?: string;
+  extraHitsWhenTargetBuffed?: number;
+  actorBuffId?: string;
+  hitsPerActorBuffStack?: number;
 }
 
 export interface DefenseBreakDefinition {
@@ -111,7 +136,12 @@ export interface ActionDefinition {
   /** Defense interaction. Legacy generic/blunt/slash/magic values resolve as normal damage. */
   damageType?: 'normal' | 'piercing' | 'true' | 'generic' | 'blunt' | 'slash' | 'magic';
   anyResourceCost?: number;
+  /** Power and exact mixed-resource payment are selected after actions are revealed. */
+  deferredFlexibleCost?: DeferredFlexibleCostDefinition;
+  /** Dynamic repeated hits resolved by the global multi-hit rules. */
+  repeatAttack?: RepeatAttackDefinition;
   targetsGridCell?: boolean;
+  optionalGridTarget?: boolean;
   /** Resolves before attacks at the same speed and can leave a planned target cell. */
   movement?: boolean;
   /** Follows the selected player instead of resolving against their planned cell. */
@@ -214,6 +244,22 @@ export function validateGameConfig(input: unknown): GameConfig {
       throw new Error(`Action ${action.id} has invalid skill or damage levels.`);
     }
     if (action.anyResourceCost !== undefined && (!Number.isInteger(action.anyResourceCost) || action.anyResourceCost < 1)) throw new Error(`Action ${action.id} has an invalid flexible cost.`);
+    if (action.deferredFlexibleCost && (action.target.selectionTiming !== 'deferred'
+      || action.target.mode !== 'single_enemy'
+      || !Number.isInteger(action.deferredFlexibleCost.minPower) || action.deferredFlexibleCost.minPower < 1
+      || !Number.isFinite(action.deferredFlexibleCost.skillLevelOffset)
+      || action.deferredFlexibleCost.resourceIds.length === 0
+      || action.deferredFlexibleCost.resourceIds.some((resourceId) => !resourceIds.has(resourceId)))) {
+      throw new Error(`Action ${action.id} has an invalid deferred flexible cost.`);
+    }
+    if (action.repeatAttack && (action.category !== 'attack' || action.target.mode !== 'single_enemy'
+      || !Number.isInteger(action.repeatAttack.baseHits) || action.repeatAttack.baseHits < 1
+      || (action.repeatAttack.targetBuffId !== undefined && !buffIds.has(action.repeatAttack.targetBuffId))
+      || (action.repeatAttack.extraHitsWhenTargetBuffed !== undefined && (!Number.isInteger(action.repeatAttack.extraHitsWhenTargetBuffed) || action.repeatAttack.extraHitsWhenTargetBuffed < 1))
+      || (action.repeatAttack.actorBuffId !== undefined && !buffIds.has(action.repeatAttack.actorBuffId))
+      || (action.repeatAttack.hitsPerActorBuffStack !== undefined && (!Number.isInteger(action.repeatAttack.hitsPerActorBuffStack) || action.repeatAttack.hitsPerActorBuffStack < 1)))) {
+      throw new Error(`Action ${action.id} has an invalid repeat attack declaration.`);
+    }
     if (action.defenseBreak) {
       const { mode, brokenBuffId } = action.defenseBreak;
       if ((action.category !== 'defense' && action.defenseLevel === undefined) || !['persistent', 'recreated'].includes(mode)
@@ -244,8 +290,25 @@ export function validateGameConfig(input: unknown): GameConfig {
       || action.target.mode !== 'multiple_enemies' || !action.target.maxTargetsByPower || !action.variable)) {
       throw new Error(`Action ${action.id} has an invalid multi-hit declaration.`);
     }
-    if (!Array.isArray(action.effects) || action.effects.some((effect) => !handlers.has(effect.handler))) {
+    if (!Number.isFinite(action.speedPriority) || action.speedPriority < 0 || action.speedPriority > 4) {
+      throw new Error(`Action ${action.id} has an invalid speed.`);
+    }
+    if (!Array.isArray(action.effects) || action.effects.length === 0 || action.effects.some((effect) => !handlers.has(effect.handler))) {
       throw new Error(`Action ${action.id} references an unsupported effect handler.`);
+    }
+    const compoundEffect = action.effects.length > 1;
+    for (const effect of action.effects) {
+      if (effect.kind !== undefined && !['attack', 'defense', 'movement', 'non_attack'].includes(effect.kind)) {
+        throw new Error(`Action ${action.id} has an invalid effect kind.`);
+      }
+      if (compoundEffect && effect.kind === undefined) {
+        throw new Error(`Compound action ${action.id} must classify every effect.`);
+      }
+      if (effect.speedPriority !== undefined && (effect.kind === undefined
+        || !Number.isFinite(effect.speedPriority) || effect.speedPriority < 0 || effect.speedPriority > 4
+        || effect.speedPriority === action.speedPriority)) {
+        throw new Error(`Action ${action.id} has an invalid effect speed override.`);
+      }
     }
     for (const [resourceId, amount] of Object.entries(action.cost ?? {})) {
       if (!resourceIds.has(resourceId) || !Number.isFinite(amount) || amount < 0) {
@@ -298,6 +361,10 @@ export function validateGameConfig(input: unknown): GameConfig {
     }
   }
   return config as GameConfig;
+}
+
+export function effectSpeedPriority(action: ActionDefinition, kind: EffectKind): number {
+  return action.effects.find((effect) => effect.kind === kind)?.speedPriority ?? action.speedPriority;
 }
 
 function assertUnique(items: Array<{ id: string }>, label: string): void {

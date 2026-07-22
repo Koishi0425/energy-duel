@@ -100,11 +100,16 @@ Run commands from the repository root:
   in its parent Pixi container after `resize()` has initialized the layout.
   View rotation is local to one client and never changes the authoritative
   `gridIndex` or gets synchronized to the room.
-  A normal move selects one clockwise or counterclockwise adjacent empty cell. Quick Attack keeps that limit with two players and may select any empty cell with three or more players.
-  Ordinary player-targeted attacks snapshot the selected player's cell before resolution and hit the occupant of that cell when they resolve; movement at the same speed resolves first and can dodge them. Explicitly locked attacks follow the selected player.
-  Simultaneous attempts to occupy one cell resolve deterministically in the
-  authoritative speed/ID order; later movers stay in place. Spatial attacks read
-  positions when their effect resolves, not when actions are submitted.
+  A normal move selects one clockwise or counterclockwise adjacent cell. Quick
+  Attack keeps that limit with two players and may select any other cell with
+  three or more players. Cells allow multiple players and summons to coexist, so
+  movement never fails because another unit is already there.
+  Ordinary player-targeted attacks snapshot the selected player's cell before
+  resolution and remain single-target: they prefer the original target when that
+  player remains there, otherwise one other occupant takes the hit. Movement at
+  the same speed resolves first and can dodge them. Explicitly locked attacks
+  follow the selected player. Spatial attacks read positions when their effect
+  resolves and affect every eligible player on a covered cell.
 - Usernames are trimmed, case-insensitively unique, and contain 3-16 Chinese
   characters, ASCII letters, digits, or underscores. Registration requires a
   password of at least 7 characters; never store plaintext passwords. Profiles
@@ -117,7 +122,13 @@ Run commands from the repository root:
   can never execute arbitrary code.
 - Actions use five UI categories: base, attack, defense, resource, and special. The
   spreadsheet's “做功/非做功” labels are descriptive only and do not affect
-  runtime logic. Target selection defaults to `planned`; `deferred` (“后发”)
+  runtime logic. Compound actions classify every component as `attack`, `defense`,
+  `movement`, or `non_attack`. Components inherit the action's effective speed unless a different
+  base `speedPriority` is explicitly declared; redundant equal-speed overrides are invalid.
+  Base and effective speeds are clamped to the inclusive 0-4 range. Standalone active
+  Buff actions do not oppose queued effects; passive and triggered Buffs resolve at their
+  configured phase or trigger instead of acquiring the current action's speed.
+  Target selection defaults to `planned`; `deferred` (“后发”)
   reveals every submitted action, then lets each deferred actor allocate targets
   before authoritative resolution. Deferred selection supports single targets,
   repeated allocations, and explicitly skippable windows such as Haunting Shadows.
@@ -133,7 +144,8 @@ Run commands from the repository root:
   server evaluate the same requirements. Gonggang's axe defense is the first
   example and requires the `axe_raised` buff.
   Inner Guard is an explicit restricted-tree character: its form never grants
-  Fist, Slash, or Heal.
+  Fist, Slash, or Heal. Collapsing Fear resolves a player covered by both a
+  directional target set and Dominion only once, using the higher Dominion level.
   Transformation costs belong to target character definitions, not the generic
   transform action. The initial character is a starting form, never a transform
   target. Players may normally switch repeatedly to any configured non-training-only
@@ -155,6 +167,23 @@ Run commands from the repository root:
   that integer from the authoritative current resource balance.
   Character passives are first-class JSON definitions referenced by character
   IDs, displayed by the client, and enforced by registered server handlers.
+  Quilon tracks gross Energy and Charge gains in character-scoped Wuyou Awareness,
+  unlocks Three Bodies at seven, and receives one full-health revival into
+  Bodhisattva Debate only after every damaging effect in that round has resolved;
+  lethal damage never consumes the revival mid-round. Nilu Fire is a terrain object like Dominion; its pulses,
+  overlap, mitigation, debuff immunity, and
+  cleanup are authoritative; any player may use Heal on a visible fire cell to
+  remove it without healing or becoming Fragile. Lotus Seats synchronize origin,
+  direction, speed, HP, and per-player resource cargo. They coexist with other units, move once
+  per round, may be attacked through `targetBoardObjectId`, deliver cargo on return,
+  and refund it when destroyed or when their owner dies.
+  Chimei owns the character-visible Soul resource. Hellwalker adds one server-validated
+  arbitrary-resource surcharge to affected attack actions for the next two rounds, while
+  Resentment marks exactly one highest-resource living player at each choosing phase.
+  Deify selects its target, X, and flexible payment after actions are revealed; successful
+  conversion starts next round, delegates that actor to the source Chimei, and ends when
+  authoritative cumulative action cost reaches X. Controller-funded resources spend Soul
+  one-for-one and never contribute to that cumulative cost.
   Buff definitions may grant actions outside the current form tree; client and
   server derive those actions from the same `grantedActionIds`. Resource values
   may be fractional, and flexible-cost actions submit an explicit serializable
@@ -243,7 +272,12 @@ Run commands from the repository root:
   attack target sets always exclude the attacker; intentional self-damage uses
   a dedicated effect instead of targeting the actor as an attack. Damage
   compares the incoming attack level with the target's selected
-  action level only when that action applies to the attacker. Defense and
+  action level only when that action applies to the attacker and its effective
+  attack speed is at least the incoming attack effect's speed. Equal-damage attacks
+  ignore this speed gate and clash normally. A slower, differently damaging attack
+  cannot oppose a faster attack, but still resolves later if its actor can act. Active
+  defense applies only when its speed is at least the incoming attack speed; slower
+  defense and movement are bypassed at the attack's original damage level. Defense and
   targetless actions apply generally; targeted/spatial actions apply only when
   the attacker is one of their actual targets. A difference below 0.5 cancels,
   0.5 to below 1 shifts health left once, and 1 or more kills directly; attacks
@@ -268,6 +302,12 @@ Run commands from the repository root:
   its per-hit values and target allocations. A player resolves health from only
   the highest effective damage level received during the round, across repeated
   hits and multiple sources.
+  Warrior gains one character-scoped Strength and one permanent Shred hit for
+  every health state shifted left. Strength increases attack skill level only.
+  Armor is an unbounded character-scoped consumable defense: after block resolves,
+  it absorbs equal non-true, non-piercing remaining damage before barriers and is
+  cleared on death. Vulnerability adds a fixed 0.5 damage to ordinary attacks,
+  while Bully explicitly scales by its stacks; those stacks decay once per round.
   Cooldown progress is action-configured through `cooldownReduction`; do not
   infer it from the actor's current character. Shadow Blade progresses only from
   Nightmare-specific actions listed in gameplay configuration.
@@ -282,6 +322,10 @@ Run commands from the repository root:
   Buff definitions may supply a default duration, but synchronized runtime Buff
   state owns the actual remaining turns and its explicit permanent flag. Tick
   every non-permanent Buff so effects may set or refresh arbitrary durations.
+  Reapplying the same timed Buff keeps the greater of its current remaining
+  duration and the newly supplied duration; a shorter source never truncates a
+  longer active duration. Explicit consumption, removal, and round ticking may
+  still reduce or clear it.
 - The login/lobby shell must stay independent of Ant Design and PixiJS. Battle
   UI and the in-app tutorial are lazy-loaded. Use `?perf=1` to display local FPS,
   slow-frame, long-task, RTT, and optional heap metrics while profiling.

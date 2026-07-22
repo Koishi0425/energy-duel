@@ -212,6 +212,11 @@ export interface SyncedBuff {
 
 export type BoardObjectKind = 'terrain' | 'summon';
 
+export interface BoardObjectCargo {
+  energy: number;
+  charge: number;
+}
+
 export interface SyncedBoardObject {
   objectId: string;
   definitionId: string;
@@ -224,6 +229,10 @@ export interface SyncedBoardObject {
   maxHp: number;
   remainingTurns: number;
   permanent: boolean;
+  originGridIndex?: number;
+  movementDirection?: -1 | 0 | 1;
+  moveSpeed?: number;
+  cargo?: Record<string, BoardObjectCargo>;
 }
 
 export interface SyncedPlayer {
@@ -306,7 +315,10 @@ export interface SubmitActionMessage {
   transformCharacterId?: string;
   power?: number;
   targetGridIndex?: number;
+  targetBoardObjectId?: string;
   resourceSpend?: Record<string, number>;
+  extraResourceSpend?: Record<string, number>;
+  controllerResourceGrant?: Record<string, number>;
   resourceChoice?: 'energy' | 'charge';
   napoleonStrategySource?: 'buffer' | 'command';
   napoleonCommand?: 'A' | 'D' | 'T';
@@ -316,6 +328,8 @@ export interface SubmitActionMessage {
 export interface SubmitDeferredTargetsMessage {
   actorPlayerId?: string;
   targetIds: string[];
+  power?: number;
+  resourceSpend?: Record<string, number>;
   requestId?: string;
 }
 
@@ -332,6 +346,9 @@ export interface DeferredActionRequiredMessage {
   allocationCount: number;
   revealedActions: RevealedAction[];
   allowSkip?: boolean;
+  flexibleResourceIds?: string[];
+  minPower?: number;
+  maxPower?: number;
 }
 
 export interface ConfigureTrainingActorMessage {
@@ -350,6 +367,7 @@ export interface ResolutionActor {
   transformCharacterId?: string;
   power?: number;
   targetGridIndex?: number;
+  targetBoardObjectId?: string;
 }
 
 export interface ResolutionStep {

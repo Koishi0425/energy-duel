@@ -58,6 +58,12 @@ describe('room support', () => {
     expect(isActionUnlocked('jiaosila', 'base', 'fist', [], { energy: 1 })).toBe(true);
   });
 
+  it('unlocks Three Bodies only with enough Wuyou Awareness and current Energy', () => {
+    expect(isActionUnlocked('quilon', 'base', 'three_bodies', [{ buffId: 'wuyou_awareness', stacks: 6 }], { energy: 2 })).toBe(false);
+    expect(isActionUnlocked('quilon', 'base', 'three_bodies', [{ buffId: 'wuyou_awareness', stacks: 7 }], { energy: 1 })).toBe(false);
+    expect(isActionUnlocked('quilon', 'base', 'three_bodies', [{ buffId: 'wuyou_awareness', stacks: 7 }], { energy: 2 })).toBe(true);
+  });
+
   it('never unlocks Fist or Slash for Inner Guard', () => {
     expect(isActionUnlocked('inner_guard', 'base', 'fist', [], { energy: 3 })).toBe(false);
     expect(isActionUnlocked('inner_guard', 'base', 'slash', [], { energy: 3 })).toBe(false);

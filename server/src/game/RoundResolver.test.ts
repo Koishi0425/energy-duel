@@ -35,11 +35,45 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')?.resources.energy).toBe(1);
   });
 
-  it('steals the generated energy from a charging target', () => {
+  it('suppresses the target charge and grants energy to the successful stealer', () => {
     const players = roster(['a', 0], ['b', 0]);
     resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'steal', targetId: 'a' }]));
     expect(players.get('a')?.resources.energy).toBe(0);
     expect(players.get('b')?.resources.energy).toBe(1);
+  });
+
+  it('lets repeated Double Steal allocations deduct existing energy without going negative', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'double_steal', targetIds: ['b', 'b'] }],
+      ['b', { actionId: 'charge' }],
+    ));
+    expect(players.get('a')?.resources.energy).toBe(2);
+    expect(players.get('b')?.resources.energy).toBe(0);
+    expect(result.summary.filter((line) => line.includes('A 的紫翼双凹对 B 生效，获得 1 气')).length).toBe(2);
+    expect(result.summary).toContain('A 的紫翼双凹对 B 生效，获得 1 气，并倒扣 B 1 气。');
+    expect(result.summary).toContain('B 使用气，但本回合获得的 1 气被凹阻止。');
+
+    const stocked = roster(['a', 0], ['b', 2]);
+    resolveRound(stocked, actions(
+      ['a', { actionId: 'double_steal', targetIds: ['b', 'b'] }],
+      ['b', { actionId: 'charge' }],
+    ));
+    expect(stocked.get('a')?.resources.energy).toBe(2);
+    expect(stocked.get('b')?.resources.energy).toBe(1);
+  });
+
+  it('rewards every player who steals from the same charging target without repeated overdrafts', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'steal', targetId: 'c' }],
+      ['b', { actionId: 'steal', targetId: 'c' }],
+      ['c', { actionId: 'charge' }],
+    ));
+    expect(players.get('a')?.resources.energy).toBe(1);
+    expect(players.get('b')?.resources.energy).toBe(1);
+    expect(players.get('c')?.resources.energy).toBe(0);
+    expect(result.summary.join('\n')).not.toContain('倒扣 C');
   });
 
   it('logs actions that produce no practical effect', () => {
@@ -430,14 +464,15 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('a')!.resources.energy).toBeCloseTo(2 / 3);
   });
 
-  it('moves Quick Attack to any empty cell with at least three players and preserves its free Ten Volt', () => {
+  it('moves Quick Attack onto an occupied cell with at least three players and preserves its free Ten Volt', () => {
     const players = roster(['a', 0], ['b', 0], ['c', 0]);
     players.get('a')!.characterId = 'pikachu'; players.get('a')!.resources.charge = 2;
     players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4;
     expect(() => validateAction(players.get('a')!, { actionId: 'quick_attack', targetGridIndex: 3 }, players)).not.toThrow();
-    expect(() => validateAction(players.get('a')!, { actionId: 'quick_attack', targetGridIndex: 2 }, players)).toThrow();
-    resolveRound(players, actions(['a', { actionId: 'quick_attack', targetGridIndex: 3 }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
-    expect(players.get('a')!.gridIndex).toBe(3);
+    expect(() => validateAction(players.get('a')!, { actionId: 'quick_attack', targetGridIndex: 2 }, players)).not.toThrow();
+    resolveRound(players, actions(['a', { actionId: 'quick_attack', targetGridIndex: 2 }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
+    expect(players.get('a')!.gridIndex).toBe(2);
+    expect(players.get('b')!.gridIndex).toBe(2);
     expect(players.get('a')!.buffs?.has('quick_attack_ready')).toBe(true);
     resolveRound(players, actions(['a', { actionId: 'ten_volt' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]));
     expect(players.get('a')!.resources.charge).toBe(1);
@@ -455,6 +490,83 @@ describe('RoundResolver JSON-driven actions', () => {
     ));
     expect(players.get('b')!.gridIndex).toBe(3);
     expect(players.get('b')!.alive).toBe(true);
+  });
+
+  it('makes fast low damage and slow high damage attacks hurt each other', () => {
+    const players = roster(['a', 0], ['b', 1]);
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
+    const fast = players.get('a')!;
+    fast.characterId = 'napoleon'; fast.buffs = new Set(['napoleon_speed']); fast.buffStacks = { napoleon_speed: 1 };
+    players.get('b')!.characterId = 'gonggang';
+
+    resolveRound(players, actions(
+      ['a', { actionId: 'attack_order', targetId: 'b' }],
+      ['b', { actionId: 'slash', targetId: 'a' }],
+    ));
+
+    expect(players.get('a')!.currentHp).toBe(1);
+    expect(players.get('b')!.currentHp).toBe(1);
+  });
+
+  it('lets a fast high damage attack hurt a slow low damage attacker alone', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; player.characterId = 'napoleon'; }
+    const fast = players.get('a')!;
+    fast.commandBuffer = 'AA'; fast.buffs = new Set(['napoleon_speed']); fast.buffStacks = { napoleon_speed: 1 };
+
+    resolveRound(players, actions(
+      ['a', { actionId: 'nap_strategy_aa', targetId: 'b' }],
+      ['b', { actionId: 'attack_order', targetId: 'a' }],
+    ));
+
+    expect(players.get('a')!.currentHp).toBe(2);
+    expect(players.get('b')!.currentHp).toBe(1);
+  });
+
+  it('ignores speed when attacks with equal damage levels clash', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; player.characterId = 'napoleon'; }
+    const fast = players.get('a')!;
+    fast.buffs = new Set(['napoleon_speed']); fast.buffStacks = { napoleon_speed: 1 };
+
+    resolveRound(players, actions(
+      ['a', { actionId: 'attack_order', targetId: 'b' }],
+      ['b', { actionId: 'attack_order', targetId: 'a' }],
+    ));
+
+    expect(players.get('a')!.currentHp).toBe(2);
+    expect(players.get('b')!.currentHp).toBe(2);
+  });
+
+  it('lets a faster attack bypass a slower active defense at full damage', () => {
+    const players = roster(['a', 0], ['b', 0]);
+    for (const player of players.values()) { player.currentHp = 2; player.maxHp = 2; }
+    const fast = players.get('a')!;
+    fast.characterId = 'napoleon'; fast.commandBuffer = 'AA'; fast.buffs = new Set(['napoleon_speed']); fast.buffStacks = { napoleon_speed: 2 };
+
+    resolveRound(players, actions(
+      ['a', { actionId: 'nap_strategy_aa', targetId: 'b' }],
+      ['b', { actionId: 'defend' }],
+    ));
+
+    expect(players.get('b')!.currentHp).toBe(1);
+  });
+
+  it('keeps ordinary attacks single-target when multiple players share the snapshotted cell', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 2;
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }]));
+    expect(players.get('b')!.alive).toBe(false);
+    expect(players.get('c')!.alive).toBe(true);
+  });
+
+  it('lets another occupant inherit an ordinary attack after its original target moves away', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    players.get('a')!.gridIndex = 0; players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 2;
+    players.get('b')!.characterId = 'pikachu'; players.get('b')!.resources.charge = 1;
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'quick_attack', targetGridIndex: 3 }], ['c', { actionId: 'charge' }]));
+    expect(players.get('b')!.alive).toBe(true);
+    expect(players.get('c')!.alive).toBe(false);
   });
 
   it('does not dodge a faster attack or a locked attack by moving', () => {
@@ -601,6 +713,19 @@ describe('RoundResolver JSON-driven actions', () => {
     resolveRound(players, actions(['a', { actionId: 'nap_strategy_tt', napoleonStrategySource: 'buffer' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.tactical_advantage).toBe(2);
     expect(actor.commandBuffer).toBe('');
+  });
+
+  it('keeps the longest duration when multiple Napoleon engines grant tactical advantage', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.currentHp = actor.maxHp = 2;
+    actor.buffs = new Set(['napoleon_emperor', 'hundred_days', 'unfallen_fortress']);
+    actor.buffStacks = { napoleon_emperor: 1, hundred_days: 1, unfallen_fortress: 1 };
+    actor.buffRemainingTurns = { napoleon_emperor: 5, hundred_days: 0, unfallen_fortress: 3 };
+
+    resolveRound(players, actions(['a', { actionId: 'tactical_order' }], ['b', { actionId: 'defend' }]));
+
+    expect(actor.buffStacks.tactical_advantage).toBe(4);
+    expect(actor.buffRemainingTurns.tactical_advantage).toBe(6);
   });
 
   it('does not grant basic resources to Napoleon when damaged', () => {
@@ -880,6 +1005,20 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('c')!.alive).toBe(false);
   });
 
+  it('resolves a player covered by both Collapsing Fear target sets only once at the higher level', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'inner_guard'; actor.currentHp = 1; actor.maxHp = 3; actor.gridIndex = 0;
+    target.characterId = 'quilon'; target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+    const targetDominion = dominion('a', 2); const boardObjects = new Map([[targetDominion.objectId, targetDominion]]);
+    const result = resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }]), boardObjects);
+    expect(result.summary.filter((line) => line.includes('坍缩恐惧（技能') && line.includes('对 B'))).toHaveLength(1);
+    expect(result.summary.some((line) => line.includes('技能 4 / 伤害 4'))).toBe(true);
+    expect(target.alive).toBe(true);
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('wuyou_used')).toBe(true);
+    expect(result.eliminated).not.toContain('b');
+  });
+
   it('targets the first player in each direction even when neither stands on Dominion', () => {
     const players = roster(['a', 3], ['b', 0], ['c', 0]); const actor = players.get('a')!;
     actor.characterId = 'inner_guard'; actor.currentHp = 2; actor.maxHp = 3; actor.gridIndex = 0;
@@ -900,5 +1039,287 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(actor.alive).toBe(true);
     expect(actor.currentHp).toBe(1);
     expect(players.get('b')!.alive).toBe(false);
+  });
+
+  it('summons Nilu Fire and lets it protect Quilon from an incoming attack', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.resources.charge = 1; actor.gridIndex = 0;
+    players.get('b')!.gridIndex = 1;
+    const boardObjects = new Map<string, CombatBoardObject>();
+    resolveRound(players, actions(['a', { actionId: 'breathing_method', targetGridIndex: 1 }], ['b', { actionId: 'charge' }]), boardObjects);
+    expect(boardObjects.get('nilu_fire:a:1')).toMatchObject({ definitionId: 'nilu_fire', kind: 'terrain', gridIndex: 1, currentHp: 0 });
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'fist', targetId: 'a' }]), boardObjects);
+    expect(actor.currentHp).toBe(2);
+  });
+
+  it('revives Quilon once and grants Bodhisattva Debate after lethal damage', () => {
+    const players = roster(['a', 0], ['b', 2]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2;
+    players.get('b')!.resources.charge = 1;
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'atomic_breath', targetId: 'a' }]));
+    expect(actor.alive).toBe(true);
+    expect(actor.currentHp).toBe(2);
+    expect(actor.buffs?.has('wuyou_used')).toBe(true);
+    expect(actor.buffs?.has('bodhisattva_debate')).toBe(true);
+  });
+
+  it('revives Quilon only after every damaging action in the round has resolved', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    players.get('b')!.resources.charge = 1; players.get('b')!.gridIndex = 2;
+    players.get('c')!.resources.charge = 1; players.get('c')!.gridIndex = 4;
+    const result = resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'atomic_breath', targetId: 'a' }], ['c', { actionId: 'atomic_breath', targetId: 'a' }]));
+    expect(result.summary.filter((line) => line.includes('触发无忧觉'))).toHaveLength(1);
+    expect(actor.alive).toBe(true);
+    expect(actor.currentHp).toBe(2);
+    expect(actor.buffs?.has('bodhisattva_debate')).toBe(true);
+    expect(result.eliminated).not.toContain('a');
+  });
+
+  it('tracks every Energy and Charge gain for Wuyou without reducing the counter when spent', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2;
+    for (let round = 0; round < 7; round += 1) resolveRound(players, actions(['a', { actionId: round % 2 === 0 ? 'charge' : 'gain_charge' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.wuyou_awareness).toBe(7);
+    actor.resources.energy = 2;
+    const boardObjects = new Map<string, CombatBoardObject>(); actor.gridIndex = 0; players.get('b')!.gridIndex = 2;
+    resolveRound(players, actions(['a', { actionId: 'three_bodies', targetGridIndex: 1 }], ['b', { actionId: 'defend' }]), boardObjects);
+    expect(actor.buffStacks?.wuyou_awareness).toBe(7);
+  });
+
+  it('uses Nilu Fire as binary resistance against external negative buffs', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:a:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    players.get('b')!.resources.charge = 1;
+    resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'nebula_shock', targetId: 'a' }]), new Map([[fire.objectId, fire]]));
+    expect(actor.buffs?.has('shock')).toBe(false);
+  });
+
+  it('makes a successful Five Precepts trigger Nilu Fire once for every hit', () => {
+    const players = roster(['a', 3], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    players.get('b')!.currentHp = players.get('b')!.maxHp = 2; players.get('b')!.gridIndex = 2;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:a:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    const result = resolveRound(players, actions(['a', { actionId: 'five_precepts', targetId: 'b' }], ['b', { actionId: 'fist', targetId: 'a' }]), new Map([[fire.objectId, fire]]));
+    expect(result.summary.filter((line) => line.includes('1 团尼卢火引燃了 1 次'))).toHaveLength(5);
+  });
+
+  it('moves the Lotus Seat once per round, absorbs ceil-halves, slows down, and delivers its cargo', () => {
+    const players = roster(['a', 2], ['b', 3]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0; actor.buffs = new Set(['wuyou_awareness']); actor.buffStacks = { wuyou_awareness: 7 };
+    target.resources.charge = 2; target.gridIndex = 1;
+    const boardObjects = new Map<string, CombatBoardObject>();
+    resolveRound(players, actions(['a', { actionId: 'three_bodies', targetGridIndex: 1 }], ['b', { actionId: 'defend' }]), boardObjects);
+    const lotus = boardObjects.get('lotus_seat:a')!;
+    expect(lotus).toMatchObject({ gridIndex: 0, originGridIndex: 0, movementDirection: 1, moveSpeed: 4, currentHp: 10 });
+    resolveRound(players, actions(['a', { actionId: 'defend' }], ['b', { actionId: 'defend' }]), boardObjects);
+    expect(lotus).toMatchObject({ gridIndex: 1, moveSpeed: 1, cargo: { b: { energy: 2, charge: 1 } } });
+    expect(target.resources).toMatchObject({ energy: 1, charge: 1 });
+    for (let round = 0; round < 3; round += 1) resolveRound(players, actions(['a', { actionId: 'defend' }], ['b', { actionId: 'defend' }]), boardObjects);
+    expect(boardObjects.has(lotus.objectId)).toBe(false);
+    expect(actor.resources).toMatchObject({ energy: 2, charge: 1 });
+  });
+
+  it('makes the Lotus Seat absorb every living player sharing its landing cell', () => {
+    const players = roster(['q', 0], ['b', 3], ['c', 1]);
+    players.get('q')!.characterId = 'quilon'; players.get('q')!.gridIndex = 0;
+    players.get('b')!.resources.charge = 2; players.get('b')!.gridIndex = 1;
+    players.get('c')!.resources.charge = 3; players.get('c')!.gridIndex = 1;
+    const lotus: CombatBoardObject = { objectId: 'lotus_seat:q', definitionId: 'lotus_seat', kind: 'summon', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 0, stacks: 1, currentHp: 10, maxHp: 10, remainingTurns: 0, permanent: true, originGridIndex: 0, movementDirection: 1, moveSpeed: 4, cargo: {} };
+    resolveRound(players, actions(['q', { actionId: 'defend' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'defend' }]), new Map([[lotus.objectId, lotus]]));
+    expect(lotus.cargo).toEqual({ b: { energy: 2, charge: 1 }, c: { energy: 1, charge: 2 } });
+    expect(players.get('b')!.resources).toMatchObject({ energy: 1, charge: 1 });
+    expect(players.get('c')!.resources).toMatchObject({ energy: 0, charge: 1 });
+  });
+
+  it('caps action speed at four so the speed-four Lotus Seat still moves first', () => {
+    const players = roster(['a', 0], ['b', 3], ['q', 0]); const attacker = players.get('a')!;
+    attacker.characterId = 'napoleon'; attacker.resources.charge = 1; attacker.gridIndex = 2;
+    attacker.buffs = new Set(['napoleon_speed']); attacker.buffStacks = { napoleon_speed: 5 };
+    players.get('b')!.gridIndex = 1; players.get('q')!.gridIndex = 4;
+    const lotus: CombatBoardObject = { objectId: 'lotus_seat:q', definitionId: 'lotus_seat', kind: 'summon', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 0, stacks: 1, currentHp: 3, maxHp: 10, remainingTurns: 0, permanent: true, originGridIndex: 4, movementDirection: 1, moveSpeed: 4, cargo: {} };
+    const result = resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetBoardObjectId: lotus.objectId }], ['b', { actionId: 'defend' }], ['q', { actionId: 'defend' }]), new Map([[lotus.objectId, lotus]]));
+    expect(result.summary.some((line) => line.includes('吸收'))).toBe(true);
+    expect(players.get('b')!.resources.energy).toBe(3);
+  });
+
+  it('lets a single-target attack destroy the Lotus Seat and refunds cargo to its original player', () => {
+    const players = roster(['a', 2], ['b', 0], ['q', 0]); players.get('a')!.resources.charge = 1;
+    const lotus: CombatBoardObject = { objectId: 'lotus_seat:q', definitionId: 'lotus_seat', kind: 'summon', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 0, stacks: 1, currentHp: 3, maxHp: 10, remainingTurns: 0, permanent: true, originGridIndex: 4, movementDirection: 1, moveSpeed: 0, cargo: { b: { energy: 2, charge: 1 } } };
+    const boardObjects = new Map([[lotus.objectId, lotus]]);
+    expect(() => validateAction(players.get('a')!, { actionId: 'atomic_breath', targetBoardObjectId: lotus.objectId }, players, boardObjects)).not.toThrow();
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetBoardObjectId: lotus.objectId }], ['b', { actionId: 'defend' }], ['q', { actionId: 'defend' }]), boardObjects);
+    expect(boardObjects.has(lotus.objectId)).toBe(false);
+    expect(players.get('b')!.resources).toMatchObject({ energy: 2, charge: 1 });
+  });
+
+  it('extinguishes Nilu Fire with Heal without making the healer fragile', () => {
+    const players = roster(['a', 0], ['b', 0], ['q', 0]);
+    const healer = players.get('b')!;
+    healer.characterId = 'quilon'; healer.currentHp = healer.maxHp = 2; healer.gridIndex = 2;
+    healer.buffs = new Set(['wuyou_used']);
+    players.get('a')!.gridIndex = 0; players.get('q')!.gridIndex = 4;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:q:3', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 3, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    const boardObjects = new Map([[fire.objectId, fire]]);
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'heal', targetGridIndex: 3 }], ['q', { actionId: 'defend' }]), boardObjects);
+    expect(healer.alive).toBe(true);
+    expect(healer.currentHp).toBe(1);
+    expect(boardObjects.has(fire.objectId)).toBe(false);
+  });
+
+  it('adds overlapping Nilu Fire damage before applying the target fire mitigation', () => {
+    const players = roster(['a', 0], ['b', 0], ['c', 0]);
+    const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    target.characterId = 'quilon'; target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+    players.get('c')!.gridIndex = 4;
+    const fires: CombatBoardObject[] = [
+      { objectId: 'nilu_fire:a:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true },
+      { objectId: 'nilu_fire:a:3', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 3, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true },
+      { objectId: 'nilu_fire:b:5', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'b', sourceCharacterId: 'quilon', gridIndex: 5, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true },
+    ];
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'c' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'charge' }]), new Map(fires.map((fire) => [fire.objectId, fire])));
+    expect(target.currentHp).toBe(1);
+  });
+
+  it('makes Fist trigger Nilu Fire twice during Bodhisattva Debate', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
+    actor.buffs = new Set(['bodhisattva_debate']); players.get('b')!.gridIndex = 2;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:a:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]), new Map([[fire.objectId, fire]]));
+    expect(result.summary.some((line) => line.includes('2 次'))).toBe(true);
+  });
+
+  it('removes Quilon summons on final death and refunds Lotus cargo', () => {
+    const players = roster(['a', 0], ['b', 0], ['q', 0]); const quilon = players.get('q')!;
+    quilon.characterId = 'quilon'; quilon.currentHp = quilon.maxHp = 2; quilon.gridIndex = 4;
+    quilon.buffs = new Set(['wuyou_used']); players.get('a')!.resources.charge = 1;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:q:3', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 3, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    const lotus: CombatBoardObject = { objectId: 'lotus_seat:q', definitionId: 'lotus_seat', kind: 'summon', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 5, stacks: 1, currentHp: 10, maxHp: 10, remainingTurns: 0, permanent: true, originGridIndex: 4, movementDirection: 1, moveSpeed: 0, cargo: { b: { energy: 2, charge: 1 } } };
+    const boardObjects = new Map([[fire.objectId, fire], [lotus.objectId, lotus]]);
+    resolveRound(players, actions(['a', { actionId: 'atomic_breath', targetId: 'q' }], ['b', { actionId: 'defend' }], ['q', { actionId: 'charge' }]), boardObjects);
+    expect(quilon.alive).toBe(false);
+    expect(boardObjects.size).toBe(0);
+    expect(players.get('b')!.resources).toMatchObject({ energy: 2, charge: 1 });
+  });
+
+  it('resolves Soul Reap without damage and applies Soul Reap plus Hellwalker for the next two rounds', () => {
+    const players = roster(['a', 1], ['b', 0]); const chimei = players.get('a')!; const target = players.get('b')!;
+    chimei.characterId = 'chimei'; chimei.currentHp = chimei.maxHp = 2; chimei.resources.soul = 0; chimei.gridIndex = 0;
+    target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+    resolveRound(players, actions(['a', { actionId: 'soul_reap', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+    expect(chimei.resources.soul).toBe(1);
+    expect(target.buffs).toEqual(expect.objectContaining(new Set(['soul_reap_debuff', 'hellwalker'])));
+    expect(target.buffRemainingTurns).toMatchObject({ soul_reap_debuff: 3, hellwalker: 3 });
+  });
+
+  it('makes Soul Capture immune to attacks and grants at most one extra Soul', () => {
+    const players = roster(['a', 0], ['b', 2], ['c', 0]); const chimei = players.get('a')!;
+    chimei.characterId = 'chimei'; chimei.currentHp = chimei.maxHp = 2; chimei.resources.charge = 1; chimei.resources.soul = 0;
+    players.get('b')!.resources.charge = 1;
+    resolveRound(players, actions(['a', { actionId: 'soul_capture' }], ['b', { actionId: 'atomic_breath', targetId: 'a' }], ['c', { actionId: 'fist', targetId: 'a' }]));
+    expect(chimei.currentHp).toBe(2);
+    expect(chimei.resources.soul).toBe(2);
+  });
+
+  it('validates Hellwalker surcharge and applies Soul Reap speed and damage penalties', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!;
+    actor.buffs = new Set(['hellwalker', 'soul_reap_debuff']); actor.resources.charge = 1;
+    expect(() => validateAction(actor, { actionId: 'slash', targetId: 'b' }, players)).toThrow(/额外支付/);
+    expect(() => validateAction(actor, { actionId: 'slash', targetId: 'b', extraResourceSpend: { charge: 1 } }, players)).not.toThrow();
+    expect(buildResolutionSteps(actions(['a', { actionId: 'slash', targetId: 'b' }]), players)[0].speedPriority).toBe(0);
+  });
+
+  it('starts Deify control next round and ends it after the configured cumulative action cost', () => {
+    const players = roster(['a', 3], ['b', 3]); const chimei = players.get('a')!; const target = players.get('b')!;
+    chimei.characterId = 'chimei'; chimei.currentHp = chimei.maxHp = 2; chimei.resources.soul = 2;
+    target.characterId = 'jiaosila'; target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'deify', targetId: 'b', power: 2, resourceSpend: { energy: 2 }, capturedSpeed: 2 }], ['b', { actionId: 'charge' }]));
+    expect(target.buffStacks).toMatchObject({ converted: 2, conversion_threshold: 2 });
+    expect(target.buffSourcePlayerIds?.converted).toBe('a');
+    resolveRound(players, actions(['a', { actionId: 'defend' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(target.buffStacks?.converted).toBe(1);
+    target.resources.energy = 1;
+    resolveRound(players, actions(['a', { actionId: 'defend' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(target.buffs?.has('converted')).toBe(false);
+  });
+
+  it('resolves Warrior armor after block and consumes only the remaining damage', () => {
+    const players = roster(['a', 3], ['b', 0]); const warrior = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2;
+    warrior.buffs = new Set(['armor']); warrior.buffStacks = { armor: 2 };
+    resolveRound(players, actions(['a', { actionId: 'hangup' }], ['b', { actionId: 'defend' }]));
+    expect(warrior.currentHp).toBe(2);
+    expect(warrior.buffStacks).toMatchObject({ armor: 1 });
+    expect(warrior.buffs?.has('defend_broken')).toBe(true);
+  });
+
+  it('lets true damage bypass Warrior armor', () => {
+    const players = roster(['a', 0], ['b', 0]); const attacker = players.get('a')!; const warrior = players.get('b')!;
+    attacker.characterId = 'ku'; attacker.resources.charge = 2; attacker.buffs = new Set(['tempered']); attacker.buffStacks = { tempered: 1 };
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.buffs = new Set(['armor']); warrior.buffStacks = { armor: 2 };
+    resolveRound(players, actions(['a', { actionId: 'void_pierce', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(warrior.currentHp).toBe(1);
+    expect(warrior.buffStacks?.armor).toBe(2);
+  });
+
+  it('adds Warrior strength to attack skill but not damage', () => {
+    const players = roster(['a', 0], ['b', 1]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
+    warrior.buffs = new Set(['strength']); warrior.buffStacks = { strength: 3 };
+    target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(target.currentHp).toBe(1);
+    expect(result.summary.join('\n')).toContain('技能 2 / 伤害 0.5');
+  });
+
+  it('does not turn Warrior strength into damage without an opposing attack', () => {
+    const players = roster(['a', 0], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
+    warrior.buffs = new Set(['strength']); warrior.buffStacks = { strength: 3 };
+    target.characterId = 'warrior'; target.currentHp = target.maxHp = 2;
+    target.buffs = new Set(['armor']); target.buffStacks = { armor: 0.5 };
+    const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('armor')).toBe(false);
+    expect(result.summary.join('\n')).toContain('技能 2 / 伤害 0.5');
+  });
+
+  it('uses Shred final skill level as every hit damage level', () => {
+    const players = roster(['a', 1], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
+    warrior.buffs = new Set(['strength', 'shred_count']); warrior.buffStacks = { strength: 3, shred_count: 3 };
+    target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(['a', { actionId: 'shred', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    const summary = result.summary.join('\n');
+    expect(target.currentHp).toBe(1);
+    expect(target.buffs?.has('defend_broken')).toBe(true);
+    expect(summary).toContain('第 1/4 段');
+    expect(summary).toContain('技能 2.5 / 伤害 2.5');
+    expect(summary).not.toContain('挡抵消了');
+  });
+
+  it('grows Warrior strength and Shred exactly once when higher round damage replaces an earlier hit', () => {
+    const players = roster(['a', 1], ['b', 2], ['c', 0]); const warrior = players.get('c')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'slash', targetId: 'c' }], ['b', { actionId: 'atomic_breath', targetId: 'c' }], ['c', { actionId: 'charge' }]));
+    expect(warrior.currentHp).toBe(0);
+    expect(warrior.buffStacks?.strength).toBe(2);
+    expect(warrior.buffStacks?.shred_count).toBe(2);
+    expect(warrior.buffs?.has('armor')).toBe(false);
+  });
+
+  it('uses dynamic repeated hits and enforces the Regain Spirit action lock', () => {
+    const players = roster(['a', 2], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
+    warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2;
+    target.currentHp = target.maxHp = 2; target.buffs = new Set(['armor', 'vulnerability']); target.buffStacks = { armor: 2, vulnerability: 2 };
+    resolveRound(players, actions(['a', { actionId: 'dismantle', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(1);
+    warrior.buffs = new Set(['regain_spirit_lock']);
+    expect(() => validateAction(warrior, { actionId: 'defend' }, players)).toThrow(/只能使用攻击/);
+    expect(() => validateAction(warrior, { actionId: 'fist', targetId: 'b' }, players)).not.toThrow();
   });
 });

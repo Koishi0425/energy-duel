@@ -3,6 +3,7 @@ import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectan
 import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RoomEmoteMessage, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
+import { HEALTH_BAR_COLORS, unitHealthBarModel } from '../game/unitHealthBar';
 import { playerRoomStatus } from '../playerRoomStatus';
 
 interface ScreenPoint { x: number; y: number }
@@ -13,6 +14,7 @@ interface Props {
   emoteEvents?: RoomEmoteMessage[];
   targeting?: boolean;
   targetablePlayerIds?: string[];
+  targetableBoardObjectIds?: string[];
   selectedTargetIds?: string[];
   gridTargeting?: boolean;
   targetableGridIndices?: number[];
@@ -21,13 +23,14 @@ interface Props {
   resetViewKey?: number;
   resolutionStep?: ResolutionStep;
   onPlayerSelect?: (player: SyncedPlayer) => void;
+  onBoardObjectSelect?: (object: SyncedBoardObject) => void;
   onPlayerInspect?: (player: SyncedPlayer) => void;
   onPlayerHover?: (player: SyncedPlayer | null, point?: ScreenPoint) => void;
-  onBoardObjectInspect?: (object: SyncedBoardObject) => void;
+  onBoardObjectInspect?: (objects: SyncedBoardObject[]) => void;
   onGridSelect?: (index: number) => void;
   onLoadProgress?: (progress: number, label: string) => void;
 }
-interface TokenView { root: Container; portrait: Sprite; ring: Graphics; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
+interface TokenView { root: Container; portrait: Sprite; ring: Graphics; healthBar: Graphics; armorValue: Text; commandBuffer: Text; name: Text; status: Text; assetUrl: string }
 interface BoardObjectView {
   root: Container;
   overlay: Container;
@@ -58,17 +61,33 @@ export default function GameCanvas(props: Props) {
   const positionViews = () => {
     const map = mapRef.current;
     if (!map) return;
+    const unitKeysByCell = new Map<number, string[]>();
+    for (const player of propsRef.current.players) {
+      const keys = unitKeysByCell.get(player.gridIndex) ?? []; keys.push(`player:${player.playerId}`); unitKeysByCell.set(player.gridIndex, keys);
+    }
+    for (const object of propsRef.current.boardObjects) if (object.kind === 'summon' && object.currentHp > 0) {
+      const keys = unitKeysByCell.get(object.gridIndex) ?? []; keys.push(`object:${object.objectId}`); unitKeysByCell.set(object.gridIndex, keys);
+    }
+    for (const keys of unitKeysByCell.values()) keys.sort();
+    const layout = (cell: number, key: string) => {
+      const keys = unitKeysByCell.get(cell) ?? [key]; const index = Math.max(0, keys.indexOf(key));
+      const columns = Math.ceil(Math.sqrt(keys.length)); const rows = Math.ceil(keys.length / columns);
+      const column = index % columns; const row = Math.floor(index / columns);
+      const scale = keys.length <= 1 ? 1 : Math.max(0.48, Math.min(0.82, 1.18 / Math.sqrt(keys.length)));
+      return { x: (column - (columns - 1) / 2) * 50 * scale, y: (row - (rows - 1) / 2) * 44 * scale, scale };
+    };
     for (const player of propsRef.current.players) {
       const view = tokenViewsRef.current.get(player.playerId);
       if (!view) continue;
-      const point = map.getGridCoordinates(player.gridIndex);
-      view.root.position.set(point.x, point.y);
+      const point = map.getGridCoordinates(player.gridIndex); const slot = layout(player.gridIndex, `player:${player.playerId}`);
+      view.root.scale.set(slot.scale); view.root.position.set(point.x + slot.x, point.y + slot.y);
     }
     for (const object of propsRef.current.boardObjects) {
       const view = boardObjectViewsRef.current.get(object.objectId);
       if (!view) continue;
       const point = map.getGridCoordinates(object.gridIndex);
-      view.root.position.set(point.x, point.y);
+      const slot = object.kind === 'summon' ? layout(object.gridIndex, `object:${object.objectId}`) : { x: 0, y: 0, scale: 1 };
+      view.root.scale.set(slot.scale); view.root.position.set(point.x + slot.x, point.y + slot.y);
       view.overlay.position.set(point.x, point.y);
     }
   };
@@ -136,14 +155,15 @@ export default function GameCanvas(props: Props) {
         const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
         const amount = definition?.displayMode === 'stacks' && object.stacks > 1 ? ` ×${object.stacks}` : '';
         view.label.anchor.set(0.5, 1); view.label.text = `${definition?.name ?? object.definitionId}${amount}`;
-        const labelY = occupied ? -portraitHeight - 7 - slot * 15 : -11 - slot * 15;
+        const labelY = occupied ? -portraitHeight - 27 - slot * 15 : -11 - slot * 15;
         view.label.position.set(0, labelY); view.overlayHit.roundRect(-38, labelY - 16, 76, 19, 4).fill({ color: 0x000000, alpha: 0.001 });
         view.root.alpha = 1;
       } else {
         const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
         const owner = propsRef.current.players.find((player) => player.playerId === object.ownerPlayerId);
         view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
-        view.ring.ellipse(0, 7, portraitHeight * 0.34, Math.max(7, portraitHeight * 0.11)).fill({ color: owner?.color ?? color, alpha: 0.3 }).stroke({ color, width: 3 });
+        const targetable = propsRef.current.targeting && propsRef.current.targetableBoardObjectIds?.includes(object.objectId);
+        view.ring.ellipse(0, 7, portraitHeight * 0.34, Math.max(7, portraitHeight * 0.11)).fill({ color: owner?.color ?? color, alpha: 0.3 }).stroke({ color: targetable ? 0x55f2b0 : color, width: targetable ? 5 : 3 });
         const asset = definition?.defaultAssetId ? assetById.get(definition.defaultAssetId) : undefined;
         const assetUrl = asset?.previewUrl ?? asset?.url ?? FALLBACK_PORTRAIT_URL;
         if (assetUrl !== view.assetUrl) {
@@ -153,7 +173,7 @@ export default function GameCanvas(props: Props) {
         view.label.anchor.set(0.5, 0); view.label.text = definition?.name ?? object.definitionId; view.label.position.set(0, 11);
         view.status.text = object.maxHp > 0 ? `HP ${formatResource(object.currentHp)}/${formatResource(object.maxHp)}${owner ? ` · ${truncate(owner.nickname, 8)}` : ''}` : owner ? `归属 ${truncate(owner.nickname, 8)}` : '召唤物';
         view.status.position.set(0, propsRef.current.players.length > 12 ? 23 : 27);
-        view.root.alpha = object.maxHp > 0 && object.currentHp <= 0 ? 0.38 : 1;
+        view.root.alpha = object.maxHp > 0 && object.currentHp <= 0 ? 0.38 : propsRef.current.targeting && !targetable ? 0.28 : 1;
       }
     }
     positionViews();
@@ -211,7 +231,7 @@ export default function GameCanvas(props: Props) {
     const map = mapRef.current;
     if (!map) return;
     map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection();
-  }, [props.players, props.phase, props.boardObjects, props.emoteEvents, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
+  }, [props.players, props.phase, props.boardObjects, props.emoteEvents, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.targetableBoardObjectIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -237,7 +257,16 @@ function createBoardObjectView(objectId: string, propsRef: React.MutableRefObjec
   const inspect = () => {
     if (propsRef.current.gridTargeting) return;
     const object = propsRef.current.boardObjects.find((candidate) => candidate.objectId === objectId);
-    if (object) propsRef.current.onBoardObjectInspect?.(object);
+    if (!object) return;
+    if (propsRef.current.targeting && propsRef.current.targetableBoardObjectIds?.includes(object.objectId)) propsRef.current.onBoardObjectSelect?.(object);
+    else if (!propsRef.current.targeting) {
+      const inspected = object.kind === 'terrain'
+        ? propsRef.current.boardObjects
+          .filter((candidate) => candidate.kind === 'terrain' && candidate.gridIndex === object.gridIndex)
+          .sort((left, right) => left.objectId.localeCompare(right.objectId))
+        : [object];
+      propsRef.current.onBoardObjectInspect?.(inspected);
+    }
   };
   for (const target of [root, overlay]) {
     target.eventMode = 'static'; target.cursor = 'pointer'; target.on('pointertap', inspect);
@@ -246,12 +275,13 @@ function createBoardObjectView(objectId: string, propsRef: React.MutableRefObjec
 }
 
 function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {
-  const root = new Container(); const ring = new Graphics();
+  const root = new Container(); const ring = new Graphics(); const healthBar = new Graphics();
   const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL)); portrait.anchor.set(0.5, 1);
+  const armorValue = new Text({ style: { fill: 0xf8fafc, fontWeight: '800', align: 'center' } }); armorValue.anchor.set(0.5);
   const commandBuffer = new Text({ style: { fill: 0xffdf68, fontWeight: '700', dropShadow: true, align: 'center' } }); commandBuffer.anchor.set(0.5, 1);
   const name = new Text({ style: { fill: 0xffffff, fontWeight: '700', dropShadow: true, align: 'center' } }); name.anchor.set(0.5, 0);
   const status = new Text({ style: { fill: 0xcbd1ed, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
-  root.addChild(ring, portrait, commandBuffer, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
+  root.addChild(ring, portrait, healthBar, armorValue, commandBuffer, name, status); root.eventMode = 'static'; root.cursor = 'pointer';
   const currentPlayer = () => propsRef.current.players.find((candidate) => candidate.playerId === playerId);
   root.on('pointerover', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
   root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
@@ -261,7 +291,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
     if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
     else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
   });
-  return { root, portrait, ring, commandBuffer, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
+  return { root, portrait, ring, healthBar, armorValue, commandBuffer, name, status, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
@@ -278,13 +308,28 @@ function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: num
   view.root.alpha = !player.connected ? 0.22 : !player.alive ? 0.38 : props.targeting && !targetable ? 0.28 : 1;
   const ringRadius = portraitHeight * 0.34;
   view.ring.clear().ellipse(0, 7, ringRadius, Math.max(7, ringRadius * 0.32)).fill({ color: player.color, alpha: 0.3 }).stroke({ color: selected ? 0xffdf68 : targetable ? 0x55f2b0 : player.color, width: selected ? 5 : targetable ? 4 : 2 });
+  const armor = player.buffs.find((buff) => buff.buffId === 'armor')?.stacks ?? 0;
+  const healthBar = unitHealthBarModel(player.currentHp, player.maxHp, playerCount, armor);
+  const barY = 3 - portraitHeight - healthBar.height;
+  const segmentWidth = (healthBar.width - healthBar.gap * (healthBar.segmentColors.length - 1)) / healthBar.segmentColors.length;
+  view.healthBar.clear(); view.healthBar.visible = !obscured;
+  view.healthBar.roundRect(-healthBar.width / 2 - 1, barY - 1, healthBar.width + 2, healthBar.height + 2, 2).fill({ color: HEALTH_BAR_COLORS.border, alpha: 0.92 });
+  healthBar.segmentColors.forEach((color, index) => {
+    view.healthBar.rect(-healthBar.width / 2 + index * (segmentWidth + healthBar.gap), barY, segmentWidth, healthBar.height).fill({ color, alpha: color === HEALTH_BAR_COLORS.empty ? 0.9 : 1 });
+  });
+  if (healthBar.armor > 0) {
+    const armorRadius = Math.max(6, healthBar.height);
+    const armorX = healthBar.width / 2 + armorRadius + 5;
+    view.healthBar.roundRect(-healthBar.width / 2 - 3, barY - 3, healthBar.width + 6, healthBar.height + 6, 3).stroke({ color: HEALTH_BAR_COLORS.armor, width: 2 });
+    view.healthBar.circle(armorX, barY + healthBar.height / 2, armorRadius).fill({ color: 0x111827, alpha: 0.96 }).stroke({ color: HEALTH_BAR_COLORS.armor, width: 2 });
+    view.armorValue.text = formatResource(healthBar.armor); view.armorValue.style.fontSize = playerCount > 12 ? 6 : playerCount > 8 ? 7 : 8; view.armorValue.position.set(armorX, barY + healthBar.height / 2); view.armorValue.visible = !obscured;
+  } else view.armorValue.visible = false;
   view.commandBuffer.visible = !obscured && player.characterId === 'napoleon' && player.commandBuffer.length > 0;
-  view.commandBuffer.text = `指令 ${player.commandBuffer}`; view.commandBuffer.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 9 : 11; view.commandBuffer.position.set(0, 4 - portraitHeight);
+  view.commandBuffer.text = `指令 ${player.commandBuffer}`; view.commandBuffer.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 9 : 11; view.commandBuffer.position.set(0, barY - 3);
   view.name.text = obscured ? '黑暗中的目标' : truncate(player.nickname, playerCount > 12 ? 6 : 12); view.name.style.fontSize = playerCount > 12 ? 8 : playerCount > 8 ? 10 : 12; view.name.position.set(0, 11);
   const resources = Object.values(player.resources).filter((resource) => isResourceVisibleForCharacter(resource.resourceId, player.characterId, resource.current)).sort((a, b) => (resourceById.get(a.resourceId)?.displayOrder ?? 999) - (resourceById.get(b.resourceId)?.displayOrder ?? 999)).map((resource) => `${resourceById.get(resource.resourceId)?.shortName ?? resource.resourceId} ${formatResource(resource.current)}`).join(' · ');
-  const healthLabel = player.characterId === 'inner_guard' ? '装置' : 'HP';
   const roomStatus = playerRoomStatus(player, props.phase).label;
-  view.status.text = obscured ? '状态未知' : player.alive ? `${roomStatus} · ${healthLabel} ${player.currentHp}/${player.maxHp}${resources ? ` · ${resources}` : ''}` : roomStatus; view.status.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
+  view.status.text = obscured ? '状态未知' : player.alive ? `${roomStatus}${resources ? ` · ${resources}` : ''}` : roomStatus; view.status.style.fontSize = playerCount > 12 ? 7 : playerCount > 8 ? 8 : 10; view.status.position.set(0, playerCount > 12 ? 23 : 27);
 }
 
 function installRotationGestures(app: Application, map: CircularMap, reposition: () => void): void {

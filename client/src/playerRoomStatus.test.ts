@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SyncedPlayer } from '@energy-duel/shared';
-import { playerRoomStatus } from './playerRoomStatus';
+import { canSponsorControlledActor, playerRoomStatus } from './playerRoomStatus';
 
 const player = { connected: true, ready: false, submitted: false, alive: true, resultConfirmed: false, isTrainingDummy: false } as SyncedPlayer;
 
@@ -15,5 +15,14 @@ describe('playerRoomStatus', () => {
   it('always gives disconnected state priority', () => {
     expect(playerRoomStatus({ ...player, connected: false, ready: true }, 'waiting')).toEqual({ label: '已断线', tone: 'offline' });
     expect(playerRoomStatus({ ...player, connected: false, resultConfirmed: true }, 'finished').label).toBe('已断线');
+  });
+
+  it('offers Soul sponsorship only for a player converted by the current Chimei', () => {
+    const chimei = { ...player, playerId: 'chimei', characterId: 'chimei', buffs: [] } as SyncedPlayer;
+    const converted = { ...player, playerId: 'target', buffs: [{ buffId: 'converted', sourcePlayerId: 'chimei' }] } as SyncedPlayer;
+    const trainingDummy = { ...player, playerId: 'dummy', isTrainingDummy: true, buffs: [] } as SyncedPlayer;
+    expect(canSponsorControlledActor(chimei, converted)).toBe(true);
+    expect(canSponsorControlledActor(chimei, trainingDummy)).toBe(false);
+    expect(canSponsorControlledActor({ ...chimei, characterId: 'warrior' }, converted)).toBe(false);
   });
 });

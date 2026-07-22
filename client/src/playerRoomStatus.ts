@@ -3,6 +3,12 @@ import type { GamePhase, SyncedPlayer } from '@energy-duel/shared';
 export type PlayerRoomStatusTone = 'positive' | 'waiting' | 'offline' | 'neutral';
 export interface PlayerRoomStatus { label: string; tone: PlayerRoomStatusTone }
 
+export function canSponsorControlledActor(controller: SyncedPlayer | undefined, actor: SyncedPlayer | undefined): boolean {
+  return Boolean(controller && actor && actor.playerId !== controller.playerId
+    && controller.characterId === 'chimei'
+    && actor.buffs.some((buff) => buff.buffId === 'converted' && buff.sourcePlayerId === controller.playerId));
+}
+
 export function playerRoomStatus(player: SyncedPlayer, phase: GamePhase): PlayerRoomStatus {
   if (!player.connected) return { label: '已断线', tone: 'offline' };
   if (phase === 'waiting') {

@@ -23,6 +23,12 @@ describe('readSyncedPlayers', () => {
 
   it('normalizes synchronized terrain and summon objects', () => {
     const objects = [{ objectId: 'dominion:a:2', definitionId: 'dominion', kind: 'terrain' as const, ownerPlayerId: 'a', sourceCharacterId: 'inner_guard', gridIndex: 2, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true }];
-    expect(readSyncedBoardObjects(objects)).toEqual(objects);
+    expect(readSyncedBoardObjects(objects)).toEqual([{ ...objects[0], originGridIndex: 2, movementDirection: 0, moveSpeed: 0, cargo: {} }]);
+  });
+
+  it('normalizes synchronized Lotus cargo maps', () => {
+    const cargo = new Map([['player-2', { energy: 2, charge: 1 }]]);
+    const object = { objectId: 'lotus_seat:player-1', definitionId: 'lotus_seat', kind: 'summon' as const, ownerPlayerId: 'player-1', sourceCharacterId: 'quilon', gridIndex: 3, stacks: 1, currentHp: 8, maxHp: 10, remainingTurns: 0, permanent: true, originGridIndex: 0, movementDirection: 1 as const, moveSpeed: 1, cargo };
+    expect(readSyncedBoardObjects([object as never])[0].cargo).toEqual({ 'player-2': { energy: 2, charge: 1 } });
   });
 });
