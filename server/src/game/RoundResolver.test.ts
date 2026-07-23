@@ -800,6 +800,15 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.buffs?.has('mud_barrier')).toBe(false);
   });
 
+  it('lets ordinary block reduce true damage', () => {
+    const players = roster(['a', 0], ['b', 0]); const attacker = players.get('a')!; const target = players.get('b')!;
+    attacker.characterId = 'ku'; attacker.resources.charge = 2;
+    attacker.buffs = new Set(['tempered']); attacker.buffStacks = { tempered: 1.5 };
+    target.currentHp = target.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'void_pierce', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(target.currentHp).toBe(2);
+  });
+
   it('kills when a level-3 damage source retains at least 1 effective damage after block', () => {
     const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.currentHp = target.maxHp = 2;
@@ -906,10 +915,27 @@ describe('RoundResolver JSON-driven actions', () => {
     try {
       const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
       target.characterId = 'star_god'; target.currentHp = target.maxHp = 2;
-      target.buffs = new Set(['star_body', 'mud_barrier']); target.buffStacks = { star_body: 1, mud_barrier: 1 };
+      target.buffs = new Set(['star_body', 'mud_barrier', 'armor']); target.buffStacks = { star_body: 1, mud_barrier: 1, armor: 2 };
       resolveRound(players, actions(['a', { actionId: piercing.id, targetId: 'b' }], ['b', { actionId: 'charge' }]));
       expect(target.currentHp).toBe(2);
       expect(target.buffs?.has('mud_barrier')).toBe(false);
+      expect(target.buffStacks?.armor).toBe(2);
+    } finally {
+      actionById.delete(piercing.id);
+    }
+  });
+
+  it('lets piercing damage bypass both block and armor', () => {
+    const template = actionById.get('wave')!;
+    const piercing = structuredClone(template) as ActionDefinition;
+    piercing.id = 'test_piercing_block'; piercing.name = '测试穿刺格挡'; piercing.level = 1.5; piercing.damageType = 'piercing';
+    actionById.set(piercing.id, piercing);
+    try {
+      const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+      target.currentHp = target.maxHp = 2; target.buffs = new Set(['armor']); target.buffStacks = { armor: 2 };
+      resolveRound(players, actions(['a', { actionId: piercing.id, targetId: 'b' }], ['b', { actionId: 'defend' }]));
+      expect(target.currentHp).toBe(1);
+      expect(target.buffStacks?.armor).toBe(2);
     } finally {
       actionById.delete(piercing.id);
     }
@@ -1160,6 +1186,54 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(result.summary.filter((line) => line.includes('1 团尼卢火引燃了 1 次'))).toHaveLength(5);
   });
 
+  it('attributes Nilu Fire to Quilon and lets the target oppose it as an attack against Quilon', () => {
+    const players = roster(['q', 0], ['b', 0], ['c', 0]); const quilon = players.get('q')!; const target = players.get('b')!;
+    quilon.characterId = 'quilon'; quilon.currentHp = quilon.maxHp = 2; quilon.gridIndex = 0;
+    target.currentHp = target.maxHp = 2; target.gridIndex = 2; players.get('c')!.gridIndex = 4;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:q:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    resolveRound(players, actions(
+      ['q', { actionId: 'fist', targetId: 'c' }],
+      ['b', { actionId: 'slash', targetId: 'q' }],
+      ['c', { actionId: 'charge' }],
+    ), new Map([[fire.objectId, fire]]));
+    expect(target.currentHp).toBe(2);
+  });
+
+  it('keeps Fire Purification off Quilon and resolves its true damage through block', () => {
+    const players = roster(['q', 1], ['b', 0], ['c', 0]); const quilon = players.get('q')!;
+    quilon.characterId = 'quilon'; quilon.currentHp = quilon.maxHp = 2; quilon.gridIndex = 0;
+    players.get('b')!.currentHp = players.get('b')!.maxHp = 2; players.get('b')!.gridIndex = 2;
+    players.get('c')!.currentHp = players.get('c')!.maxHp = 2; players.get('c')!.gridIndex = 3;
+    const fire: CombatBoardObject = { objectId: 'nilu_fire:q:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+    resolveRound(players, actions(
+      ['q', { actionId: 'fire_purification' }],
+      ['b', { actionId: 'defend' }],
+      ['c', { actionId: 'charge' }],
+    ), new Map([[fire.objectId, fire]]));
+    expect(quilon.currentHp).toBe(2);
+    expect(players.get('b')!.currentHp).toBe(2);
+    expect(players.get('c')!.currentHp).toBe(1);
+  });
+
+  it('stops Fire Purification with Super Defense or Unbroken', () => {
+    for (const defense of ['super_defend', 'unbroken'] as const) {
+      const players = roster(['q', 1], ['b', defense === 'super_defend' ? 1 : 0]); const quilon = players.get('q')!; const target = players.get('b')!;
+      quilon.characterId = 'quilon'; quilon.currentHp = quilon.maxHp = 2; quilon.gridIndex = 0;
+      target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+      if (defense === 'unbroken') target.buffs = new Set(['unbroken']);
+      const fire: CombatBoardObject = { objectId: 'nilu_fire:q:1', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'q', sourceCharacterId: 'quilon', gridIndex: 1, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true };
+      resolveRound(players, actions(['q', { actionId: 'fire_purification' }], ['b', { actionId: defense === 'super_defend' ? 'super_defend' : 'charge' }]), new Map([[fire.objectId, fire]]));
+      expect(target.currentHp).toBe(2);
+    }
+  });
+
+  it('makes Unbroken immune to direct damage outside attack resolution', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('a')!;
+    target.currentHp = target.maxHp = 2; target.buffs = new Set(['unbroken', 'shock']);
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(2);
+  });
+
   it('moves the Lotus Seat once per round, absorbs ceil-halves, slows down, and delivers its cargo', () => {
     const players = roster(['a', 2], ['b', 3]); const actor = players.get('a')!; const target = players.get('b')!;
     actor.characterId = 'quilon'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0; actor.buffs = new Set(['wuyou_awareness']); actor.buffStacks = { wuyou_awareness: 7 };
@@ -1234,7 +1308,7 @@ describe('RoundResolver JSON-driven actions', () => {
       { objectId: 'nilu_fire:a:3', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'a', sourceCharacterId: 'quilon', gridIndex: 3, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true },
       { objectId: 'nilu_fire:b:5', definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: 'b', sourceCharacterId: 'quilon', gridIndex: 5, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true },
     ];
-    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'c' }], ['b', { actionId: 'defend' }], ['c', { actionId: 'charge' }]), new Map(fires.map((fire) => [fire.objectId, fire])));
+    resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'c' }], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }]), new Map(fires.map((fire) => [fire.objectId, fire])));
     expect(target.currentHp).toBe(1);
   });
 

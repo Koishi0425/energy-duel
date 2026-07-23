@@ -57,7 +57,7 @@
     ,{ "id": "unfallen_fortress", "name": "不落要塞", "description": "每回合获得战术优势，并提供 1 级基础格挡。", "color": "#64748b", "scope": "character", "durationTurns": 3 }
     ,{ "id": "attack_forbidden", "name": "全面压制", "description": "下回合不能提交攻击分类技能。", "color": "#dc2626", "scope": "player", "durationTurns": 1 }
     ,{ "id": "inner_guard_devices", "name": "装置", "description": "层数为内卫当前剩余的装置数量。", "color": "#22c55e", "scope": "character" }
-    ,{ "id": "unbroken", "name": "不破", "description": "下一回合免疫所有攻击。", "color": "#f8fafc", "scope": "character", "durationTurns": 1 }
+    ,{ "id": "unbroken", "name": "不破", "description": "下一回合免疫任何伤害。", "color": "#f8fafc", "scope": "character", "durationTurns": 1 }
     ,{ "id": "wuyou_awareness", "name": "无忧觉", "description": "层数记录本局累计获得的气与蓄力；达到 7 后解锁承三身。", "color": "#fbbf24", "scope": "character" }
     ,{ "id": "wuyou_used", "name": "无忧觉已应验", "description": "本局已经触发过无忧觉的复生。", "color": "#92400e", "scope": "character" }
     ,{ "id": "bodhisattva_debate", "name": "菩萨辩", "description": "攻击等级提高 0.5；拳与斩触发双段攻击。", "color": "#f97316", "scope": "character" }
@@ -98,18 +98,23 @@
   "boardObjects": [
     { "id": "dominion", "name": "国度", "kind": "terrain", "color": "#8b5cf6", "description": "内卫损失装置时生成的永久场地；位于此地块的其他玩家会受到坍缩恐惧的国度伤害。", "displayMode": "marker", "sourceLabel": "使役邪魔" },
     { "id": "nilu_fire", "name": "尼卢火", "kind": "terrain", "color": "#ef4444", "description": "奎隆布置的永久地块效果；攻击结算时灼烧自身及相邻地块，并为奎隆降低伤害、抵抗负面状态。治疗可以将其熄灭。", "displayMode": "marker" },
-    { "id": "lotus_seat", "name": "托生莲座", "kind": "summon", "color": "#f59e0b", "description": "沿选定方向移动，吸收途经玩家的一半气与蓄力；返回起点后将携带资源交给奎隆。", "displayMode": "health", "defaultAssetId": "portrait_default" }
+    { "id": "lotus_seat", "name": "托生莲座", "kind": "summon", "color": "#f59e0b", "description": "沿选定方向移动，吸收途经玩家的一半气与蓄力；返回起点后将携带资源交给奎隆。", "displayMode": "health", "defaultAssetId": "portrait_lotus_seat" }
   ],
   "assets": [
-    { "id": "portrait_default", "url": "/assets/characters/default_character/base/portrait.884a7ba26363.webp", "previewUrl": "/assets/characters/default_character/base/preview.bb92b1de8d4c.webp" },
-    { "id": "portrait_jiaosila", "url": "/assets/characters/jiaosila/base/portrait.153d229952de.webp", "previewUrl": "/assets/characters/jiaosila/base/preview.dfbd8b393593.webp" },
-    { "id": "portrait_gonggang", "url": "/assets/characters/gonggang/base/portrait.44972cc2054f.webp", "previewUrl": "/assets/characters/gonggang/base/preview.b1fba7294e84.webp" },
-    { "id": "portrait_regent", "url": "/assets/characters/regent/base/portrait.7fa8b1a67080.webp", "previewUrl": "/assets/characters/regent/base/preview.b5563c916cbd.webp" },
-    { "id": "portrait_pikachu", "url": "/assets/characters/pikachu/base/portrait.872aee1c1cba.webp", "previewUrl": "/assets/characters/pikachu/base/preview.80073ba49a65.webp" },
-    { "id": "portrait_li_chungang", "url": "/assets/characters/li_chungang/base/portrait.74ece49c2415.webp", "previewUrl": "/assets/characters/li_chungang/base/preview.515882385239.webp" },
-    { "id": "portrait_ao", "url": "/assets/characters/ao/base/portrait.003a6ab6f7fd.webp", "previewUrl": "/assets/characters/ao/base/preview.e609494562fa.webp" },
-    { "id": "portrait_nightmare", "url": "/assets/characters/nightmare/base/portrait.4579ba994559.webp", "previewUrl": "/assets/characters/nightmare/base/preview.fedab9a6e174.webp" },
-    { "id": "portrait_mudrock", "url": "/assets/characters/mudrock/base/portrait.166314ac6aaf.webp", "previewUrl": "/assets/characters/mudrock/base/preview.3801d1b3aed3.webp" }
+    { "id": "portrait_default", "url": "/assets/characters/default_character/base/portrait.14862b07c23f.webp", "previewUrl": "/assets/characters/default_character/base/preview.065ec7499b97.webp" },
+    { "id": "portrait_jiaosila", "url": "/assets/characters/jiaosila/base/portrait.083ac891043f.webp", "previewUrl": "/assets/characters/jiaosila/base/preview.80db4c74a348.webp" },
+    { "id": "portrait_gonggang", "url": "/assets/characters/gonggang/base/portrait.ccf3d83f1fa7.webp", "previewUrl": "/assets/characters/gonggang/base/preview.af6fd27a585a.webp" },
+    { "id": "portrait_regent", "url": "/assets/characters/regent/base/portrait.c2db54333672.webp", "previewUrl": "/assets/characters/regent/base/preview.30a539cce4d4.webp" },
+    { "id": "portrait_pikachu", "url": "/assets/characters/pikachu/base/portrait.4327adea246b.webp", "previewUrl": "/assets/characters/pikachu/base/preview.978871f5a120.webp" },
+    { "id": "portrait_li_chungang", "url": "/assets/characters/li_chungang/base/portrait.a1e927f537bd.webp", "previewUrl": "/assets/characters/li_chungang/base/preview.9be7e65cd4dc.webp" },
+    { "id": "portrait_ao", "url": "/assets/characters/ao/base/portrait.7ce9deea4365.webp", "previewUrl": "/assets/characters/ao/base/preview.887d3b22e8f1.webp" },
+    { "id": "portrait_nightmare", "url": "/assets/characters/nightmare/base/portrait.376eb49f7376.webp", "previewUrl": "/assets/characters/nightmare/base/preview.6a675378c829.webp" },
+    { "id": "portrait_mudrock", "url": "/assets/characters/mudrock/base/portrait.97d4a7aa04ba.webp", "previewUrl": "/assets/characters/mudrock/base/preview.3d0689f53204.webp" },
+    { "id": "portrait_napoleon", "url": "/assets/characters/napoleon/base/portrait.ee3d260fa651.webp", "previewUrl": "/assets/characters/napoleon/base/preview.5786b87c9637.webp" },
+    { "id": "portrait_inner_guard", "url": "/assets/characters/inner_guard/base/portrait.2b087fc85931.webp", "previewUrl": "/assets/characters/inner_guard/base/preview.aa332302c10b.webp" },
+    { "id": "portrait_quilon", "url": "/assets/characters/quilon/base/portrait.96451e38ab2d.webp", "previewUrl": "/assets/characters/quilon/base/preview.7950016b6fca.webp" },
+    { "id": "portrait_warrior", "url": "/assets/characters/warrior/base/portrait.195e2dd4b121.webp", "previewUrl": "/assets/characters/warrior/base/preview.db59f47046e1.webp" },
+    { "id": "portrait_lotus_seat", "url": "/assets/characters/lotus_seat/base/portrait.8b769caea8b1.webp", "previewUrl": "/assets/characters/lotus_seat/base/preview.8bbf44f12fc0.webp" }
   ],
   "characters": [
     {
@@ -175,8 +180,8 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "napoleon", "star_god", "ku", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "napoleon", "name": "拿破仑", "defaultAssetId": "portrait_default", "passiveIds": ["napoleon_command"],
-      "forms": [{ "id": "base", "name": "皇帝形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["attack_order", "defense_order", "tactical_order", "nap_strategy_aa", "nap_strategy_ad", "nap_strategy_at", "nap_strategy_da", "nap_strategy_dd", "nap_strategy_dt", "nap_strategy_ta", "nap_strategy_td", "nap_strategy_tt", "nap_strategy_aaa", "nap_strategy_aat", "nap_strategy_ata", "nap_strategy_ddd", "nap_strategy_ddt", "nap_strategy_dad", "nap_strategy_ttt", "nap_strategy_taa", "nap_strategy_tad", "nap_strategy_tta", "nap_strategy_aaaa", "nap_strategy_dddd", "nap_strategy_tttt", "nap_strategy_aadd", "nap_strategy_tata", "nap_strategy_ttaa", "nap_strategy_aaaaa", "nap_strategy_ddddd", "nap_strategy_ttttt", "nap_strategy_tatat"] }],
+      "id": "napoleon", "name": "拿破仑", "defaultAssetId": "portrait_napoleon", "passiveIds": ["napoleon_command"],
+      "forms": [{ "id": "base", "name": "皇帝形态", "defaultAssetId": "portrait_napoleon", "poses": {}, "unlockedActions": ["attack_order", "defense_order", "tactical_order", "nap_strategy_aa", "nap_strategy_ad", "nap_strategy_at", "nap_strategy_da", "nap_strategy_dd", "nap_strategy_dt", "nap_strategy_ta", "nap_strategy_td", "nap_strategy_tt", "nap_strategy_aaa", "nap_strategy_aat", "nap_strategy_ata", "nap_strategy_ddd", "nap_strategy_ddt", "nap_strategy_dad", "nap_strategy_ttt", "nap_strategy_taa", "nap_strategy_tad", "nap_strategy_tta", "nap_strategy_aaaa", "nap_strategy_dddd", "nap_strategy_tttt", "nap_strategy_aadd", "nap_strategy_tata", "nap_strategy_ttaa", "nap_strategy_aaaaa", "nap_strategy_ddddd", "nap_strategy_ttttt", "nap_strategy_tatat"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "star_god", "ku", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
@@ -190,13 +195,13 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "inner_guard", "name": "内卫", "defaultAssetId": "portrait_default", "passiveIds": ["command_demon"],
-      "forms": [{ "id": "base", "name": "邪魔护卫", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "dissipation", "collapsing_fear", "transform"] }],
+      "id": "inner_guard", "name": "内卫", "defaultAssetId": "portrait_inner_guard", "passiveIds": ["command_demon"],
+      "forms": [{ "id": "base", "name": "邪魔护卫", "defaultAssetId": "portrait_inner_guard", "poses": {}, "unlockedActions": ["charge", "gain_charge", "defend", "steal", "double_steal", "chop", "super_defend", "dissipation", "collapsing_fear", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "quilon", "name": "奎隆", "defaultAssetId": "portrait_default", "passiveIds": ["wuyou_awareness"],
-      "forms": [{ "id": "base", "name": "摩诃萨埵权化", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "breathing_method", "five_precepts", "fire_purification", "three_bodies", "transform"] }],
+      "id": "quilon", "name": "奎隆", "defaultAssetId": "portrait_quilon", "passiveIds": ["wuyou_awareness"],
+      "forms": [{ "id": "base", "name": "摩诃萨埵权化", "defaultAssetId": "portrait_quilon", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "breathing_method", "five_precepts", "fire_purification", "three_bodies", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "chimei", "warrior"], "transformationCost": {}
     },
     {
@@ -205,8 +210,8 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "quilon", "warrior"], "transformationCost": {}
     },
     {
-      "id": "warrior", "name": "战士", "defaultAssetId": "portrait_default", "passiveIds": ["tear_passive"],
-      "forms": [{ "id": "base", "name": "铁甲重装", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "bleed", "taunt", "tremble", "molten_fist", "dismantle", "bully", "regain_spirit", "dominate", "blood_wall", "shred", "body_slam", "transform"] }],
+      "id": "warrior", "name": "战士", "defaultAssetId": "portrait_warrior", "passiveIds": ["tear_passive"],
+      "forms": [{ "id": "base", "name": "铁甲重装", "defaultAssetId": "portrait_warrior", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "bleed", "taunt", "tremble", "molten_fist", "dismantle", "bully", "regain_spirit", "dominate", "blood_wall", "shred", "body_slam", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "quilon", "chimei"], "transformationCost": {}
     }
   ],
@@ -219,7 +224,7 @@
     { "id": "steal", "name": "凹", "category": "base", "description": "选择 1 名其他存活玩家；若该玩家本回合使用气，则阻止其获得该气，并使自身获得 1 气；多个玩家凹同一目标时均可获得气。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "steal" }], "vfxId": "steal" },
     { "id": "double_steal", "name": "紫翼双凹", "category": "base", "description": "在其他存活玩家中选择 2 次，每次按凹结算；可以重复选择同一名玩家，若两次均选择同一名出气玩家，第二次额外从目标已有气中扣除 1 气，最低扣至 0。", "cost": {}, "target": { "mode": "multiple_enemies", "maxTargets": 2 }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "double_steal" }], "vfxId": "double_steal" },
     { "id": "chop", "name": "剁", "category": "base", "description": "取消本回合的所有凹；每名使用凹的玩家损失 1 个健康状态。", "cost": {}, "target": { "mode": "all_enemies" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "chop" }], "vfxId": "emoji_chop" },
-    { "id": "super_defend", "name": "超防", "category": "defense", "description": "消耗 1 气，本回合免疫任何攻击。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 4, "level": 999, "effects": [{ "handler": "super_defend" }], "vfxId": "super_shield" },
+    { "id": "super_defend", "name": "超防", "category": "defense", "description": "消耗 1 气，本回合免疫任何伤害。", "cost": { "energy": 1 }, "target": { "mode": "none" }, "speedPriority": 4, "level": 999, "effects": [{ "handler": "super_defend" }], "vfxId": "super_shield" },
     { "id": "heal", "name": "治疗", "category": "special", "description": "恢复一个健康状态；出招时处于脆弱状态。场上有尼卢火时，可改为选择该地块并将其熄灭。", "cost": {}, "target": { "mode": "none" }, "optionalGridTarget": true, "speedPriority": 0, "level": 0, "effects": [{ "handler": "heal" }], "vfxId": "heal" },
     { "id": "transform", "name": "变身", "category": "special", "description": "切换为其他已解锁角色；消耗由目标角色配置决定。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 4, "level": 0, "effects": [{ "handler": "transform" }], "vfxId": "transform_particles" },
     { "id": "atomic_breath", "name": "原子吐息", "category": "attack", "description": "娇斯拉专属的 3 级攻击。", "cost": { "energy": 2, "charge": 1 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 3, "effects": [{ "handler": "atomic_breath" }], "vfxId": "atomic_breath" },

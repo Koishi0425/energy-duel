@@ -56,7 +56,7 @@ export class CircularMap extends Container {
     validateViewport(width, height);
     this.viewportWidth = width;
     this.viewportHeight = height;
-    this.radius = Math.max(48, Math.min(width, height) * 0.34);
+    this.radius = Math.max(48, Math.min(width, height) * 0.36);
     this.hasLayout = true;
     this.boardLayer.position.set(width / 2, height / 2);
     this.layoutCells();
@@ -91,7 +91,7 @@ export class CircularMap extends Container {
 
   private layoutCells(): void {
     const arcLength = (Math.PI * 2 * this.radius) / this.gridCount;
-    this.cellRadius = Math.max(11, Math.min(28, arcLength * 0.28));
+    this.cellRadius = Math.max(11, Math.min(32, arcLength * 0.32));
     this.cells.forEach((cell, index) => {
       const angle = (Math.PI * 2 * index) / this.gridCount;
       cell.position.set(this.radius * Math.cos(angle), this.radius * Math.sin(angle));

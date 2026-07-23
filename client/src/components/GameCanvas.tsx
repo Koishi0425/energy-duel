@@ -5,6 +5,7 @@ import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 import { HEALTH_BAR_COLORS, unitHealthBarModel } from '../game/unitHealthBar';
 import { boardUnitSlot, lotusSeatBoardStatus } from '../game/lotusSeatBoard';
+import { boardPortraitBaseHeight, boardPortraitSize, type BoardUnitKind } from '../game/boardVisualSizing';
 import { playerRoomStatus } from '../playerRoomStatus';
 
 interface ScreenPoint { x: number; y: number }
@@ -150,23 +151,23 @@ export default function GameCanvas(props: Props) {
           || propsRef.current.boardObjects.some((candidate) => candidate.kind === 'summon' && candidate.gridIndex === object.gridIndex && candidate.currentHp > 0);
         const terrainAtCell = propsRef.current.boardObjects.filter((candidate) => candidate.kind === 'terrain' && candidate.gridIndex === object.gridIndex).sort((left, right) => left.objectId.localeCompare(right.objectId));
         const slot = Math.max(0, terrainAtCell.findIndex((candidate) => candidate.objectId === object.objectId));
-        const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
+        const portraitHeight = boardPortraitBaseHeight(propsRef.current.players.length);
         const amount = definition?.displayMode === 'stacks' && object.stacks > 1 ? ` ×${object.stacks}` : '';
         view.label.anchor.set(0.5, 1); view.label.text = `${definition?.name ?? object.definitionId}${amount}`;
         const labelY = occupied ? -portraitHeight - 27 - slot * 15 : -11 - slot * 15;
         view.label.position.set(0, labelY); view.overlayHit.roundRect(-38, labelY - 16, 76, 19, 4).fill({ color: 0x000000, alpha: 0.001 });
         view.root.alpha = 1;
       } else {
-        const portraitHeight = propsRef.current.players.length > 12 ? 44 : propsRef.current.players.length > 8 ? 54 : 76;
+        const portraitHeight = boardPortraitBaseHeight(propsRef.current.players.length);
         const owner = propsRef.current.players.find((player) => player.playerId === object.ownerPlayerId);
-        view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
+        applyPortraitSize(view.portrait, propsRef.current.players.length, 'summon'); view.portrait.position.set(0, 8);
         const targetable = propsRef.current.targeting && propsRef.current.targetableBoardObjectIds?.includes(object.objectId);
         view.ring.ellipse(0, 7, portraitHeight * 0.34, Math.max(7, portraitHeight * 0.11)).fill({ color: owner?.color ?? color, alpha: 0.3 }).stroke({ color: targetable ? 0x55f2b0 : color, width: targetable ? 5 : 3 });
         const asset = definition?.defaultAssetId ? assetById.get(definition.defaultAssetId) : undefined;
         const assetUrl = asset?.previewUrl ?? asset?.url ?? FALLBACK_PORTRAIT_URL;
         if (assetUrl !== view.assetUrl) {
           view.assetUrl = assetUrl;
-          void loadTrimmedTexture(assetUrl).then((texture) => { if (view?.assetUrl === assetUrl) view.portrait.texture = texture; }).catch(() => { view!.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
+          void loadTrimmedTexture(assetUrl).then((texture) => { if (view?.assetUrl === assetUrl) { view.portrait.texture = texture; applyPortraitSize(view.portrait, propsRef.current.players.length, 'summon'); } }).catch(() => { view!.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); applyPortraitSize(view!.portrait, propsRef.current.players.length, 'summon'); });
         }
         view.label.anchor.set(0.5, 0); view.label.text = definition?.name ?? object.definitionId; view.label.position.set(0, 11);
         view.status.text = object.maxHp > 0 ? `HP ${formatResource(object.currentHp)}/${formatResource(object.maxHp)}${owner ? ` · ${truncate(owner.nickname, 8)}` : ''}` : owner ? `归属 ${truncate(owner.nickname, 8)}` : '召唤物';
@@ -299,6 +300,7 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
   root.on('pointermove', (event: FederatedPointerEvent) => { const player = currentPlayer(); if (player) propsRef.current.onPlayerHover?.(player, { x: event.clientX, y: event.clientY }); });
   root.on('pointerout', () => propsRef.current.onPlayerHover?.(null));
   root.on('pointertap', () => {
+    if (propsRef.current.gridTargeting) return;
     const player = currentPlayer(); if (!player) return;
     if (propsRef.current.targeting && propsRef.current.targetablePlayerIds?.includes(player.playerId)) propsRef.current.onPlayerSelect?.(player);
     else if (!propsRef.current.targeting) propsRef.current.onPlayerInspect?.(player);
@@ -307,12 +309,13 @@ function createTokenView(playerId: string, propsRef: React.MutableRefObject<Prop
 }
 
 function updateTokenView(view: TokenView, player: SyncedPlayer, playerCount: number, props: Props): void {
-  const portraitHeight = playerCount > 12 ? 44 : playerCount > 8 ? 54 : 76;
-  view.portrait.height = portraitHeight; view.portrait.width = portraitHeight * 0.78; view.portrait.position.set(0, 8);
+  const portraitHeight = boardPortraitBaseHeight(playerCount);
+  applyPortraitSize(view.portrait, playerCount, 'player'); view.portrait.position.set(0, 8);
+  view.root.eventMode = props.gridTargeting ? 'none' : 'static'; view.root.cursor = props.gridTargeting ? 'default' : 'pointer';
   const assetUrl = resolvePortraitPreviewUrl(player.characterId, player.currentFormId);
   if (assetUrl !== view.assetUrl) {
     view.assetUrl = assetUrl;
-    void loadTrimmedTexture(assetUrl).then((texture) => { if (view.assetUrl === assetUrl) view.portrait.texture = texture; }).catch(() => { view.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); });
+    void loadTrimmedTexture(assetUrl).then((texture) => { if (view.assetUrl === assetUrl) { view.portrait.texture = texture; applyPortraitSize(view.portrait, playerCount, 'player'); } }).catch(() => { view.portrait.texture = Texture.from(FALLBACK_PORTRAIT_URL); applyPortraitSize(view.portrait, playerCount, 'player'); });
   }
   const targetable = props.targeting && props.targetablePlayerIds?.includes(player.playerId);
   const selected = props.selectedTargetIds?.includes(player.playerId);
@@ -367,6 +370,11 @@ function installRotationGestures(app: Application, map: CircularMap, reposition:
 }
 
 const trimmedTextureCache = new Map<string, Promise<Texture>>();
+function applyPortraitSize(sprite: Sprite, playerCount: number, kind: BoardUnitKind): void {
+  const size = boardPortraitSize(sprite.texture.width, sprite.texture.height, playerCount, kind);
+  sprite.width = size.width; sprite.height = size.height;
+}
+
 function loadTrimmedTexture(url: string): Promise<Texture> {
   const cached = trimmedTextureCache.get(url); if (cached) return cached;
   const promise = new Promise<Texture>((resolve, reject) => {
@@ -425,7 +433,7 @@ function animateResolutionStep(app: Application, layer: Container, step: Resolut
     }
     if (actor.transformCharacterId) {
       const view = views.get(actor.playerId); const character = characterById.get(actor.transformCharacterId); const assetId = character?.forms[0]?.defaultAssetId; const asset = assetId ? assetById.get(assetId) : undefined; const url = asset?.previewUrl ?? asset?.url;
-      if (view && url) void loadTrimmedTexture(url).then((texture) => { view.portrait.texture = texture; view.assetUrl = url; });
+      if (view && url) void loadTrimmedTexture(url).then((texture) => { view.portrait.texture = texture; view.assetUrl = url; applyPortraitSize(view.portrait, players.length, 'player'); });
     }
   }
   const start = performance.now();

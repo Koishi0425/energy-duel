@@ -10,9 +10,9 @@ describe('CircularMap', () => {
   it('places index zero at the right and increases clockwise', () => {
     const map = new CircularMap(2);
     map.resize(400, 300);
-    expect(map.getGridCoordinates(0)).toEqual({ x: 302, y: 150 });
+    expect(map.getGridCoordinates(0)).toEqual({ x: 308, y: 150 });
     expect(map.getGridCoordinates(1).x).toBeCloseTo(200);
-    expect(map.getGridCoordinates(1).y).toBeCloseTo(252);
+    expect(map.getGridCoordinates(1).y).toBeCloseTo(258);
   });
 
   it('keeps every cell on the same radius', () => {
@@ -49,7 +49,7 @@ describe('CircularMap', () => {
     map.setViewRotation(Math.PI / 2);
     expect(map.rotationRadians).toBeCloseTo(Math.PI / 2);
     expect(map.getGridCoordinates(0).x).toBeCloseTo(200);
-    expect(map.getGridCoordinates(0).y).toBeCloseTo(252);
+    expect(map.getGridCoordinates(0).y).toBeCloseTo(258);
     expect(map.gridCount).toBe(4);
   });
 
@@ -60,8 +60,8 @@ describe('CircularMap', () => {
     map.resize(600, 400);
     expect(map.rotationRadians).toBeCloseTo(Math.PI / 4);
     const point = map.getGridCoordinates(0);
-    expect(point.x).toBeCloseTo(300 + 136 * Math.SQRT1_2);
-    expect(point.y).toBeCloseTo(200 + 136 * Math.SQRT1_2);
+    expect(point.x).toBeCloseTo(300 + 144 * Math.SQRT1_2);
+    expect(point.y).toBeCloseTo(200 + 144 * Math.SQRT1_2);
   });
 
   it('numbers cells and only emits clicks for highlighted destinations', () => {

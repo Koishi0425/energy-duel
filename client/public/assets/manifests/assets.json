@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-16T06:11:17.090Z",
+  "generatedAt": "2026-07-23T03:41:26.449Z",
   "assets": [
     {
       "id": "portrait_ao",
@@ -8,10 +8,10 @@
       "characterId": "ao",
       "formId": "base",
       "name": "凹",
-      "url": "/assets/characters/ao/base/portrait.003a6ab6f7fd.webp",
-      "previewUrl": "/assets/characters/ao/base/preview.e609494562fa.webp",
-      "bytes": 15798,
-      "previewBytes": 5594
+      "url": "/assets/characters/ao/base/portrait.7ce9deea4365.webp",
+      "previewUrl": "/assets/characters/ao/base/preview.887d3b22e8f1.webp",
+      "bytes": 20086,
+      "previewBytes": 6264
     },
     {
       "id": "portrait_default",
@@ -19,10 +19,10 @@
       "characterId": "default_character",
       "formId": "base",
       "name": "初始角色",
-      "url": "/assets/characters/default_character/base/portrait.884a7ba26363.webp",
-      "previewUrl": "/assets/characters/default_character/base/preview.bb92b1de8d4c.webp",
-      "bytes": 13856,
-      "previewBytes": 4992
+      "url": "/assets/characters/default_character/base/portrait.14862b07c23f.webp",
+      "previewUrl": "/assets/characters/default_character/base/preview.065ec7499b97.webp",
+      "bytes": 17594,
+      "previewBytes": 5432
     },
     {
       "id": "portrait_gonggang",
@@ -30,10 +30,21 @@
       "characterId": "gonggang",
       "formId": "base",
       "name": "贡刚",
-      "url": "/assets/characters/gonggang/base/portrait.44972cc2054f.webp",
-      "previewUrl": "/assets/characters/gonggang/base/preview.b1fba7294e84.webp",
-      "bytes": 23684,
-      "previewBytes": 7978
+      "url": "/assets/characters/gonggang/base/portrait.ccf3d83f1fa7.webp",
+      "previewUrl": "/assets/characters/gonggang/base/preview.af6fd27a585a.webp",
+      "bytes": 36360,
+      "previewBytes": 10850
+    },
+    {
+      "id": "portrait_inner_guard",
+      "type": "character-portrait",
+      "characterId": "inner_guard",
+      "formId": "base",
+      "name": "内卫",
+      "url": "/assets/characters/inner_guard/base/portrait.2b087fc85931.webp",
+      "previewUrl": "/assets/characters/inner_guard/base/preview.aa332302c10b.webp",
+      "bytes": 60360,
+      "previewBytes": 15332
     },
     {
       "id": "portrait_jiaosila",
@@ -41,10 +52,10 @@
       "characterId": "jiaosila",
       "formId": "base",
       "name": "娇斯拉",
-      "url": "/assets/characters/jiaosila/base/portrait.153d229952de.webp",
-      "previewUrl": "/assets/characters/jiaosila/base/preview.dfbd8b393593.webp",
-      "bytes": 20350,
-      "previewBytes": 6838
+      "url": "/assets/characters/jiaosila/base/portrait.083ac891043f.webp",
+      "previewUrl": "/assets/characters/jiaosila/base/preview.80db4c74a348.webp",
+      "bytes": 23594,
+      "previewBytes": 7054
     },
     {
       "id": "portrait_li_chungang",
@@ -52,10 +63,21 @@
       "characterId": "li_chungang",
       "formId": "base",
       "name": "李淳罡",
-      "url": "/assets/characters/li_chungang/base/portrait.74ece49c2415.webp",
-      "previewUrl": "/assets/characters/li_chungang/base/preview.515882385239.webp",
-      "bytes": 38124,
-      "previewBytes": 12610
+      "url": "/assets/characters/li_chungang/base/portrait.a1e927f537bd.webp",
+      "previewUrl": "/assets/characters/li_chungang/base/preview.9be7e65cd4dc.webp",
+      "bytes": 38298,
+      "previewBytes": 13062
+    },
+    {
+      "id": "portrait_lotus_seat",
+      "type": "character-portrait",
+      "characterId": "lotus_seat",
+      "formId": "base",
+      "name": "lotus_seat",
+      "url": "/assets/characters/lotus_seat/base/portrait.8b769caea8b1.webp",
+      "previewUrl": "/assets/characters/lotus_seat/base/preview.8bbf44f12fc0.webp",
+      "bytes": 47842,
+      "previewBytes": 14438
     },
     {
       "id": "portrait_mudrock",
@@ -63,10 +85,21 @@
       "characterId": "mudrock",
       "formId": "base",
       "name": "泥岩",
-      "url": "/assets/characters/mudrock/base/portrait.166314ac6aaf.webp",
-      "previewUrl": "/assets/characters/mudrock/base/preview.3801d1b3aed3.webp",
-      "bytes": 100618,
-      "previewBytes": 22354
+      "url": "/assets/characters/mudrock/base/portrait.97d4a7aa04ba.webp",
+      "previewUrl": "/assets/characters/mudrock/base/preview.3d0689f53204.webp",
+      "bytes": 96850,
+      "previewBytes": 20992
+    },
+    {
+      "id": "portrait_napoleon",
+      "type": "character-portrait",
+      "characterId": "napoleon",
+      "formId": "base",
+      "name": "拿破仑",
+      "url": "/assets/characters/napoleon/base/portrait.ee3d260fa651.webp",
+      "previewUrl": "/assets/characters/napoleon/base/preview.5786b87c9637.webp",
+      "bytes": 69406,
+      "previewBytes": 15510
     },
     {
       "id": "portrait_nightmare",
@@ -74,10 +107,10 @@
       "characterId": "nightmare",
       "formId": "base",
       "name": "梦魇",
-      "url": "/assets/characters/nightmare/base/portrait.4579ba994559.webp",
-      "previewUrl": "/assets/characters/nightmare/base/preview.fedab9a6e174.webp",
-      "bytes": 120470,
-      "previewBytes": 29414
+      "url": "/assets/characters/nightmare/base/portrait.376eb49f7376.webp",
+      "previewUrl": "/assets/characters/nightmare/base/preview.6a675378c829.webp",
+      "bytes": 120840,
+      "previewBytes": 29612
     },
     {
       "id": "portrait_pikachu",
@@ -85,10 +118,21 @@
       "characterId": "pikachu",
       "formId": "base",
       "name": "皮卡丘",
-      "url": "/assets/characters/pikachu/base/portrait.872aee1c1cba.webp",
-      "previewUrl": "/assets/characters/pikachu/base/preview.80073ba49a65.webp",
-      "bytes": 86076,
-      "previewBytes": 19230
+      "url": "/assets/characters/pikachu/base/portrait.4327adea246b.webp",
+      "previewUrl": "/assets/characters/pikachu/base/preview.978871f5a120.webp",
+      "bytes": 75068,
+      "previewBytes": 17182
+    },
+    {
+      "id": "portrait_quilon",
+      "type": "character-portrait",
+      "characterId": "quilon",
+      "formId": "base",
+      "name": "奎隆",
+      "url": "/assets/characters/quilon/base/portrait.96451e38ab2d.webp",
+      "previewUrl": "/assets/characters/quilon/base/preview.7950016b6fca.webp",
+      "bytes": 139496,
+      "previewBytes": 32010
     },
     {
       "id": "portrait_regent",
@@ -96,10 +140,21 @@
       "characterId": "regent",
       "formId": "base",
       "name": "储君",
-      "url": "/assets/characters/regent/base/portrait.7fa8b1a67080.webp",
-      "previewUrl": "/assets/characters/regent/base/preview.b5563c916cbd.webp",
-      "bytes": 101302,
-      "previewBytes": 24584
+      "url": "/assets/characters/regent/base/portrait.c2db54333672.webp",
+      "previewUrl": "/assets/characters/regent/base/preview.30a539cce4d4.webp",
+      "bytes": 94756,
+      "previewBytes": 22470
+    },
+    {
+      "id": "portrait_warrior",
+      "type": "character-portrait",
+      "characterId": "warrior",
+      "formId": "base",
+      "name": "战士",
+      "url": "/assets/characters/warrior/base/portrait.195e2dd4b121.webp",
+      "previewUrl": "/assets/characters/warrior/base/preview.db59f47046e1.webp",
+      "bytes": 59308,
+      "previewBytes": 15246
     },
     {
       "id": "nameplate-13a9f90a2c",

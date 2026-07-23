@@ -78,6 +78,9 @@ Run commands from the repository root:
 - `npm run build` builds both workspaces.
 - `npm run assets:optimize` rebuilds deployable, content-hashed WebP assets and
   `client/public/assets/manifests/assets.json` from `art-source/runtime-imports/`.
+- `npm run assets:optimize:characters` rebuilds only character and summon
+  portraits while preserving generated nameplates, title badges, and profile
+  asset configuration.
 - `npm run typecheck` type-checks both workspaces without emitting files.
 - `npm test` runs all Vitest suites.
 - `npm run docker:build`, `npm run docker:up`, `npm run docker:logs`, and
@@ -192,7 +195,9 @@ Run commands from the repository root:
   Deify selects its target, X, and flexible payment after actions are revealed; successful
   conversion starts next round, delegates that actor to the source Chimei, and ends when
   authoritative cumulative action cost reaches X. Controller-funded resources spend Soul
-  one-for-one and never contribute to that cumulative cost.
+  one-for-one and never contribute to that cumulative cost. Unless a definition states
+  otherwise, damage caused by a summon or terrain belongs to its owner and resolves as
+  that owner's attack for target, speed, and level opposition.
   Buff definitions may grant actions outside the current form tree; client and
   server derive those actions from the same `grantedActionIds`. Resource values
   may be fractional, and flexible-cost actions submit an explicit serializable

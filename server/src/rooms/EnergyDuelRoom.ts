@@ -684,7 +684,7 @@ export class EnergyDuelRoom extends Room {
     for (const player of this.state.players.values()) {
       const converted = Array.from(player.buffs.values()).find((buff) => buff.buffId === 'converted');
       const source = converted && this.state.players.get(converted.sourcePlayerId);
-      if (converted && source?.alive && source.characterId === 'chimei') player.controllerPlayerId = source.playerId;
+      if (converted && source?.alive && source.characterId === 'chimei') player.controllerPlayerId = source.isTrainingDummy ? source.controllerPlayerId : source.playerId;
       else {
         player.controllerPlayerId = player.isTrainingDummy ? player.controllerPlayerId : player.playerId;
         if (converted) {

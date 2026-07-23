@@ -102,6 +102,7 @@ const roundBoardObjects = new WeakMap<CombatPlayer, Map<string, CombatBoardObjec
 const roundBoardCellCounts = new WeakMap<CombatPlayer, number>();
 const roundPlayers = new WeakMap<CombatPlayer, Map<string, CombatPlayer>>();
 const roundFragilePlayers = new WeakMap<CombatPlayer, Set<string>>();
+const roundDamageImmunePlayers = new WeakMap<CombatPlayer, Set<string>>();
 const pendingWuyouRevives = new WeakSet<CombatPlayer>();
 const roundLearningTargets = new WeakMap<CombatPlayer, Set<string>>();
 
@@ -224,6 +225,11 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   const summary: string[] = []; const eliminated = new Set<string>();
   const performance = Object.fromEntries(Array.from(players.keys(), (id) => [id, { damageStatesDealt: 0, eliminations: 0, successfulDefenses: 0, recoveryStates: 0 } satisfies RoundPerformance]));
   const aliveAtStart = Array.from(players.values()).filter((player) => player.alive);
+  const damageImmune = new Set(aliveAtStart.filter((player) => primaryEffect(actions.get(player.id)) === 'super_defend' || player.buffs?.has('unbroken')).map((player) => player.id));
+  const immune = new Set([
+    ...damageImmune,
+    ...aliveAtStart.filter((player) => primaryEffect(actions.get(player.id)) === 'soul_capture').map((player) => player.id),
+  ]);
   const convertedAtStart = new Set(aliveAtStart.filter((player) => player.buffs?.has('converted')).map((player) => player.id));
   const resourcesAtSubmission = new Map(aliveAtStart.map((player) => [player.id, Object.values(player.resources).reduce((sum, value) => sum + value, 0)]));
   for (const action of actions.values()) {
@@ -233,7 +239,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   }
   for (const player of aliveAtStart) {
     roundDamageStates.delete(player); pendingWuyouRevives.delete(player); roundBoardObjects.set(player, boardObjects);
-    roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); roundLearningTargets.set(player, new Set()); syncNiluResistance(player);
+    roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); roundLearningTargets.set(player, new Set()); roundDamageImmunePlayers.set(player, damageImmune); syncNiluResistance(player);
   }
   const hpAtStart = new Map(aliveAtStart.map((player) => [player.id, player.currentHp]));
   for (const player of aliveAtStart) if (player.characterId === 'napoleon') {
@@ -266,7 +272,6 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   countMudrockSelections(players, actions);
   const hasChop = aliveAtStart.some((player) => primaryEffect(actions.get(player.id)) === 'chop');
   const hasCut = aliveAtStart.some((player) => primaryEffect(actions.get(player.id)) === 'cut');
-  const immune = new Set(aliveAtStart.filter((player) => ['super_defend', 'soul_capture'].includes(primaryEffect(actions.get(player.id)) ?? '') || player.buffs?.has('unbroken')).map((player) => player.id));
   const fragile = new Set(aliveAtStart.filter((player) => {
     const action = actions.get(player.id); const effect = primaryEffect(action);
     const extinguishesFire = effect === 'heal' && action?.targetGridIndex !== undefined && Array.from(boardObjects.values()).some((object) => object.definitionId === 'nilu_fire' && object.gridIndex === action.targetGridIndex);
@@ -348,7 +353,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     if (!actor.alive || eliminated.has(actor.id) || (pendingWuyouRevives.has(actor) && actor.currentHp <= 0)) { processed.add(actor.id); continue; }
     if (canceledActors.has(actor.id)) { summary.push(`${actor.nickname} 的${definition.name}${canceledReasons.get(actor.id) ?? '被取消'}，未能结算。`); processed.add(actor.id); continue; }
     if (submitted.targetBoardObjectId) {
-      resolveBoardObjectAttack(actor, submitted, definition, boardObjects, players, eliminated, summary, performance);
+      resolveBoardObjectAttack(actor, submitted, definition, boardObjects, players, actions, blockers, immune, fragile, eliminated, darkShelterAbsorbs, summary, performance);
     } else if (effect === 'transform') {
       const previous = actor.characterId; const next = submitted.transformCharacterId ?? actor.characterId; const wasNearDeath = actor.maxHp > 1 && actor.currentHp === 1; if (previous === 'napoleon') removeBuff(actor, 'tactical_advantage'); actor.characterId = next; actor.currentFormId = 'base'; actor.maxHp = next === 'inner_guard' ? 3 : 2; actor.currentHp = wasNearDeath ? 1 : actor.maxHp; actor.commandBuffer = '';
       if (next === 'regent' && !actor.buffs?.has('regent_claimed')) { actor.resources.stars = resourceValue(actor, 'stars') + 3; setBuff(actor, 'regent_claimed'); summary.push(`${actor.nickname} 首次成为储君，获得 3 辉星。`); }
@@ -378,7 +383,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     }
     else if (effect === 'breathing_method') { summonNiluFire(actor, submitted.targetGridIndex, players, summary); }
     else if (effect === 'five_precepts') { resolveFivePrecepts(actor, submitted, definition, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
-    else if (effect === 'fire_purification') { resolveFirePurification(actor, players, eliminated, summary, performance); }
+    else if (effect === 'fire_purification') { resolveFirePurification(actor, definition, players, actions, blockers, immune, fragile, eliminated, darkShelterAbsorbs, summary, performance); }
     else if (effect === 'three_bodies') { summonLotusSeat(actor, submitted.targetGridIndex, players, summary); }
     else if (effect === 'soul_reap') {
       const target = players.get(directTargets(actor, submitted, players)[0]); const amount = target?.buffs?.has('resentment_mark') ? 2 : 1;
@@ -492,7 +497,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
 
     if (preclaimedResources.has(actor.id) && hasPassive(actor, 'practice_makes_perfect')) setBuff(actor, 'ao_mastery', Math.min(4, buffStacks(actor, 'ao_mastery') + 1));
     if (actor.characterId === 'quilon' && definition.category === 'attack' && !['fire_purification', 'five_precepts'].includes(effect)) {
-      triggerNiluFires(actor, actor.buffs?.has('bodhisattva_debate') && ['fist', 'slash'].includes(effect) ? 2 : 1, players, eliminated, summary, performance);
+      triggerNiluFires(actor, definition, actor.buffs?.has('bodhisattva_debate') && ['fist', 'slash'].includes(effect) ? 2 : 1, players, actions, blockers, immune, fragile, eliminated, darkShelterAbsorbs, summary, performance);
     }
     if (effect === 'aoao_divine') removeBuff(actor, 'ao_mastery');
     if (effect === 'sovereign_blade') removeBuff(actor, 'sovereign_blade_active');
@@ -661,7 +666,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   const attackSpeed = attackerAction ? actionEffectSpeed(attacker.id, attackerAction, attacker, 'attack', players, actions) : 0;
   const defenseKeepsUp = Boolean(targetAction
     && actionEffectSpeed(target.id, targetAction, target, 'defense', players, actions) >= attackSpeed);
-  if (target.buffs?.has('unbroken') || (immune.has(target.id) && defenseKeepsUp)) { performance[target.id].successfulDefenses += 1; const immuneName = primaryEffect(targetAction) === 'soul_capture' ? '摄魄' : '超防'; summary.push(`${target.nickname} 的${target.buffs?.has('unbroken') ? '不破' : immuneName}挡住了 ${attacker.nickname}。`); return 'none'; }
+  if (target.buffs?.has('unbroken') || immune.has(target.id)) { performance[target.id].successfulDefenses += 1; const immuneName = primaryEffect(targetAction) === 'soul_capture' ? '摄魄' : '超防'; summary.push(`${target.nickname} 的${target.buffs?.has('unbroken') ? '不破' : immuneName}挡住了 ${attacker.nickname}。`); return 'none'; }
   if (shelter.get(target.id) === attacker.id && defenseKeepsUp) { performance[target.id].successfulDefenses += 1; summary.push(`${target.nickname} 的黑暗庇护吸收了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
   let attackerLevel = rawLevel + (target.buffs?.has('fear') ? 1 : 0);
   let damageLevel = (explicitDamageLevel ?? attack.damageLevel ?? rawLevel) + (target.buffs?.has('fear') ? 1 : 0);
@@ -731,6 +736,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
 
 type DamageOutcome = 'none' | 'shifted' | 'shifted_out' | 'eliminated';
 function damagePlayer(player: CombatPlayer, attackLevel: number, defenseLevel: number, isFragile: boolean, eliminated: Set<string>, forceShift = false, maxOneState = false, selected?: SubmittedAction, lethalHeavyHit = false, sourceGridIndex?: number): DamageOutcome {
+  if (roundDamageImmunePlayers.get(player)?.has(player.id)) return 'none';
   const difference = Math.max(0, attackLevel - niluFireMitigation(player)) - defenseLevel;
   if (forceShift) {
     if (player.characterId === 'inner_guard') return applyInnerGuardLoss(player, player.currentHp, 1, eliminated, sourceGridIndex);
@@ -1053,33 +1059,28 @@ function summonNiluFire(actor: CombatPlayer, gridIndex: number | undefined, play
   summary.push(`${actor.nickname} 在 ${gridIndex} 号地块布置了尼卢火。`);
 }
 
-function triggerNiluFires(actor: CombatPlayer, count: number, players: Map<string, CombatPlayer>, eliminated: Set<string>, summary: string[], performance: Record<string, RoundPerformance>): void {
+function triggerNiluFires(actor: CombatPlayer, triggeringDefinition: ActionDefinition, count: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const fires = niluFires(actor); const cellCount = players.size * 2;
   if (!fires.length) return;
+  const fireAttack = { ...triggeringDefinition, id: 'nilu_fire', name: '尼卢火', damageType: 'true' as const };
   for (let trigger = 0; trigger < count; trigger += 1) {
     for (const target of players.values()) {
-      if (!target.alive) continue;
+      if (!target.alive || target.id === actor.id) continue;
       const overlappingFires = fires.filter((fire) => cellsAround(fire.gridIndex, cellCount, 1).includes(target.gridIndex ?? -1));
       if (!overlappingFires.length) continue;
-      const before = target.currentHp;
-      const outcome = damagePlayer(target, overlappingFires.length * 0.5, 0, false, eliminated, false, true, undefined, false, overlappingFires[0].gridIndex);
-      const states = Math.max(0, before - target.currentHp);
-      if (states > 0) performance[actor.id].damageStatesDealt += states;
-      if (outcome === 'eliminated' || outcome === 'shifted_out') performance[actor.id].eliminations += 1;
+      const level = overlappingFires.length * 0.5;
+      applyAttack(actor, target, fireAttack, level, players, actions, blockers, immune, fragile, eliminated, shelter, cellCount, summary, performance, level);
     }
   }
   summary.push(`${actor.nickname} 的 ${fires.length} 团尼卢火引燃了 ${count} 次。`);
 }
 
-function resolveFirePurification(actor: CombatPlayer, players: Map<string, CombatPlayer>, eliminated: Set<string>, summary: string[], performance: Record<string, RoundPerformance>): void {
+function resolveFirePurification(actor: CombatPlayer, definition: ActionDefinition, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const fires = niluFires(actor); const cellCount = players.size * 2;
   for (const fire of fires) for (const target of players.values()) {
-    if (!target.alive || !cellsAround(fire.gridIndex, cellCount, 2).includes(target.gridIndex ?? -1)) continue;
-    const before = target.currentHp;
-    const outcome = damagePlayer(target, 1.5 + (actor.buffs?.has('bodhisattva_debate') ? 0.5 : 0), 0, false, eliminated, false, true, undefined, false, fire.gridIndex);
-    const states = Math.max(0, before - target.currentHp);
-    if (states > 0) performance[actor.id].damageStatesDealt += states;
-    if (outcome === 'eliminated' || outcome === 'shifted_out') performance[actor.id].eliminations += 1;
+    if (!target.alive || target.id === actor.id || !cellsAround(fire.gridIndex, cellCount, 2).includes(target.gridIndex ?? -1)) continue;
+    const level = 1.5 + (actor.buffs?.has('bodhisattva_debate') ? 0.5 : 0);
+    applyAttack(actor, target, definition, level, players, actions, blockers, immune, fragile, eliminated, shelter, cellCount, summary, performance, level);
   }
   summary.push(fires.length ? `${actor.nickname} 引动 ${fires.length} 团尼卢火施展清火执。` : `${actor.nickname} 使用清火执，但场上没有尼卢火。`);
 }
@@ -1093,7 +1094,7 @@ function resolveFivePrecepts(actor: CombatPlayer, submitted: SubmittedAction, de
   for (const damageLevel of [0.5, 0.5, 1, 1.5, 1.5]) {
     const hit = { ...definition, skillLevel: matchedSkill, damageLevel };
     resolveAttackTargets(actor, submitted, hit, [targetId], matchedSkill, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
-    triggerNiluFires(actor, 1, players, eliminated, summary, performance);
+    triggerNiluFires(actor, definition, 1, players, actions, blockers, immune, fragile, eliminated, shelter, summary, performance);
   }
 }
 
@@ -1142,7 +1143,7 @@ function moveLotusSeats(boardObjects: Map<string, CombatBoardObject>, players: M
   }
 }
 
-function resolveBoardObjectAttack(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, boardObjects: Map<string, CombatBoardObject>, players: Map<string, CombatPlayer>, eliminated: Set<string>, summary: string[], performance: Record<string, RoundPerformance>): void {
+function resolveBoardObjectAttack(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, boardObjects: Map<string, CombatBoardObject>, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const object = submitted.targetBoardObjectId ? boardObjects.get(submitted.targetBoardObjectId) : undefined;
   if (!object || object.definitionId !== 'lotus_seat' || object.currentHp <= 0) { summary.push(`${actor.nickname} 的${definition.name}没有有效的托生莲座目标。`); return; }
   const damage = definition.id === 'five_precepts'
@@ -1150,7 +1151,7 @@ function resolveBoardObjectAttack(actor: CombatPlayer, submitted: SubmittedActio
     : submittedDamageLevel(actor, submitted);
   object.currentHp = Math.max(0, object.currentHp - damage);
   summary.push(`${actor.nickname} 的${definition.name}对托生莲座造成 ${formatLevel(damage)} 点伤害，剩余 ${formatLevel(object.currentHp)} 点生命。`);
-  if (definition.id === 'five_precepts' && actor.characterId === 'quilon') for (let hit = 0; hit < 5; hit += 1) triggerNiluFires(actor, 1, players, eliminated, summary, performance);
+  if (definition.id === 'five_precepts' && actor.characterId === 'quilon') for (let hit = 0; hit < 5; hit += 1) triggerNiluFires(actor, definition, 1, players, actions, blockers, immune, fragile, eliminated, shelter, summary, performance);
   if (object.currentHp > 0) return;
   refundLotusCargo(object, players); boardObjects.delete(object.objectId); summary.push('托生莲座被击毁，携带的资源已经返还给原玩家。');
 }

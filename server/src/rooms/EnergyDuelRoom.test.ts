@@ -145,6 +145,22 @@ describe('EnergyDuelRoom Chimei control', () => {
     expect(room.authorizedActor({ sessionId: 'target' }, 'target')).toBeUndefined();
   });
 
+  it('keeps a real player controllable when the converting Chimei is a host-controlled training dummy', () => {
+    const room = new EnergyDuelRoom() as any; room.state.roomMode = 'training';
+    const host = new PlayerState(); host.playerId = 'host'; host.controllerPlayerId = 'host'; host.alive = true;
+    const dummy = new PlayerState(); dummy.playerId = 'dummy'; dummy.controllerPlayerId = 'host'; dummy.characterId = 'chimei'; dummy.isTrainingDummy = true; dummy.alive = true;
+    const converted = new BuffState(); converted.instanceId = 'host:converted'; converted.buffId = 'converted'; converted.sourcePlayerId = 'dummy';
+    host.buffs.set(converted.instanceId, converted);
+    room.state.players.set(host.playerId, host); room.state.players.set(dummy.playerId, dummy);
+
+    room.syncConvertedControllers();
+
+    expect(host.controllerPlayerId).toBe('host');
+    expect(dummy.controllerPlayerId).toBe('host');
+    expect(room.authorizedActor({ sessionId: 'host' }, 'host')).toBe(host);
+    expect(room.authorizedActor({ sessionId: 'host' }, 'dummy')).toBe(dummy);
+  });
+
   it('preserves the source of a player-scoped conversion buff', () => {
     const room = new EnergyDuelRoom() as any; const current = new MapSchema<BuffState>();
     room.storedBuffs.set('target', new Map());

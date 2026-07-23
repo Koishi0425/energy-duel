@@ -6,13 +6,30 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const sourceRoot = path.join(root, 'art-source', 'runtime-imports');
 const outputRoot = path.join(root, 'client', 'public', 'assets');
+const charactersOnly = process.argv.includes('--characters-only');
 const gameConfig = JSON.parse(await readFile(path.join(root, 'shared', 'config', 'game.json'), 'utf8'));
 const characterNames = new Map(gameConfig.characters.map((character) => [character.id, character.name]));
 
-async function runFfmpeg(input, output, size, lossless = false, quality = size <= 384 ? 84 : 88) {
+async function detectAlphaBounds(input) {
+  const args = ['-hide_banner', '-i', input, '-vf', 'alphaextract,bbox', '-frames:v', '1', '-f', 'null', '-'];
+  let diagnostics = '';
+  await new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    child.stderr.on('data', (chunk) => { diagnostics += chunk; });
+    child.once('error', reject); child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited with ${code}`)));
+  });
+  const match = diagnostics.match(/crop=(\d+):(\d+):(\d+):(\d+)/);
+  if (!match) throw new Error(`Unable to detect visible bounds for ${input}`);
+  return { width: Number(match[1]), height: Number(match[2]), x: Number(match[3]), y: Number(match[4]) };
+}
+
+async function runFfmpeg(input, output, size, lossless = false, quality = size <= 384 ? 84 : 88, visibleBounds) {
   await mkdir(path.dirname(output), { recursive: true });
   const temporary = `${output}.tmp.webp`;
-  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vf', `scale=${size}:${size}:force_original_aspect_ratio=decrease`, '-c:v', 'libwebp', '-compression_level', '6'];
+  const filter = visibleBounds
+    ? `crop=${visibleBounds.width}:${visibleBounds.height}:${visibleBounds.x}:${visibleBounds.y},scale=${Math.round(size * 0.9)}:${Math.round(size * 0.9)}:force_original_aspect_ratio=decrease,pad=${size}:${size}:(ow-iw)/2:(oh-ih)/2:color=0x00000000`
+    : `scale=${size}:${size}:force_original_aspect_ratio=decrease`;
+  const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vf', filter, '-c:v', 'libwebp', '-compression_level', '6'];
   if (lossless) args.push('-lossless', '1'); else args.push('-quality', String(quality), '-preset', 'picture');
   args.push('-pix_fmt', 'yuva420p', temporary);
   await new Promise((resolve, reject) => {
@@ -37,8 +54,9 @@ async function optimizeCharacters() {
   for (const entry of entries.filter((candidate) => candidate.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
     const input = path.join(directory, entry.name, 'portrait.png');
     const destination = path.join(outputRoot, 'characters', entry.name, 'base');
-    const full = await runFfmpeg(input, path.join(destination, 'portrait.webp'), 1024);
-    const preview = await runFfmpeg(input, path.join(destination, 'preview.webp'), 384);
+    const visibleBounds = await detectAlphaBounds(input);
+    const full = await runFfmpeg(input, path.join(destination, 'portrait.webp'), 1024, false, 88, visibleBounds);
+    const preview = await runFfmpeg(input, path.join(destination, 'preview.webp'), 384, false, 84, visibleBounds);
     const id = entry.name === 'default_character' ? 'portrait_default' : `portrait_${entry.name}`;
     assets.push({ id, type: 'character-portrait', characterId: entry.name, formId: 'base', name: characterNames.get(entry.name) ?? entry.name, url: publicUrl(full.path), previewUrl: publicUrl(preview.path), bytes: full.bytes, previewBytes: preview.bytes });
   }
@@ -70,29 +88,41 @@ async function optimizeTitles() {
   return assets;
 }
 
-for (const generatedDirectory of [
-  path.join(outputRoot, 'characters'),
-  path.join(outputRoot, 'profiles', 'nameplates'),
-  path.join(outputRoot, 'profiles', 'titles'),
-  path.join(outputRoot, 'manifests'),
-]) await rm(generatedDirectory, { recursive: true, force: true });
+let existingAssets = [];
+if (charactersOnly) {
+  const manifest = JSON.parse(await readFile(path.join(outputRoot, 'manifests', 'assets.json'), 'utf8'));
+  existingAssets = manifest.assets.filter((asset) => asset.type !== 'character-portrait');
+}
+const generatedDirectories = charactersOnly
+  ? [path.join(outputRoot, 'characters'), path.join(outputRoot, 'manifests')]
+  : [
+      path.join(outputRoot, 'characters'),
+      path.join(outputRoot, 'profiles', 'nameplates'),
+      path.join(outputRoot, 'profiles', 'titles'),
+      path.join(outputRoot, 'manifests'),
+    ];
+for (const generatedDirectory of generatedDirectories) await rm(generatedDirectory, { recursive: true, force: true });
 
-const assets = [...await optimizeCharacters(), ...await optimizeNameplates(), ...await optimizeTitles()];
+const assets = charactersOnly
+  ? [...await optimizeCharacters(), ...existingAssets]
+  : [...await optimizeCharacters(), ...await optimizeNameplates(), ...await optimizeTitles()];
 const manifestDirectory = path.join(outputRoot, 'manifests'); await mkdir(manifestDirectory, { recursive: true });
 await writeFile(path.join(manifestDirectory, 'assets.json'), `${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), assets }, null, 2)}\n`, 'utf8');
-const nameplates = assets.filter((asset) => asset.type === 'nameplate').map((asset) => ({ id: asset.id, name: asset.name, description: '测试期间开放使用。', assetUrl: asset.url, previewUrl: asset.previewUrl }));
-const titleBadges = Object.fromEntries(assets.filter((asset) => asset.type === 'title-badge').map((asset) => [asset.name.toLowerCase(), asset.url]));
-const profileAssets = {
-  version: 1,
-  nameplates,
-  titleRarities: {
-    normal: { name: '普通', assetUrl: titleBadges.normal },
-    bronze: { name: '铜', assetUrl: titleBadges.bronze },
-    silver: { name: '银', assetUrl: titleBadges.silver },
-    gold: { name: '金', assetUrl: titleBadges.gold },
-    rainbow: { name: '彩', assetUrl: titleBadges.rainbow },
-  },
-};
-await writeFile(path.join(root, 'shared', 'config', 'profile-assets.json'), `${JSON.stringify(profileAssets, null, 2)}\n`, 'utf8');
+if (!charactersOnly) {
+  const nameplates = assets.filter((asset) => asset.type === 'nameplate').map((asset) => ({ id: asset.id, name: asset.name, description: '测试期间开放使用。', assetUrl: asset.url, previewUrl: asset.previewUrl }));
+  const titleBadges = Object.fromEntries(assets.filter((asset) => asset.type === 'title-badge').map((asset) => [asset.name.toLowerCase(), asset.url]));
+  const profileAssets = {
+    version: 1,
+    nameplates,
+    titleRarities: {
+      normal: { name: '普通', assetUrl: titleBadges.normal },
+      bronze: { name: '铜', assetUrl: titleBadges.bronze },
+      silver: { name: '银', assetUrl: titleBadges.silver },
+      gold: { name: '金', assetUrl: titleBadges.gold },
+      rainbow: { name: '彩', assetUrl: titleBadges.rainbow },
+    },
+  };
+  await writeFile(path.join(root, 'shared', 'config', 'profile-assets.json'), `${JSON.stringify(profileAssets, null, 2)}\n`, 'utf8');
+}
 const runtimeBytes = assets.reduce((sum, asset) => sum + (asset.bytes ?? 0) + (asset.previewBytes ?? 0), 0);
 console.log(`Optimized ${assets.length} assets (${(runtimeBytes / 1024 / 1024).toFixed(2)} MiB runtime output).`);
