@@ -256,9 +256,11 @@ export interface SyncedPlayer {
   controllerPlayerId: string;
   isTrainingDummy: boolean;
   commandBuffer: string;
+  learnedActionIds: string[];
+  learnedPassiveIds: string[];
 }
 
-export type GamePhase = 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished';
+export type GamePhase = 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'learning' | 'finished';
 export type RoomMode = 'standard' | 'training';
 export type ActionCategory = 'base' | 'attack' | 'defense' | 'resource' | 'special';
 export type TargetMode = 'none' | 'single_enemy' | 'multiple_enemies' | 'all_enemies';
@@ -349,6 +351,23 @@ export interface DeferredActionRequiredMessage {
   flexibleResourceIds?: string[];
   minPower?: number;
   maxPower?: number;
+}
+
+export interface LearningRequiredMessage {
+  learnerPlayerId: string;
+  targetPlayerId: string;
+  targetNickname: string;
+  actionIds: string[];
+  passiveIds: string[];
+}
+
+export interface SubmitLearningMessage {
+  learnerPlayerId?: string;
+  targetPlayerId: string;
+  actionId?: string;
+  passiveId?: string;
+  skip?: boolean;
+  requestId?: string;
 }
 
 export interface ConfigureTrainingActorMessage {

@@ -19,6 +19,7 @@ export function playerRoomStatus(player: SyncedPlayer, phase: GamePhase): Player
     ? { label: '已出招', tone: 'positive' }
     : { label: player.alive ? '思考中' : '已淘汰', tone: player.alive ? 'waiting' : 'neutral' };
   if (phase === 'deferred') return { label: player.alive ? '后发确认' : '已淘汰', tone: player.alive ? 'waiting' : 'neutral' };
+  if (phase === 'learning') return { label: player.alive ? '吞天学习' : '已淘汰', tone: player.alive ? 'waiting' : 'neutral' };
   if (phase === 'resolving') return { label: player.alive ? '结算中' : '已淘汰', tone: 'neutral' };
   return player.resultConfirmed
     ? { label: '已确认结算', tone: 'positive' }

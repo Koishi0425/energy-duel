@@ -4,12 +4,14 @@ interface RawResourceCollection { values(): IterableIterator<SyncedResource> }
 interface RawBuffCollection { values(): IterableIterator<SyncedBuff> }
 export interface RawBoardObjectCollection { values(): IterableIterator<SyncedBoardObject> }
 
-export interface RawSyncedPlayer extends Omit<SyncedPlayer, 'resources' | 'buffs' | 'controllerPlayerId' | 'isTrainingDummy' | 'commandBuffer'> {
+export interface RawSyncedPlayer extends Omit<SyncedPlayer, 'resources' | 'buffs' | 'controllerPlayerId' | 'isTrainingDummy' | 'commandBuffer' | 'learnedActionIds' | 'learnedPassiveIds'> {
   resources?: RawResourceCollection;
   buffs?: RawBuffCollection;
   controllerPlayerId?: string;
   isTrainingDummy?: boolean;
   commandBuffer?: string;
+  learnedActionIds?: Iterable<string>;
+  learnedPassiveIds?: Iterable<string>;
 }
 
 export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined): SyncedPlayer[] {
@@ -51,6 +53,8 @@ export function readSyncedPlayers(players: Iterable<RawSyncedPlayer> | undefined
       controllerPlayerId: player.controllerPlayerId ?? player.playerId,
       isTrainingDummy: player.isTrainingDummy ?? false,
       commandBuffer: player.commandBuffer ?? '',
+      learnedActionIds: Array.from(player.learnedActionIds ?? []),
+      learnedPassiveIds: Array.from(player.learnedPassiveIds ?? []),
     };
   });
 }

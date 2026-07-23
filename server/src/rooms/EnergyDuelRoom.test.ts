@@ -205,3 +205,65 @@ describe('EnergyDuelRoom game reset', () => {
     expect(Array.from(room.state.players.values(), (player: PlayerState) => player.gridIndex)).toEqual([0, 2, 4]);
   });
 });
+
+describe('EnergyDuelRoom Devour learning', () => {
+  function learningRoom() {
+    const room = new EnergyDuelRoom() as any;
+    const learner = new PlayerState(); learner.playerId = 'a'; learner.accountId = 'a'; learner.controllerPlayerId = 'a'; learner.characterId = 'ye_qingxian'; learner.currentFormId = 'base'; learner.alive = true;
+    const target = new PlayerState(); target.playerId = 'b'; target.accountId = 'b'; target.controllerPlayerId = 'b'; target.nickname = '战士'; target.characterId = 'warrior'; target.currentFormId = 'base'; target.alive = false;
+    room.state.players.set('a', learner); room.state.players.set('b', target); room.state.phase = 'learning'; room.state.round = 1;
+    room.prepareLearning({ learningTargets: [{ learnerPlayerId: 'a', targetPlayerId: 'b' }] });
+    return { room, learner, client: { sessionId: 'a', send: vi.fn() } };
+  }
+
+  it('learns one server-offered skill and unlocks it only for Ye Qingxian', () => {
+    const { room, learner, client } = learningRoom();
+    const option = room.pendingLearning.get('a')[0].actionIds[0];
+    room.submitLearning(client, { learnerPlayerId: 'a', targetPlayerId: 'b', actionId: option, requestId: 'learn-1' });
+    expect(Array.from(learner.learnedActionIds)).toContain(option);
+    expect(room.isActionUnlocked(learner, option)).toBe(true);
+    learner.characterId = 'star_god';
+    expect(room.isActionUnlocked(learner, option)).toBe(false);
+    expect(room.state.phase).toBe('choosing');
+    expect(room.state.round).toBe(2);
+  });
+
+  it('allows the learner to explicitly skip the opportunity', () => {
+    const { room, learner, client } = learningRoom();
+    room.submitLearning(client, { learnerPlayerId: 'a', targetPlayerId: 'b', skip: true, requestId: 'skip-1' });
+    expect(learner.learnedActionIds).toHaveLength(0);
+    expect(learner.learnedPassiveIds).toHaveLength(0);
+    expect(room.pendingLearning.size).toBe(0);
+    expect(room.state.phase).toBe('choosing');
+  });
+
+  it('prompts each queued opportunity in order before advancing the round', () => {
+    const { room, learner, client } = learningRoom();
+    const second = new PlayerState(); second.playerId = 'c'; second.accountId = 'c'; second.controllerPlayerId = 'c'; second.nickname = '凹'; second.characterId = 'ao'; second.currentFormId = 'base'; second.alive = false;
+    room.state.players.set('c', second);
+    room.prepareLearning({ learningTargets: [{ learnerPlayerId: 'a', targetPlayerId: 'b' }, { learnerPlayerId: 'a', targetPlayerId: 'c' }] });
+
+    room.submitLearning(client, { learnerPlayerId: 'a', targetPlayerId: 'b', skip: true, requestId: 'skip-first' });
+
+    expect(room.pendingLearning.get('a')).toHaveLength(1);
+    expect(room.pendingLearning.get('a')[0].targetPlayerId).toBe('c');
+    expect(room.state.phase).toBe('learning');
+    expect(room.state.round).toBe(1);
+  });
+
+  it('sends a learning prompt to a training dummy controller and preserves its reconnect seat', async () => {
+    const { room } = learningRoom();
+    const learner = room.state.players.get('a'); learner.playerId = 'dummy'; learner.controllerPlayerId = 'host'; learner.isTrainingDummy = true;
+    room.state.players.delete('a'); room.state.players.set('dummy', learner);
+    room.pendingLearning.clear(); room.pendingLearning.set('dummy', [{ targetPlayerId: 'b', targetNickname: '战士', actionIds: ['bully'], passiveIds: [] }]);
+    const send = vi.fn();
+    room.sendLearningPrompt({ sessionId: 'host', send });
+    expect(send).toHaveBeenCalledWith('learning_required', expect.objectContaining({ learnerPlayerId: 'dummy', targetPlayerId: 'b' }));
+
+    const player = new PlayerState(); player.playerId = 'guest'; player.connected = true; room.state.players.set('guest', player);
+    room.allowReconnection = vi.fn().mockResolvedValue(undefined); room.emitRoomNotice = vi.fn();
+    await room.onDrop({ sessionId: 'guest' });
+    expect(player.connected).toBe(false);
+    expect(room.allowReconnection).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'guest' }), 30);
+  });
+});

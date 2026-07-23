@@ -9,6 +9,7 @@ import {
   type ConfigureTrainingActorMessage,
   type SubmitDeferredTargetsMessage,
   type SubmitActionMessage,
+  type SubmitLearningMessage,
 } from '@energy-duel/shared';
 import { randomUUID } from 'node:crypto';
 import { ArraySchema, MapSchema, Schema, type } from '@colyseus/schema';
@@ -25,6 +26,7 @@ const DEFAULT_CHARACTER_ID = 'default_character';
 const DEFAULT_FORM_ID = 'base';
 const PLAYER_BUFF_SCOPE = '*';
 const RECONNECTION_WINDOW_SECONDS = 30;
+const LEARNING_EXCLUDED_ACTIONS = new Set(['charge', 'gain_charge', 'fist', 'slash', 'defend', 'steal', 'double_steal', 'chop', 'super_defend', 'heal', 'transform']);
 
 export function normalizeInitialTargetIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.length > 0 && value.every((id) => typeof id === 'string') ? value : undefined;
@@ -40,6 +42,13 @@ interface StoredBuff {
   remainingTurns: number;
   permanent: boolean;
   sourcePlayerId: string;
+}
+
+interface PendingLearning {
+  targetPlayerId: string;
+  targetNickname: string;
+  actionIds: string[];
+  passiveIds: string[];
 }
 
 type GamePerformance = Omit<GamePerformanceInput, 'outcome' | 'totalRounds'>;
@@ -80,6 +89,8 @@ export class PlayerState extends Schema {
   @type('string') controllerPlayerId = '';
   @type('boolean') isTrainingDummy = false;
   @type('string') commandBuffer = '';
+  @type(['string']) learnedActionIds = new ArraySchema<string>();
+  @type(['string']) learnedPassiveIds = new ArraySchema<string>();
 }
 
 export class BoardObjectCargoState extends Schema {
@@ -115,7 +126,7 @@ export class RoundLogEntryState extends Schema {
 export class DemoRoomState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
   @type({ map: BoardObjectState }) boardObjects = new MapSchema<BoardObjectState>();
-  @type('string') phase: 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'finished' = 'waiting';
+  @type('string') phase: 'waiting' | 'choosing' | 'deferred' | 'resolving' | 'learning' | 'finished' = 'waiting';
   @type('uint16') round = 0;
   @type('uint16') gameNumber = 0;
   @type('string') hostPlayerId = '';
@@ -134,6 +145,7 @@ export class EnergyDuelRoom extends Room {
   private nextDummyId = 1;
   private readonly gamePerformance = new Map<string, GamePerformance>();
   private currentGameId = '';
+  private readonly pendingLearning = new Map<string, PendingLearning[]>();
 
   static async onAuth(token: string | undefined): Promise<SessionIdentity> {
     const identity = sessionService.validateToken(token);
@@ -162,6 +174,7 @@ export class EnergyDuelRoom extends Room {
     this.onMessage('start_game', (client, payload: { requestId?: string }) => this.startGame(client, payload?.requestId));
     this.onMessage('submit_action', (client, payload: SubmitActionMessage) => this.submitAction(client, payload));
     this.onMessage('submit_deferred_targets', (client, payload: SubmitDeferredTargetsMessage) => this.submitDeferredTargets(client, payload));
+    this.onMessage('submit_learning', (client, payload: SubmitLearningMessage) => this.submitLearning(client, payload));
     this.onMessage('cancel_action', (client, payload: { actorPlayerId?: string; requestId?: string }) => this.cancelAction(client, payload?.requestId, payload?.actorPlayerId));
     this.onMessage('acknowledge_result', (client, payload: { requestId?: string }) => this.acknowledgeResult(client, payload?.requestId));
     this.onMessage('send_emote', (client, payload: { emoteId?: unknown; requestId?: string }) => this.sendEmote(client, payload));
@@ -214,7 +227,7 @@ export class EnergyDuelRoom extends Room {
   async onDrop(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     const isHost = client.sessionId === this.state.hostPlayerId;
-    const activeMatch = ['choosing', 'deferred', 'resolving'].includes(this.state.phase);
+    const activeMatch = ['choosing', 'deferred', 'resolving', 'learning'].includes(this.state.phase);
     if (!player || (!isHost && !activeMatch)) return;
     player.connected = false;
     this.emitRoomNotice('disconnect', player);
@@ -227,6 +240,7 @@ export class EnergyDuelRoom extends Room {
       player.connected = true;
       this.emitRoomNotice('reconnect', player);
       if (this.state.phase === 'deferred') this.sendDeferredPrompt(client);
+      if (this.state.phase === 'learning') this.sendLearningPrompt(client);
     }
   }
 
@@ -247,7 +261,7 @@ export class EnergyDuelRoom extends Room {
     assignGridIndices(this.state.players.values());
     this.emitRoomNotice('leave', leavingPlayer);
     lobbyFeed.publish();
-    if (this.state.phase === 'choosing' || this.state.phase === 'deferred' || this.state.phase === 'resolving') {
+    if (this.state.phase === 'choosing' || this.state.phase === 'deferred' || this.state.phase === 'resolving' || this.state.phase === 'learning') {
       this.actions.clear();
       this.state.phase = 'finished';
       this.state.lastResult = `${leavingPlayer.nickname} 已退出，游戏结束。`;
@@ -265,6 +279,7 @@ export class EnergyDuelRoom extends Room {
       return this.sendError(client, '所有玩家准备后才能开始', requestId, 'start_game');
     }
     this.actions.clear();
+    this.pendingLearning.clear();
     this.gamePerformance.clear();
     this.currentGameId = randomUUID();
     void this.lock().then(() => lobbyFeed.publish(), () => undefined);
@@ -281,6 +296,8 @@ export class EnergyDuelRoom extends Room {
       player.submitted = false;
       player.resultConfirmed = false;
       player.commandBuffer = '';
+      player.learnedActionIds.clear();
+      player.learnedPassiveIds.clear();
       if (!player.isTrainingDummy) player.controllerPlayerId = player.playerId;
       player.buffs.clear();
       this.storedBuffs.set(player.playerId, new Map());
@@ -440,6 +457,35 @@ export class EnergyDuelRoom extends Room {
     this.clock.setTimeout(() => this.applyRoundResult(combatPlayers, combatBoardObjects, result), totalDurationMs);
   }
 
+  private sendLearningPrompt(client: Client): void {
+    const entry = Array.from(this.pendingLearning.entries()).find(([learnerId, queue]) => {
+      const learner = this.state.players.get(learnerId);
+      return queue.length > 0 && (learnerId === client.sessionId || learner?.controllerPlayerId === client.sessionId);
+    });
+    if (!entry) return;
+    const [learnerPlayerId, [pending]] = entry;
+    client.send('learning_required', { learnerPlayerId, ...pending });
+  }
+
+  private submitLearning(client: Client, payload: SubmitLearningMessage): void {
+    const requestId = payload?.requestId;
+    if (this.state.phase !== 'learning') return this.sendError(client, '当前没有待选择的吞天学习', requestId, 'submit_learning');
+    const learner = this.authorizedActor(client, payload?.learnerPlayerId);
+    const queue = learner ? this.pendingLearning.get(learner.playerId) : undefined;
+    const pending = queue?.[0];
+    if (!learner || learner.characterId !== 'ye_qingxian' || !pending || pending.targetPlayerId !== payload?.targetPlayerId) return this.sendError(client, '学习请求已经失效', requestId, 'submit_learning');
+    const skips = payload.skip === true && payload.actionId === undefined && payload.passiveId === undefined;
+    const learnsAction = !skips && typeof payload.actionId === 'string' && pending.actionIds.includes(payload.actionId) && payload.passiveId === undefined;
+    const learnsPassive = !skips && typeof payload.passiveId === 'string' && pending.passiveIds.includes(payload.passiveId) && payload.actionId === undefined;
+    if (!skips && !learnsAction && !learnsPassive) return this.sendError(client, '请选择一个可学习的专属技能或被动，或放弃学习', requestId, 'submit_learning');
+    if (learnsAction && !learner.learnedActionIds.includes(payload.actionId!)) learner.learnedActionIds.push(payload.actionId!);
+    if (learnsPassive && !learner.learnedPassiveIds.includes(payload.passiveId!)) learner.learnedPassiveIds.push(payload.passiveId!);
+    queue!.shift(); if (queue!.length === 0) this.pendingLearning.delete(learner.playerId);
+    this.sendSuccess(client, requestId, 'submit_learning', skips ? '已放弃本次吞天学习' : `已通过吞天学习${actionById.get(payload.actionId ?? '')?.name ?? gameConfig.passives.find((passive) => passive.id === payload.passiveId)?.name ?? '能力'}`);
+    if (this.pendingLearning.size > 0) { for (const connected of this.clients) this.sendLearningPrompt(connected); return; }
+    this.state.round += 1; this.state.phase = 'choosing'; this.state.lastResult += '\n吞天学习完成，请选择下一回合行动。';
+  }
+
   private sendEmote(client: Client, payload: { emoteId?: unknown; requestId?: string }): void {
     const player = this.state.players.get(client.sessionId);
     if (!player?.connected || !isRoomEmoteId(payload?.emoteId)) {
@@ -515,8 +561,28 @@ export class EnergyDuelRoom extends Room {
     while (this.state.roundLog.length > 200) this.state.roundLog.shift();
     this.actions.clear();
     if (this.finishIfDecided()) return;
+    this.prepareLearning(result);
+    if (this.pendingLearning.size > 0) {
+      this.state.phase = 'learning'; this.state.lastResult += '\n等待叶倾仙选择吞天学习。';
+      for (const client of this.clients) this.sendLearningPrompt(client);
+      return;
+    }
     this.state.round += 1;
     this.state.phase = 'choosing';
+  }
+
+  private prepareLearning(result: RoundResult): void {
+    this.pendingLearning.clear();
+    for (const opportunity of result.learningTargets) {
+      const learner = this.state.players.get(opportunity.learnerPlayerId); const target = this.state.players.get(opportunity.targetPlayerId);
+      if (!learner?.alive || learner.characterId !== 'ye_qingxian' || !target) continue;
+      const character = characterById.get(target.characterId); const form = character?.forms.find((candidate) => candidate.id === target.currentFormId);
+      const actionIds = (form?.unlockedActions ?? []).filter((id) => !LEARNING_EXCLUDED_ACTIONS.has(id) && !learner.learnedActionIds.includes(id));
+      const nativePassives = characterById.get(learner.characterId)?.passiveIds ?? [];
+      const passiveIds = (character?.passiveIds ?? []).filter((id) => !nativePassives.includes(id) && !learner.learnedPassiveIds.includes(id));
+      if (actionIds.length === 0 && passiveIds.length === 0) continue;
+      const queue = this.pendingLearning.get(learner.playerId) ?? []; queue.push({ targetPlayerId: target.playerId, targetNickname: target.nickname, actionIds, passiveIds }); this.pendingLearning.set(learner.playerId, queue);
+    }
   }
 
   private finishIfDecided(): boolean {
@@ -563,6 +629,7 @@ export class EnergyDuelRoom extends Room {
 
   private resetToWaiting(): void {
     this.actions.clear();
+    this.pendingLearning.clear();
     void this.unlock().then(() => lobbyFeed.publish(), () => undefined);
     this.state.phase = 'waiting';
     this.state.round = 0;
@@ -582,6 +649,8 @@ export class EnergyDuelRoom extends Room {
       player.maxHp = maxHpForCharacter(player.characterId);
       player.currentHp = player.maxHp;
       player.buffs.clear();
+      player.learnedActionIds.clear();
+      player.learnedPassiveIds.clear();
       this.storedBuffs.set(player.playerId, new Map());
       if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
     }
@@ -629,7 +698,7 @@ export class EnergyDuelRoom extends Room {
 
   private assignResentmentMark(): void {
     const living = Array.from(this.state.players.values()).filter((player) => player.alive);
-    const source = living.find((player) => player.characterId === 'chimei');
+    const source = living.find((player) => this.playerHasPassive(player, 'resentment_passive'));
     for (const player of this.state.players.values()) this.storedBuffs.get(player.playerId)?.get(PLAYER_BUFF_SCOPE)?.delete('resentment_mark');
     if (!source || living.length === 0) { for (const player of this.state.players.values()) this.syncActiveBuffs(player.playerId, player.characterId, player.buffs); return; }
     const count = this.state.players.size * 2; const origin = source.gridIndex;
@@ -708,6 +777,7 @@ export class EnergyDuelRoom extends Room {
       Array.from(player.buffs.values(), (buff) => ({ buffId: buff.buffId, stacks: buff.stacks })),
       Object.fromEntries(Array.from(player.resources.entries(), ([resourceId, resource]) => [resourceId, resource.current])),
       player.commandBuffer,
+      Array.from(player.learnedActionIds),
     );
   }
 
@@ -733,6 +803,8 @@ export class EnergyDuelRoom extends Room {
       buffSourcePlayerIds: Object.fromEntries(Array.from(player.buffs.values(), (buff) => [buff.buffId, buff.sourcePlayerId])),
       gridIndex: player.gridIndex,
       commandBuffer: player.commandBuffer,
+      learnedActionIds: Array.from(player.learnedActionIds),
+      learnedPassiveIds: Array.from(player.learnedPassiveIds),
     };
   }
 
@@ -799,6 +871,10 @@ export class EnergyDuelRoom extends Room {
     if (characterId !== 'mudrock') return;
     if (characterBuffs.has('mud_round_counter') || characterBuffs.has('mud_barrier')) return;
     characterBuffs.set('mud_round_counter', { buffId: 'mud_round_counter', stacks: 1, remainingTurns: 0, permanent: true, sourcePlayerId: playerId });
+  }
+
+  private playerHasPassive(player: PlayerState, passiveId: string): boolean {
+    return characterById.get(player.characterId)?.passiveIds?.includes(passiveId) === true || (player.characterId === 'ye_qingxian' && player.learnedPassiveIds.includes(passiveId));
   }
 
   private restoreCharacterHealth(playerId: string, player: PlayerState): void {

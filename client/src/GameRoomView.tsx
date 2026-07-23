@@ -7,6 +7,7 @@ import {
   isResourceVisibleForCharacter,
   isRoomEmoteId,
   napoleonStrategyFromCommand,
+  passiveById,
   roomEmotes,
   type NapoleonCommand,
   resourceById,
@@ -14,6 +15,7 @@ import {
   type CommandResultMessage,
   type DeferredActionRequiredMessage,
   type GameRatingResultMessage,
+  type LearningRequiredMessage,
   type PlayerProfile,
   type ResolutionStep,
   type RoomEmoteId,
@@ -92,6 +94,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [gridAction, setGridAction] = useState<{ action: ActionDefinition; targetIds: string[] }>();
   const [optionalGridAction, setOptionalGridAction] = useState<ActionDefinition>();
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
+  const [learningRequest, setLearningRequest] = useState<LearningRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
   const [inspectedBoardObjectIds, setInspectedBoardObjectIds] = useState<string[]>([]);
@@ -205,6 +208,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       if (typeof payload?.eventId !== 'string' || typeof payload.playerId !== 'string' || !isRoomEmoteId(payload.emoteId)) return;
       enqueueEmote(payload);
     });
+    const removeLearning = room.onMessage('learning_required', (payload: LearningRequiredMessage) => setLearningRequest(payload));
     const removeNotice = room.onMessage('room_notice', (payload: RoomNoticeMessage) => {
       if (typeof payload?.eventId !== 'string' || typeof payload.nickname !== 'string') return;
       if (!['join', 'leave', 'disconnect', 'reconnect'].includes(payload.type)) return;
@@ -219,7 +223,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => {
       mounted.current = false; window.clearInterval(pingTimer);
       for (const timer of emoteTimers.current.values()) window.clearTimeout(timer); emoteTimers.current.clear(); seenEmoteIds.current.clear();
-      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeRatingResult(); removeEmote(); removeNotice();
+      room.onStateChange.remove(handleState); removeCommand(); removeError(); removeClosed(); removePong(); removeResolution(); removeDeferred(); removeLearning(); removeRatingResult(); removeEmote(); removeNotice();
       room.onDrop.remove(handleDrop); room.onReconnect.remove(handleReconnect); room.onLeave.remove(handleLeave);
     };
 
@@ -357,7 +361,10 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (paymentPrepared.current.actionId !== action.id) paymentPrepared.current = { actionId: action.id, sponsorReady: false, surchargeReady: false };
     if (canSponsorActiveActor && !paymentPrepared.current.sponsorReady) { setControllerGrant({}); setSponsorAction(action); return; }
     if (activeActor?.buffs.some((buff) => buff.buffId === 'hellwalker') && action.category === 'attack' && !paymentPrepared.current.surchargeReady) { setSurchargeResourceId(undefined); setSurchargeAction(action); return; }
-    if (activeActor?.characterId === 'ye_qingxian' && action.id !== 'transform') {
+    const hasDevourHeaven = activeActor?.characterId === 'ye_qingxian'
+      && (characterById.get(activeActor.characterId)?.passiveIds?.includes('devour_heaven')
+        || activeActor.learnedPassiveIds.includes('devour_heaven'));
+    if (hasDevourHeaven && action.id !== 'transform') {
       setSelectedActionId(action.id); setSelectedTargetIds([]); setResourceChoiceAction(action); return;
     }
     if (action.napoleonSequence) {
@@ -543,6 +550,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} resourceSponsor={canSponsorActiveActor ? me : undefined} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }} />}
       {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}，完成后确认提交。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div>{deferredRequest.flexibleResourceIds && <div className="deferred-payment"><p>度神决 X：<InputNumber min={deferredRequest.minPower ?? 1} max={deferredRequest.maxPower ?? 1} precision={0} value={deferredPower} onChange={(value) => setDeferredPower(Math.trunc(value ?? 1))} />（已支付 {deferredSelected}/{deferredPower}）</p>{deferredRequest.flexibleResourceIds.map((resourceId) => { const current = activeActor?.resources[resourceId]?.current ?? 0; return <div className="resource-payment-row" key={resourceId}><span>{resourceById.get(resourceId)?.name ?? resourceId}（持有 {formatNumber(current)}）</span><InputNumber min={0} max={Math.floor(current)} precision={0} value={deferredSpend[resourceId] ?? 0} onChange={(value) => setDeferredSpend((existing) => ({ ...existing, [resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>; })}</div>}<p className="deferred-allocation-summary">当前分配：{selectedTargetIds.length ? formatTargetAllocation(selectedTargetIds, players) : '尚未选择'}（{selectedTargetIds.length}/{deferredRequest.allocationCount}）</p><div className="deferred-selection-actions"><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds((current) => current.slice(0, -1))}>撤销上一次</Button><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds([])}>清空重选</Button><Button type="primary" disabled={selectedTargetIds.length !== deferredRequest.allocationCount || Boolean(deferredRequest.flexibleResourceIds && deferredSelected !== deferredPower)} onClick={confirmDeferredTargets}>确认提交</Button>{deferredRequest.allowSkip && <Button disabled={selectedTargetIds.length > 0} onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div></div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
+      {gameState.phase === 'learning' && <p className="resolving-notice">等待叶倾仙选择吞天学习，或放弃本次学习…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
       {gameState.phase === 'choosing' && me && !me.alive && <p className="eliminated-notice">你已淘汰，正在观战</p>}
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
@@ -572,6 +580,14 @@ function RoomContent({ room, session, onLeave }: Props) {
     <Modal title="吞天收益选择" open={Boolean(resourceChoiceAction)} footer={null} onCancel={() => { setResourceChoiceAction(undefined); setSelectedActionId(undefined); }}>
       <p>若本次招式令其他玩家健康状态左移，将获得你选择的基础资源。</p>
       <div className="deferred-selection-actions"><Button type="primary" onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('energy'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'energy', null); }}>获得气</Button><Button onClick={() => { const action = resourceChoiceAction; setPendingResourceChoice('charge'); setResourceChoiceAction(undefined); if (action) continueChooseAction(action, 'charge', null); }}>获得蓄力</Button></div>
+    </Modal>
+    <Modal title="吞天 · 击杀学习" open={Boolean(learningRequest)} closable={false} maskClosable={false} footer={null}>
+      <p>你击杀了 {learningRequest?.targetNickname ?? '目标'}。可以学习其当前角色的一个专属技能或被动，也可以放弃。</p>
+      <div className="deferred-selection-actions">
+        {learningRequest?.actionIds.map((actionId) => <Button key={actionId} type="primary" onClick={() => { room.send('submit_learning', { requestId: requestId(), learnerPlayerId: learningRequest.learnerPlayerId, targetPlayerId: learningRequest.targetPlayerId, actionId }); setLearningRequest(undefined); }}>技能 · {actionById.get(actionId)?.name ?? actionId}</Button>)}
+        {learningRequest?.passiveIds.map((passiveId) => <Button key={passiveId} onClick={() => { room.send('submit_learning', { requestId: requestId(), learnerPlayerId: learningRequest.learnerPlayerId, targetPlayerId: learningRequest.targetPlayerId, passiveId }); setLearningRequest(undefined); }}>被动 · {passiveById.get(passiveId)?.name ?? passiveId}</Button>)}
+        <Button danger onClick={() => { if (!learningRequest) return; room.send('submit_learning', { requestId: requestId(), learnerPlayerId: learningRequest.learnerPlayerId, targetPlayerId: learningRequest.targetPlayerId, skip: true }); setLearningRequest(undefined); }}>放弃学习</Button>
+      </div>
     </Modal>
     {hovered && <Card className="hover-player-card" style={hoverCardStyle(hovered.x, hovered.y)} onMouseEnter={() => window.clearTimeout(hoverDismissTimer.current)} onMouseLeave={() => setHovered(undefined)}><PlayerDetails player={players.find((player) => player.playerId === hovered.player.playerId) ?? hovered.player} /></Card>}
     {new URLSearchParams(window.location.search).get('perf') === '1' && <PerformancePanel rtt={rtt} />}
@@ -652,6 +668,7 @@ function phaseTitle(state: SyncedGameState): string {
   if (state.phase === 'waiting') return '房间准备';
   if (state.phase === 'finished') return '游戏结束';
   if (state.phase === 'deferred') return `第 ${state.round} 回合 · 后发选择`;
+  if (state.phase === 'learning') return `第 ${state.round} 回合 · 吞天学习`;
   if (state.phase === 'resolving') return `第 ${state.round} 回合 · 结算`;
   return `第 ${state.round} 回合`;
 }

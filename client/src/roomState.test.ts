@@ -13,12 +13,15 @@ describe('readSyncedPlayers', () => {
       characterId: 'default_character', currentFormId: 'base', submitted: false, connected: true, resultConfirmed: false,
       resources: { values: () => [{ resourceId: 'energy', current: 2, max: 0 }][Symbol.iterator]() },
       buffs: { values: () => [{ instanceId: 'frozen-1', buffId: 'frozen', stacks: 1, remainingTurns: 2, permanent: false, sourcePlayerId: 'player-2' }][Symbol.iterator]() },
+      learnedActionIds: ['bully'], learnedPassiveIds: ['tear_passive'],
     };
     const result = readSyncedPlayers([player]);
     expect(result[0].resources.energy.current).toBe(2);
     expect(result[0].buffs[0].buffId).toBe('frozen');
     expect(result[0].controllerPlayerId).toBe('player-1');
     expect(result[0].isTrainingDummy).toBe(false);
+    expect(result[0].learnedActionIds).toEqual(['bully']);
+    expect(result[0].learnedPassiveIds).toEqual(['tear_passive']);
   });
 
   it('normalizes synchronized terrain and summon objects', () => {

@@ -25,6 +25,8 @@ export interface CombatPlayer {
   buffRemainingTurns?: Record<string, number>;
   buffSourcePlayerIds?: Record<string, string>;
   commandBuffer?: string;
+  learnedActionIds?: string[];
+  learnedPassiveIds?: string[];
 }
 
 export interface CombatBoardObject {
@@ -69,6 +71,7 @@ export interface RoundResult {
   eliminated: string[];
   steps: ResolutionStep[];
   performance: Record<string, RoundPerformance>;
+  learningTargets: Array<{ learnerPlayerId: string; targetPlayerId: string }>;
 }
 
 export interface RoundPerformance {
@@ -100,6 +103,7 @@ const roundBoardCellCounts = new WeakMap<CombatPlayer, number>();
 const roundPlayers = new WeakMap<CombatPlayer, Map<string, CombatPlayer>>();
 const roundFragilePlayers = new WeakMap<CombatPlayer, Set<string>>();
 const pendingWuyouRevives = new WeakSet<CombatPlayer>();
+const roundLearningTargets = new WeakMap<CombatPlayer, Set<string>>();
 
 export function validateAction(player: CombatPlayer, action: SubmittedAction, players: ReadonlyMap<string, CombatPlayer>, boardObjects: ReadonlyMap<string, CombatBoardObject> = new Map()): void {
   if (!player.alive) throw new Error('已淘汰玩家不能出招');
@@ -116,7 +120,9 @@ export function validateAction(player: CombatPlayer, action: SubmittedAction, pl
       if (!triggered || triggered.id !== definition.id) throw new Error('当前指令不会触发该策略');
     } else throw new Error('请选择已有策略或触发它的指令');
   } else if (action.napoleonStrategySource !== undefined || action.napoleonCommand !== undefined) throw new Error('该行动不接受拿破仑策略来源');
-  if (player.characterId === 'ye_qingxian' && action.actionId !== 'transform' && !['energy', 'charge'].includes(action.resourceChoice ?? '')) throw new Error('请选择吞天获得气或蓄力');
+  if (hasPassive(player, 'devour_heaven') && action.actionId !== 'transform' && !['energy', 'charge'].includes(action.resourceChoice ?? '')) throw new Error('请选择吞天获得气或蓄力');
+  if (hasPassive(player, 'sword_dao') && action.actionId === 'fist') throw new Error('剑道无法使用拳');
+  if (hasPassive(player, 'shadow_blade_passive') && ['fist', 'slash'].includes(action.actionId)) throw new Error('暗影之刃无法使用拳或斩');
   const variable = definition.variable;
   if (variable) {
     if (!Number.isInteger(action.power) || (action.power ?? 0) < variable.minPower
@@ -227,7 +233,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   }
   for (const player of aliveAtStart) {
     roundDamageStates.delete(player); pendingWuyouRevives.delete(player); roundBoardObjects.set(player, boardObjects);
-    roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); syncNiluResistance(player);
+    roundBoardCellCounts.set(player, players.size * 2); roundPlayers.set(player, players); roundLearningTargets.set(player, new Set()); syncNiluResistance(player);
   }
   const hpAtStart = new Map(aliveAtStart.map((player) => [player.id, player.currentHp]));
   for (const player of aliveAtStart) if (player.characterId === 'napoleon') {
@@ -243,16 +249,17 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     for (const [resourceId, amount] of Object.entries(action.controllerResourceGrant ?? {})) {
       if (!controller || amount <= 0) continue;
       controller.resources.soul = resourceValue(controller, 'soul') - amount;
-      player.resources[resourceId] = resourceValue(player, resourceId) + amount;
+      gainResource(player, resourceId, amount);
     }
     if (player.buffs?.has('sleeping') && !['continue_sleep', 'filthy_bloodline'].includes(action.actionId)) wakeMudrock(player, true, summary);
-    const sacrifice = sacrificeResource(player, action);
+    const sacrifice = sacrificeResource(player, action); const hpBeforeSacrifice = player.currentHp;
     for (const [resourceId, amount] of Object.entries(costForSubmittedAction(player, action))) player.resources[resourceId] = Math.max(0, resourceValue(player, resourceId) - amount);
     if (sacrifice) { player.currentHp -= 1; summary.push(`${player.nickname} 以祭道抵免 1 点${sacrifice === 'energy' ? '气' : '蓄力'}缺口，进入${healthStateName(player)}。`); if (player.currentHp <= 0 && !queueWuyouRevive(player)) { player.alive = false; eliminated.add(player.id); } }
     const strategy = requireAction(action.actionId).napoleonSequence;
     if (strategy) player.commandBuffer = consumeNapoleonStrategy(player.commandBuffer ?? '', strategy, action.napoleonStrategySource === 'command' ? action.napoleonCommand : undefined);
     for (const [resourceId, amount] of Object.entries(action.resourceSpend ?? {})) player.resources[resourceId] = resourceValue(player, resourceId) - amount;
     for (const [resourceId, amount] of Object.entries(action.extraResourceSpend ?? {})) player.resources[resourceId] = resourceValue(player, resourceId) - amount;
+    if (sacrifice && hpBeforeSacrifice > 1 && player.currentHp === 1 && player.alive) { gainResource(player, 'energy', 1); summary.push(`${player.nickname} 因祭道进入濒死，获得 1 气。`); }
     if (action.actionId === 'filthy_bloodline') { setBuff(player, 'sleeping', 2); setBuff(player, 'sleep_progress', 1); }
   }
 
@@ -263,7 +270,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   const fragile = new Set(aliveAtStart.filter((player) => {
     const action = actions.get(player.id); const effect = primaryEffect(action);
     const extinguishesFire = effect === 'heal' && action?.targetGridIndex !== undefined && Array.from(boardObjects.values()).some((object) => object.definitionId === 'nilu_fire' && object.gridIndex === action.targetGridIndex);
-    return !extinguishesFire && ['fist', 'double_steal', 'heal', 'winning_hand'].includes(effect ?? '') && player.characterId !== 'mudrock';
+    return !extinguishesFire && ['fist', 'double_steal', 'heal', 'winning_hand'].includes(effect ?? '') && !hasPassive(player, 'child_of_earth');
   }).map((player) => player.id));
   for (const player of aliveAtStart) roundFragilePlayers.set(player, fragile);
   const blockers = new Map(aliveAtStart.flatMap((player) => {
@@ -273,7 +280,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   const attackAttempts = new Set<string>(); const canceledAttackTargets = new Set<string>(); const canceledActors = new Set<string>(); const canceledReasons = new Map<string, string>(); const processed = new Set<string>();
 
   if (hasChop) resolveGlobalCounter(['steal', 'double_steal'], '凹类技能', '剁', 'chop', aliveAtStart, actions, eliminated, summary);
-  if (hasChop) for (const actor of aliveAtStart.filter((player) => player.characterId === 'ku' && primaryEffect(actions.get(player.id)) === 'chop')) {
+  if (hasChop) for (const actor of aliveAtStart.filter((player) => hasPassive(player, 'tempered_passive') && primaryEffect(actions.get(player.id)) === 'chop')) {
     const successes = aliveAtStart.filter((player) => ['steal', 'double_steal'].includes(primaryEffect(actions.get(player.id)) ?? '')).length;
     for (let index = 0; index < successes; index += 1) rewardTempered(actor, summary);
   }
@@ -289,17 +296,17 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
         const priorAllocations = allocationsByTarget.get(targetId) ?? 0; allocationsByTarget.set(targetId, priorAllocations + 1);
         const overdrafts = effect === 'double_steal' && priorAllocations > 0;
         suppressedCharges.add(targetId);
-        const bonus = actor.characterId === 'chimei' && target?.buffs?.has('resentment_mark') ? 1 : 0;
+        const bonus = hasPassive(actor, 'resentment_passive') && target?.buffs?.has('resentment_mark') ? 1 : 0;
         const amount = 1 + bonus; gainResource(actor, 'energy', amount);
         if (overdrafts && target) target.resources.energy = Math.max(0, resourceValue(target, 'energy') - 1);
-        preclaimedResources.add(actor.id); summary.push(`${actor.nickname} 的${requireAction(submitted.actionId).name}对 ${target?.nickname ?? targetId} 生效，获得 ${amount} 气${overdrafts ? `，并倒扣 ${target?.nickname ?? targetId} 1 气` : ''}。`); if (actor.characterId === 'ku') rewardTempered(actor, summary);
+        preclaimedResources.add(actor.id); summary.push(`${actor.nickname} 的${requireAction(submitted.actionId).name}对 ${target?.nickname ?? targetId} 生效，获得 ${amount} 气${overdrafts ? `，并倒扣 ${target?.nickname ?? targetId} 1 气` : ''}。`); if (hasPassive(actor, 'tempered_passive')) rewardTempered(actor, summary);
       } else summary.push(`${actor.nickname} 的${requireAction(submitted.actionId).name}没有从 ${target?.nickname ?? targetId} 获得气：目标本回合没有出气。`);
     }
   }
   if (!hasCut) for (const actor of aliveAtStart) {
     const submitted = actions.get(actor.id); if (!submitted || primaryEffect(submitted) !== 'absorb_charge') continue;
     const targetId = actionTargets(submitted)[0]; const target = players.get(targetId);
-    if (targetId && primaryEffect(actions.get(targetId)) === 'gain_charge' && !absorbClaims.has(targetId)) { absorbClaims.add(targetId); const bonus = actor.characterId === 'chimei' && target?.buffs?.has('resentment_mark') ? 1 : 0; gainResource(actor, 'charge', 1 + bonus); if (bonus && target) target.resources.charge = Math.max(0, resourceValue(target, 'charge') - 1); preclaimedResources.add(actor.id); summary.push(`${actor.nickname} 从 ${target?.nickname ?? targetId} 吸取 ${1 + bonus} 蓄力。`); if (actor.characterId === 'ku') rewardTempered(actor, summary); }
+    if (targetId && primaryEffect(actions.get(targetId)) === 'gain_charge' && !absorbClaims.has(targetId)) { absorbClaims.add(targetId); const bonus = hasPassive(actor, 'resentment_passive') && target?.buffs?.has('resentment_mark') ? 1 : 0; gainResource(actor, 'charge', 1 + bonus); if (bonus && target) target.resources.charge = Math.max(0, resourceValue(target, 'charge') - 1); preclaimedResources.add(actor.id); summary.push(`${actor.nickname} 从 ${target?.nickname ?? targetId} 吸取 ${1 + bonus} 蓄力。`); if (hasPassive(actor, 'tempered_passive')) rewardTempered(actor, summary); }
     else summary.push(`${actor.nickname} 的吸没有获得蓄力。`);
   }
 
@@ -333,14 +340,13 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   let slowLotusMoved = false;
   for (const actor of ordered) {
     const submitted = actions.get(actor.id)!; const definition = requireAction(submitted.actionId); const effect = primaryEffect(submitted)!;
-    const wasChimei = actor.characterId === 'chimei';
+    const hadHellwalker = hasPassive(actor, 'hellwalker_passive');
     const speed = actionSpeed(actor.id, submitted, actor, players, actions);
     resolveRockfallRecoveriesBefore(speed, actor.id);
     if (!fastLotusMoved && speed <= 4) { moveLotusSeats(boardObjects, players, 4, movedLotusIds, summary); fastLotusMoved = true; }
     if (!slowLotusMoved && speed <= 1) { moveLotusSeats(boardObjects, players, 1, movedLotusIds, summary); slowLotusMoved = true; }
     if (!actor.alive || eliminated.has(actor.id) || (pendingWuyouRevives.has(actor) && actor.currentHp <= 0)) { processed.add(actor.id); continue; }
     if (canceledActors.has(actor.id)) { summary.push(`${actor.nickname} 的${definition.name}${canceledReasons.get(actor.id) ?? '被取消'}，未能结算。`); processed.add(actor.id); continue; }
-    let gainedResource = preclaimedResources.has(actor.id);
     if (submitted.targetBoardObjectId) {
       resolveBoardObjectAttack(actor, submitted, definition, boardObjects, players, eliminated, summary, performance);
     } else if (effect === 'transform') {
@@ -351,13 +357,13 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     } else if (effect === 'quick_attack') {
       const moved = tryMove(actor, submitted.targetGridIndex, players); setBuff(actor, 'quick_attack_ready'); summary.push(moved ? `${actor.nickname} 使用迅雷移动到 ${actor.gridIndex} 号地块。` : `${actor.nickname} 的迅雷没有产生位移。`);
     } else if (effect === 'charge') {
-      if (!suppressedCharges.has(actor.id)) { gainResource(actor, 'energy', 1); gainedResource = true; summary.push(`${actor.nickname} 使用气，获得 1 气。`); }
+      if (!suppressedCharges.has(actor.id)) { gainResource(actor, 'energy', 1); summary.push(`${actor.nickname} 使用气，获得 1 气。`); }
       else summary.push(`${actor.nickname} 使用气，但本回合获得的 1 气被凹阻止。`);
     } else if (effect === 'gain_charge') {
-      if (!absorbClaims.has(actor.id)) { gainResource(actor, 'charge', 1); gainedResource = true; summary.push(`${actor.nickname} 获得 1 蓄力。`); }
+      if (!absorbClaims.has(actor.id)) { gainResource(actor, 'charge', 1); summary.push(`${actor.nickname} 获得 1 蓄力。`); }
       else summary.push(`${actor.nickname} 使用蓄力，但产生的蓄力被吸走。`);
     } else if (['steal', 'double_steal'].includes(effect) && !hasChop) {
-      if (actor.characterId === 'ao' && buffStacks(actor, 'ao_mastery') >= 4) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+      if (hasPassive(actor, 'practice_makes_perfect') && buffStacks(actor, 'ao_mastery') >= 4) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     } else if (effect === 'absorb_charge' && !hasCut) {
       const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId);
       if (buffStacks(actor, 'ao_mastery') >= 4 && targetId) resolveAttackTargets(actor, submitted, definition, [targetId], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
@@ -401,7 +407,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     else if (effect === 'bleed' || effect === 'blood_wall') {
       damagePlayer(actor, 0, 0, false, eliminated, true, true, submitted, false, actor.gridIndex);
       if (actor.alive && !eliminated.has(actor.id)) {
-        if (effect === 'bleed') { gainResource(actor, 'energy', 2); gainedResource = true; summary.push(`${actor.nickname} 使用放血，获得 2 气并进入${healthStateName(actor)}。`); }
+        if (effect === 'bleed') { gainResource(actor, 'energy', 2); summary.push(`${actor.nickname} 使用放血，获得 2 气并进入${healthStateName(actor)}。`); }
         else { setBuff(actor, 'armor', buffStacks(actor, 'armor') + 2.5); summary.push(`${actor.nickname} 筑起血墙，获得 2.5 级护甲并进入${healthStateName(actor)}。`); }
       } else summary.push(`${actor.nickname} 使用${definition.name}后死亡，未获得后续收益。`);
     }
@@ -442,8 +448,8 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       }
     }
     else if (effect === 'raise_axe') { setBuff(actor, 'axe_raised'); summary.push(`${actor.nickname} 举起战斧。`); }
-    else if (effect === 'hidden_cache') { actor.resources.stars = resourceValue(actor, 'stars') + 1; setBuff(actor, 'hidden_cache_pending'); gainedResource = true; summary.push(`${actor.nickname} 获得 1 辉星，并将在下回合开始时再获得 3 辉星。`); }
-    else if (effect === 'winning_hand') { actor.resources.stars = resourceValue(actor, 'stars') + 9; gainedResource = true; summary.push(`${actor.nickname} 获得 9 辉星。`); }
+    else if (effect === 'hidden_cache') { actor.resources.stars = resourceValue(actor, 'stars') + 1; setBuff(actor, 'hidden_cache_pending'); summary.push(`${actor.nickname} 获得 1 辉星，并将在下回合开始时再获得 3 辉星。`); }
+    else if (effect === 'winning_hand') { actor.resources.stars = resourceValue(actor, 'stars') + 9; summary.push(`${actor.nickname} 获得 9 辉星。`); }
     else if (effect === 'forge_sword') summary.push(`${actor.nickname} 将君王之剑锻造至 ${formatLevel(forge(actor, 3))}。`);
     else if (effect === 'forge_wall') summary.push(`${actor.nickname} 将君王之剑锻造至 ${formatLevel(forge(actor, 1))}。`);
     else if (effect === 'summon_forth') { const level = forge(actor, 0.5); setBuff(actor, 'sovereign_blade_active'); summary.push(`${actor.nickname} 将君王之剑锻造至 ${formatLevel(level)} 并激活。`); }
@@ -454,7 +460,18 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     else if (effect === 'transcend_fuse') { removeBuff(actor, 'transcendence'); setBuff(actor, 'transcendence_permanent'); summary.push(`${actor.nickname} 将超脱融合为永久状态。`); }
     else if (effect === 'transcend_detonate') { resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); removeBuff(actor, 'transcendence'); removeBuff(actor, 'transcendence_permanent'); removeBuff(actor, 'transcendence_progress'); }
     else if (effect === 'nebula_shock') { const targetId = directTargets(actor, submitted, players)[0]; resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); const target = players.get(targetId); if (target?.alive) applyDebuff(actor, target, 'shock', 1, 2); }
-    else if (effect === 'rule_the_world') { const targets = playersOnCells(actor, cellsAround(submitted.targetGridIndex ?? actor.gridIndex ?? 0, players.size * 2, 2), players); for (const targetId of targets) { const target = players.get(targetId); if (target && actionLevelAgainst(target, actions.get(targetId), actor.id, players) <= 3) applyDebuff(actor, target, 'fear', 1, 2); } summary.push(`${actor.nickname} 的君临天下控制了范围内符合条件的玩家，但不造成伤害。`); }
+    else if (effect === 'rule_the_world') {
+      const covered = playersOnCells(actor, cellsAround(submitted.targetGridIndex ?? actor.gridIndex ?? 0, players.size * 2, 2), players);
+      const dominionCells = new Set(Array.from(boardObjects.values()).filter((object) => object.definitionId === 'dominion' && object.ownerPlayerId === actor.id).map((object) => object.gridIndex));
+      const affected: string[] = [];
+      for (const targetId of covered) {
+        const target = players.get(targetId); if (!target) continue;
+        const attackLevel = dominionCells.has(target.gridIndex ?? -1) ? 4 : 3;
+        if (attackLevel - actionLevelAgainst(target, actions.get(targetId), actor.id, players) < 0.5) continue;
+        if (applyDebuff(actor, target, 'fear', 1, 2)) affected.push(target.nickname);
+      }
+      summary.push(affected.length ? `${actor.nickname} 的君临天下命中 ${affected.join('、')}，施加恐惧但不造成伤害。` : `${actor.nickname} 的君临天下没有命中任何玩家。`);
+    }
     else if (effect === 'censure') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); if (targetId && !processed.has(targetId) && targetAction && requireAction(targetAction.actionId).category === 'resource') { canceledActors.add(targetId); canceledReasons.set(targetId, '被杖责截断资源收益'); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
     else if (effect === 'see_through') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); const success = Boolean(targetId && !processed.has(targetId) && targetAction && ['attack', 'special'].includes(requireAction(targetAction.actionId).category)); const level = success ? 0.5 + buffStacks(actor, 'tempered') : 0.5; if (success) { canceledActors.add(targetId); canceledReasons.set(targetId, '被看破取消'); blockers.delete(targetId); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
     else if (effect === 'shatter') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); const success = Boolean(targetAction && requireAction(targetAction.actionId).category === 'defense'); const mastery = buffStacks(actor, 'tempered'); const level = 1 + mastery + (success ? mastery * 0.5 : 0); if (success) { const target = players.get(targetId); if (target) applyDebuff(actor, target, 'defense_forbidden', 1, 2); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
@@ -473,18 +490,18 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       summary.push(target ? `${actor.nickname} 的无言恐惧笼罩 ${target.nickname}，但不造成伤害。` : `${actor.nickname} 的无言恐惧没有有效目标。`);
     } else if (isDirectAttack(effect)) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
 
-    if (gainedResource && actor.characterId === 'ao') setBuff(actor, 'ao_mastery', Math.min(4, buffStacks(actor, 'ao_mastery') + 1));
+    if (preclaimedResources.has(actor.id) && hasPassive(actor, 'practice_makes_perfect')) setBuff(actor, 'ao_mastery', Math.min(4, buffStacks(actor, 'ao_mastery') + 1));
     if (actor.characterId === 'quilon' && definition.category === 'attack' && !['fire_purification', 'five_precepts'].includes(effect)) {
       triggerNiluFires(actor, actor.buffs?.has('bodhisattva_debate') && ['fist', 'slash'].includes(effect) ? 2 : 1, players, eliminated, summary, performance);
     }
     if (effect === 'aoao_divine') removeBuff(actor, 'ao_mastery');
     if (effect === 'sovereign_blade') removeBuff(actor, 'sovereign_blade_active');
-    if (actor.characterId === 'mudrock' && effect === 'fist') setBuff(actor, 'mud_fist_level', buffStacks(actor, 'mud_fist_level') + 1);
+    if (hasPassive(actor, 'child_of_earth') && effect === 'fist') setBuff(actor, 'mud_fist_level', buffStacks(actor, 'mud_fist_level') + 1);
     if (definition.cooldownReduction && actor.buffs?.has(definition.cooldownReduction.buffId)) {
       const next = buffStacks(actor, definition.cooldownReduction.buffId) - definition.cooldownReduction.stacks;
       if (next > 0) setBuff(actor, definition.cooldownReduction.buffId, next); else removeBuff(actor, definition.cooldownReduction.buffId);
     }
-    if (wasChimei && definition.category !== 'base' && !actionCanDealAttackDamage(actor, submitted)) applyHellwalker(actor, players.get(actionTargets(submitted)[0] ?? '') ?? actor, players, summary);
+    if (hadHellwalker && definition.category !== 'base' && !actionCanDealAttackDamage(actor, submitted)) applyHellwalker(actor, players.get(actionTargets(submitted)[0] ?? '') ?? actor, players, summary);
     processed.add(actor.id);
   }
   if (!fastLotusMoved) moveLotusSeats(boardObjects, players, 4, movedLotusIds, summary);
@@ -494,7 +511,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     const effect = primaryEffect(actions.get(player.id));
     if (effect === 'collect_light' && canceledAttackTargets.has(player.id) && player.currentHp === hpAtStart.get(player.id) && !eliminated.has(player.id)) { player.resources.stars = resourceValue(player, 'stars') + 1; summary.push(`${player.nickname} 的收集光辉获得 1 辉星。`); }
     removeBuff(player, 'iridescence_afterglow'); if (effect === 'iridescence') setBuff(player, 'iridescence_afterglow');
-    if (player.characterId === 'mudrock' && !player.buffs?.has('mud_barrier')) { const count = buffStacks(player, 'mud_round_counter') + (effect === 'transform' ? 0 : 1); if (count >= 4) { setBuff(player, 'mud_barrier'); setBuff(player, 'mud_round_counter', 0); summary.push(`${player.nickname} 的沃土予身生成一层屏障。`); } else setBuff(player, 'mud_round_counter', count); }
+    if (hasPassive(player, 'fertile_soil') && !player.buffs?.has('mud_barrier')) { const count = buffStacks(player, 'mud_round_counter') + (effect === 'transform' ? 0 : 1); if (count >= 4) { setBuff(player, 'mud_barrier'); setBuff(player, 'mud_round_counter', 0); summary.push(`${player.nickname} 的沃土予身生成一层屏障。`); } else setBuff(player, 'mud_round_counter', count); }
     if (effect === 'dark_shelter' && darkShelterAbsorbs.has(player.id)) { setBuff(player, 'dark_shelter_power', 1, 4); summary.push(`${player.nickname} 的黑暗庇护成功吸收攻击。`); }
     removeBuff(player, 'fear_action_canceled');
     if (effect === 'dream_path' && actions.get(player.id)?.targetGridIndex !== undefined && player.buffs?.has('dream_path')) tryMove(player, actions.get(player.id)?.targetGridIndex, players);
@@ -520,14 +537,15 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   for (const id of eliminated) { const player = players.get(id); if (player) { player.alive = false; player.currentHp = 0; } }
   removeQuilonObjectsForDeadOwners(boardObjects, players, summary);
   for (const player of players.values()) roundDamageStates.delete(player);
-  return { summary, eliminated: Array.from(eliminated), steps: buildResolutionSteps(actions, players), performance };
+  const learningTargets = aliveAtStart.flatMap((player) => Array.from(roundLearningTargets.get(player) ?? [], (targetPlayerId) => ({ learnerPlayerId: player.id, targetPlayerId })));
+  return { summary, eliminated: Array.from(eliminated), steps: buildResolutionSteps(actions, players), performance, learningTargets };
 }
 
 function resolveGlobalCounter(effectIds: readonly EffectHandlerId[], targetName: string, counterName: string, counterEffect: EffectHandlerId, players: CombatPlayer[], actions: ReadonlyMap<string, SubmittedAction>, eliminated: Set<string>, summary: string[], fragile = new Set<string>()): void {
   const effects = new Set(effectIds);
   const users = players.filter((player) => effects.has(primaryEffect(actions.get(player.id))!));
   const source = players.filter((player) => primaryEffect(actions.get(player.id)) === counterEffect).sort((left, right) => left.id.localeCompare(right.id))[0];
-  for (const user of users) { const hpBefore = user.currentHp; damagePlayer(user, 1, 0, fragile.has(user.id), eliminated, true, true, actions.get(user.id), false, source?.gridIndex); if (source && user.currentHp < hpBefore) rewardDevour(source, actions.get(source.id), summary); summary.push(`${user.nickname} 的${targetName}被${counterName}取消，进入${healthStateName(user)}。`); }
+  for (const user of users) { const hpBefore = user.currentHp; const outcome = damagePlayer(user, 1, 0, fragile.has(user.id), eliminated, true, true, actions.get(user.id), false, source?.gridIndex); if (source && user.currentHp < hpBefore) { rewardDevour(source, actions.get(source.id), summary); if ((outcome === 'eliminated' || outcome === 'shifted_out') && hasPassive(source, 'devour_heaven')) roundLearningTargets.get(source)?.add(user.id); } summary.push(`${user.nickname} 的${targetName}被${counterName}取消，进入${healthStateName(user)}。`); }
   if (!users.length) summary.push(`有人使用${counterName}，但本回合无人使用${targetName}。`);
 }
 
@@ -626,7 +644,7 @@ function resolveAttackTargets(attacker: CombatPlayer, submitted: SubmittedAction
   for (const originalTargetId of new Set(targets)) {
     const targetId = redirectAttackTarget(attacker, originalTargetId, players, actions, summary);
     attempts.add(targetId);
-    const explicitDamageLevel = attacker.characterId === 'warrior' && definition.category === 'attack'
+    const explicitDamageLevel = hasPassive(attacker, 'tear_passive') && definition.category === 'attack'
       ? submittedDamageLevel(attacker, submitted)
       : undefined;
     if (applyAttack(attacker, players.get(targetId), definition, level, players, actions, blockers, immune, fragile, eliminated, shelter, players.size * 2, summary, performance, explicitDamageLevel) === 'none') canceled.add(targetId);
@@ -671,7 +689,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   if (!piercingDamage && target.buffs?.has('unfallen_fortress')) targetLevel = Math.max(targetLevel, 1);
   if (targetAction && requireAction(targetAction.actionId).category === 'defense' && !block) targetLevel = 0;
   if (primaryEffect(targetAction) === 'dark_shelter') targetLevel = 0;
-  if (block && damageLevel < targetLevel) { performance[target.id].successfulDefenses += 1; if (target.characterId === 'ku') rewardTempered(target, summary); summary.push(`${target.nickname} 的${block.name}抵消了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
+  if (block && damageLevel < targetLevel) { performance[target.id].successfulDefenses += 1; if (hasPassive(target, 'tempered_passive')) rewardTempered(target, summary); summary.push(`${target.nickname} 的${block.name}抵消了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
   if (block?.defenseBreak && targetLevel > 0 && damageLevel >= targetLevel) {
     blockers.delete(target.id);
     if (block.defenseBreak.mode === 'persistent') setBuff(target, block.defenseBreak.brokenBuffId!);
@@ -698,9 +716,12 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   else {
     const appliedStates = Math.max(0, hpBefore - target.currentHp);
     performance[attacker.id].damageStatesDealt += appliedStates;
-    if (appliedStates > 0 && (outcome === 'eliminated' || outcome === 'shifted_out')) performance[attacker.id].eliminations += 1;
+    if (appliedStates > 0 && (outcome === 'eliminated' || outcome === 'shifted_out')) {
+      performance[attacker.id].eliminations += 1;
+      if (hasPassive(attacker, 'devour_heaven')) roundLearningTargets.get(attacker)?.add(target.id);
+    }
   }
-  if (outcome === 'none' && block && target.characterId === 'ku') rewardTempered(target, summary);
+  if (outcome === 'none' && block && hasPassive(target, 'tempered_passive')) rewardTempered(target, summary);
   if (target.currentHp < hpBefore) rewardDevour(attacker, actions.get(attacker.id), summary);
   const comparison = `${attacker.nickname} 的${attack.name}（技能 ${formatLevel(attackerLevel)} / 伤害 ${formatLevel(damageLevel)}）对 ${target.nickname} 的${targetAction ? requireAction(targetAction.actionId).name : '无招式'}`;
   if (outcome === 'none') summary.push(`${comparison}：有效伤害不足 0.5，未造成伤害。`);
@@ -922,13 +943,15 @@ export function requireAction(actionId: string): ActionDefinition { const defini
 function primaryEffect(action: SubmittedAction | undefined): EffectHandlerId | undefined { return action ? requireAction(action.actionId).effects[0]?.handler : undefined; }
 function actionTargets(action: SubmittedAction): string[] { return action.targetIds ?? (action.targetId ? [action.targetId] : []); }
 function resourceValue(player: CombatPlayer, resourceId: string): number { return player.resources[resourceId] ?? 0; }
-function rewardDevour(player: CombatPlayer, action: SubmittedAction | undefined, summary: string[]): void { const choice = action?.resourceChoice; if (player.characterId !== 'ye_qingxian' || !choice) return; gainResource(player, choice, 1); summary.push(`${player.nickname} 的吞天获得 1 ${choice === 'energy' ? '气' : '蓄力'}。`); }
+function rewardDevour(player: CombatPlayer, action: SubmittedAction | undefined, summary: string[]): void { const choice = action?.resourceChoice; if (!hasPassive(player, 'devour_heaven') || !choice) return; gainResource(player, choice, 1); summary.push(`${player.nickname} 的吞天获得 1 ${choice === 'energy' ? '气' : '蓄力'}。`); }
 function gainResource(player: CombatPlayer, resourceId: string, amount: number): void {
   if (amount <= 0) return;
   player.resources[resourceId] = resourceValue(player, resourceId) + amount;
-  if (player.characterId === 'quilon' && (resourceId === 'energy' || resourceId === 'charge')) setBuff(player, 'wuyou_awareness', buffStacks(player, 'wuyou_awareness') + amount);
+  if (hasPassive(player, 'sacrifice_path') && (resourceId === 'energy' || resourceId === 'charge')) setBuff(player, 'sacrifice_path_progress', buffStacks(player, 'sacrifice_path_progress') + amount);
+  if (hasPassive(player, 'wuyou_awareness') && (resourceId === 'energy' || resourceId === 'charge')) setBuff(player, 'wuyou_awareness', buffStacks(player, 'wuyou_awareness') + amount);
 }
 function buffStacks(player: CombatPlayer, buffId: string): number { return player.buffs?.has(buffId) ? player.buffStacks?.[buffId] ?? 1 : 0; }
+function hasPassive(player: CombatPlayer, passiveId: string): boolean { return characterById.get(player.characterId ?? '')?.passiveIds?.includes(passiveId) === true || (player.characterId === 'ye_qingxian' && player.learnedPassiveIds?.includes(passiveId) === true); }
 function setBuff(player: CombatPlayer, buffId: string, stacks = 1, remainingTurns?: number): void {
   player.buffs ??= new Set(); player.buffStacks ??= {}; player.buffRemainingTurns ??= {};
   if (stacks <= 0) return removeBuff(player, buffId);
@@ -937,7 +960,7 @@ function setBuff(player: CombatPlayer, buffId: string, stacks = 1, remainingTurn
 }
 function removeBuff(player: CombatPlayer, buffId: string): void { player.buffs?.delete(buffId); if (player.buffStacks) delete player.buffStacks[buffId]; if (player.buffRemainingTurns) delete player.buffRemainingTurns[buffId]; if (player.buffSourcePlayerIds) delete player.buffSourcePlayerIds[buffId]; }
 function recordWarriorHealthShift(player: CombatPlayer, hpBefore: number): void {
-  if (player.characterId !== 'warrior') return;
+  if (!hasPassive(player, 'tear_passive')) return;
   const shifts = Math.max(0, hpBefore - player.currentHp);
   if (shifts <= 0) return;
   setBuff(player, 'strength', buffStacks(player, 'strength') + shifts);
@@ -1201,9 +1224,9 @@ function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | un
   if (!action || player.buffs?.has('fear_action_canceled')) return 0; const definition = requireAction(action.actionId); let level = definition.variable && action.power !== undefined ? (definition.variable.skillLevelPerPower ?? definition.variable.levelPerPower) * action.power : definition.skillLevel ?? definition.level;
   if (definition.defenseBreak?.mode === 'persistent' && player.buffs?.has(definition.defenseBreak.brokenBuffId!)) return 0;
   if (definition.id === 'slash' && player.buffs?.has('axe_raised')) level += 0.5;
-  if (definition.id === 'slash' && player.characterId === 'mudrock') level += buffStacks(player, 'mud_awakened');
-  if (definition.id === 'fist' && player.characterId === 'mudrock') level += buffStacks(player, 'mud_fist_level') * 0.5;
-  if (['steal', 'absorb_charge'].includes(definition.id) && player.characterId === 'ao') { const stage = buffStacks(player, 'ao_mastery'); level = (stage >= 1 ? 0.5 : 0) + (stage >= 3 ? 1 : 0); }
+  if (definition.id === 'slash' && hasPassive(player, 'child_of_earth')) level += buffStacks(player, 'mud_awakened');
+  if (definition.id === 'fist' && hasPassive(player, 'child_of_earth')) level += buffStacks(player, 'mud_fist_level') * 0.5;
+  if (['steal', 'absorb_charge'].includes(definition.id) && hasPassive(player, 'practice_makes_perfect')) { const stage = buffStacks(player, 'ao_mastery'); level = (stage >= 1 ? 0.5 : 0) + (stage >= 3 ? 1 : 0); }
   if (definition.id === 'aoao_divine') level += buffStacks(player, 'ao_mastery') * 0.5;
   if (primaryEffect(action) === 'sovereign_blade') level = buffStacks(player, 'sovereign_blade_forged');
   if (action.actionId === 'harmony_with_light') level = buffStacks(player, 'harmony_uses') + 1;
@@ -1218,7 +1241,7 @@ function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | un
   if (action.actionId === 'body_slam') level = buffStacks(player, 'armor');
   if (player.characterId === 'napoleon') level += buffStacks(player, 'tactical_advantage') * 0.5;
   if (player.characterId === 'quilon' && player.buffs?.has('bodhisattva_debate') && definition.category === 'attack') level += 0.5;
-  if (player.characterId === 'warrior' && definition.category === 'attack') level += buffStacks(player, 'strength') * 0.5;
+  if (hasPassive(player, 'tear_passive') && definition.category === 'attack') level += buffStacks(player, 'strength') * 0.5;
   if ((player.buffs?.has('transcendence') || player.buffs?.has('transcendence_permanent')) && action.actionId !== 'transcend_detonate') level += buffStacks(player, 'transcendence_progress') * 0.5;
   if (player.buffs?.has('iridescence_afterglow')) level = Math.max(1.5, level);
   if (definition.category === 'attack' && actionTargets(action).some((targetId) => roundPlayers.get(player)?.get(targetId)?.buffs?.has('resentment_mark'))) level += 0.5;
@@ -1231,7 +1254,7 @@ function submittedDamageLevel(player: CombatPlayer, action: SubmittedAction | un
   const debateBonus = player.characterId === 'quilon' && player.buffs?.has('bodhisattva_debate') && definition.category === 'attack' ? 0.5 : 0;
   if (action.actionId === 'shred') return Math.max(0, submittedActionLevel(player, action)
     - (player.buffs?.has('soul_reap_debuff') && definition.category === 'attack' ? 0.5 : 0));
-  if (player.characterId === 'warrior' && definition.category === 'attack') {
+  if (hasPassive(player, 'tear_passive') && definition.category === 'attack') {
     const targetVulnerability = actionTargets(action).reduce((highest, targetId) => Math.max(highest, buffStacks(roundPlayers.get(player)?.get(targetId) ?? player, 'vulnerability')), 0);
     const baseDamage = action.actionId === 'bully' ? 0.5 + targetVulnerability * 0.5
       : action.actionId === 'body_slam' ? buffStacks(player, 'armor')
@@ -1255,7 +1278,7 @@ function multiHitDamageLevel(definition: ActionDefinition): number {
 function costForSubmittedAction(player: CombatPlayer, action: SubmittedAction): Record<string, number> {
   if (action.actionId === 'transform' && action.transformCharacterId) return characterById.get(action.transformCharacterId)?.transformationCost ?? {};
   const definition = requireAction(action.actionId); const cost = { ...definition.cost };
-  if (action.actionId === 'slash' && player.characterId === 'li_chungang') cost.energy = 1 / 3;
+  if (action.actionId === 'slash' && hasPassive(player, 'sword_dao')) cost.energy = 1 / 3;
   if (action.actionId === 'ten_volt' && player.buffs?.has('quick_attack_ready')) cost.charge = 0;
   if (action.actionId === 'collapsing_fear' && player.characterId === 'inner_guard' && player.currentHp === 1) cost.energy = 2;
   if (definition.variable && action.power !== undefined) cost[definition.variable.resourceId] = (cost[definition.variable.resourceId] ?? 0) + definition.variable.costPerPower * action.power;
@@ -1301,7 +1324,7 @@ function consumeNapoleonStrategy(buffer: string, sequence: string, command?: 'A'
 }
 
 function sacrificeResource(player: CombatPlayer, action: SubmittedAction): string | undefined {
-  if (player.characterId !== 'ye_qingxian' || resourceValue(player, 'energy') + resourceValue(player, 'charge') < 3 || player.currentHp <= 0) return undefined;
+  if (!hasPassive(player, 'sacrifice_path') || buffStacks(player, 'sacrifice_path_progress') < 3 || player.currentHp <= 0) return undefined;
   const deficits = Object.entries(costForSubmittedAction(player, action)).filter(([resourceId, amount]) => amount - resourceValue(player, resourceId) > 1e-6);
   return deficits.length === 1 && Math.abs(deficits[0][1] - resourceValue(player, deficits[0][0]) - 1) < 1e-6 ? deficits[0][0] : undefined;
 }

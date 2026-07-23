@@ -175,7 +175,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     characterId: 'ao', role: '资源干扰与成长', difficulty: '专家',
     summary: '用吸针对蓄力并推动熟能生巧升级，随后以逐渐便宜、逐渐增强的凹凹神功终结节奏。',
     gamePlan: ['观察谁最可能使用蓄力；吸只有成功获取资源才会推进成长。', '削会由成功的吸带入全场技能池，用来反制其他人的吸并改变生命状态。'],
-    keyMechanics: [{ title: '熟能生巧', description: '每次成功获取资源，吸与凹凹神功依序获得新效果；凹凹神功使用后重置升级。' }],
+    keyMechanics: [{ title: '熟能生巧', description: '凹、紫翼双凹或吸成功截获资源时升级；气和蓄力自身产出的资源不计入。凹凹神功使用后重置升级。' }],
     featuredActionIds: ['absorb_charge', 'aoao_divine', 'cut'],
   },
   {
@@ -199,10 +199,10 @@ export const characterGuides: CharacterGuideDefinition[] = [
     featuredActionIds: ['fist', 'rockfall_hammer', 'filthy_bloodline', 'continue_sleep', 'slash'],
   },
   {
-    characterId: 'ye_qingxian', role: '生命换取资源与收割', difficulty: '专家',
-    summary: '用祭道抵免最后一点资源缺口，并让任意招式造成的状态左移通过吞天回收资源。',
-    gamePlan: ['资源合计达到 3 后才能用祭道补足一项恰好差 1 的费用。', '提交招式时先选择吞天获得气或蓄力；只有实际令其他玩家左移才会获得。'],
-    keyMechanics: [{ title: '祭道', description: '自伤不触发濒死获得气；濒死时再次祭道可能直接死亡。' }],
+    characterId: 'ye_qingxian', role: '累计激活祭道超支资源与击杀学习', difficulty: '专家',
+    summary: '累计获得气与蓄力至 3 点后祭道永久激活，可左移健康抵免资源缺口；任意招式令其他玩家左移时通过吞天回收资源；击杀后可学习目标技能。',
+    gamePlan: ['前几回合积极使用气和蓄力，尽快累计 3 点激活祭道。', '祭道激活后可超支使用掌仙术（3 气），差 1 气时自动左移健康抵免。', '君临天下在对抗获胜时施加大范围恐惧控场，但不造成伤害也不触发吞天。', '击杀后可学习目标技能，逐步扩展技能树。'],
+    keyMechanics: [{ title: '祭道', description: '累计制——激活后永久生效。祭道进入濒死仍获得气；恢复后可再次触发，濒死时祭道则会死亡。' }, { title: '吞天学习', description: '直接击杀后可学习目标的一个专属技能或被动，也可以放弃；切换角色后保留。' }, { title: '君临天下', description: '攻击分类但不造成伤害——需对抗获胜才能施加恐惧，可用高等级技能反制。' }],
     featuredActionIds: ['immortal_palm', 'rule_the_world'],
   },
   {

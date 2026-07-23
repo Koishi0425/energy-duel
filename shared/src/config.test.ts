@@ -20,7 +20,7 @@ describe('game configuration', () => {
     expect(gameConfig.actions.find((action) => action.id === 'create_star_core')?.defenseBreak).toEqual({ mode: 'recreated' });
     expect(gameConfig.buffs.find((buff) => buff.id === 'transcendence_permanent')?.grantedActionIds).toBeUndefined();
     expect(gameConfig.actions.find((action) => action.id === 'quick_attack')).toMatchObject({ movement: true });
-    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')).toMatchObject({ category: 'special', level: 3 });
+    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')).toMatchObject({ category: 'attack', skillLevel: 3, damageLevel: 0 });
     expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')?.damageType).toBeUndefined();
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));

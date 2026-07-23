@@ -584,11 +584,17 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(locked.get('b')!.alive).toBe(false);
   });
 
-  it('grants Cut globally when Ao transforms and upgrades mastery from resource actions', () => {
+  it('grants Cut globally when Ao transforms and upgrades mastery only after stealing resources', () => {
     const players = roster(['a', 0], ['b', 0]);
     resolveRound(players, actions(['a', { actionId: 'transform', transformCharacterId: 'ao' }], ['b', { actionId: 'defend' }]));
     expect(Array.from(players.values()).every((player) => player.buffs?.has('cut_granted'))).toBe(true);
     resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.buffStacks?.ao_mastery).toBeUndefined();
+    resolveRound(players, actions(['a', { actionId: 'gain_charge' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.buffStacks?.ao_mastery).toBeUndefined();
+    resolveRound(players, actions(['a', { actionId: 'steal', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    expect(players.get('a')!.buffStacks?.ao_mastery).toBeUndefined();
+    resolveRound(players, actions(['a', { actionId: 'steal', targetId: 'b' }], ['b', { actionId: 'charge' }]));
     expect(players.get('a')!.buffStacks?.ao_mastery).toBe(1);
   });
 
@@ -739,13 +745,47 @@ describe('RoundResolver JSON-driven actions', () => {
   it('lets Ye Qingxian sacrifice one health state for an exact one-resource shortfall', () => {
     const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
     actor.characterId = 'ye_qingxian'; actor.resources.charge = 1; actor.currentHp = actor.maxHp = 2; target.currentHp = target.maxHp = 2;
+    actor.buffs = new Set(['sacrifice_path_progress']); actor.buffStacks = { sacrifice_path_progress: 3 };
     const palm = { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'charge' as const };
     expect(() => validateAction(actor, palm, players)).not.toThrow();
     resolveRound(players, actions(['a', palm], ['b', { actionId: 'charge' }]));
     expect(actor.currentHp).toBe(1);
-    expect(actor.resources.energy).toBe(0);
+    expect(actor.resources.energy).toBe(1);
     expect(actor.resources.charge).toBe(2);
     expect(target.alive).toBe(false);
+    expect(actor.buffStacks.sacrifice_path_progress).toBe(5);
+  });
+
+  it('tracks Sacrifice Path from cumulative gains without losing activation after spending', () => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2;
+    resolveRound(players, actions(['a', { actionId: 'charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'gain_charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
+    expect(actor.buffStacks?.sacrifice_path_progress).toBe(3);
+    actor.resources.energy = 2; actor.resources.charge = 0;
+    expect(() => validateAction(actor, { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'energy' }, players)).not.toThrow();
+  });
+
+  it('grants near-death Energy again after Ye Qingxian recovers and sacrifices again', () => {
+    const players = roster(['a', 2], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2;
+    actor.buffs = new Set(['sacrifice_path_progress']); actor.buffStacks = { sacrifice_path_progress: 3 };
+    const palm = { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'energy' as const };
+    resolveRound(players, actions(['a', palm], ['b', { actionId: 'super_defend' }]));
+    expect(actor.currentHp).toBe(1); expect(actor.resources.energy).toBe(1);
+    resolveRound(players, actions(['a', { actionId: 'charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'heal', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
+    expect(actor.currentHp).toBe(2); expect(actor.resources.energy).toBe(2);
+    resolveRound(players, actions(['a', palm], ['b', { actionId: 'super_defend' }]));
+    expect(actor.currentHp).toBe(1); expect(actor.resources.energy).toBe(1);
+  });
+
+  it('records a Devour learning opportunity after a direct elimination', () => {
+    const players = roster(['a', 3], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2; target.characterId = 'warrior'; target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(['a', { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'energy' }], ['b', { actionId: 'charge' }]));
+    expect(result.learningTargets).toEqual([{ learnerPlayerId: 'a', targetPlayerId: 'b' }]);
   });
 
   it('applies Star Body before block and lets true damage bypass only Star Body', () => {
@@ -812,15 +852,17 @@ describe('RoundResolver JSON-driven actions', () => {
     actor.characterId = 'ye_qingxian'; actor.currentHp = actor.maxHp = 2; actor.gridIndex = 0;
     actor.resources.energy = 1; actor.resources.charge = 2;
     players.get('b')!.gridIndex = 2; players.get('c')!.gridIndex = 4; players.get('d')!.gridIndex = 6;
+    for (const target of players.values()) { target.currentHp = 2; target.maxHp = 2; }
+    players.get('c')!.resources.charge = 1;
     const action = { actionId: 'rule_the_world', targetGridIndex: 6, resourceChoice: 'energy' as const };
     expect(() => validateAction(actor, action, players)).not.toThrow();
-    resolveRound(players, actions(['a', action], ['b', { actionId: 'charge' }], ['c', { actionId: 'charge' }], ['d', { actionId: 'charge' }]));
+    resolveRound(players, actions(['a', action], ['b', { actionId: 'charge' }], ['c', { actionId: 'atomic_breath', targetId: 'a' }], ['d', { actionId: 'charge' }]));
     expect(players.get('b')!.alive).toBe(true);
     expect(players.get('c')!.alive).toBe(true);
     expect(players.get('d')!.alive).toBe(true);
-    expect(players.get('c')!.currentHp).toBe(1);
-    expect(players.get('d')!.currentHp).toBe(1);
-    expect(players.get('c')!.buffs?.has('fear')).toBe(true);
+    expect(players.get('c')!.currentHp).toBe(2);
+    expect(players.get('d')!.currentHp).toBe(2);
+    expect(players.get('c')!.buffs?.has('fear') ?? false).toBe(false);
     expect(players.get('d')!.buffs?.has('fear')).toBe(true);
   });
 

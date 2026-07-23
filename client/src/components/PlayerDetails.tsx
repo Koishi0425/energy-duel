@@ -1,4 +1,4 @@
-import { buffById, characterById, isResourceVisibleForCharacter, passiveById, resourceById, type PlayerProfile, type SyncedPlayer } from '@energy-duel/shared';
+import { actionById, buffById, characterById, isResourceVisibleForCharacter, passiveById, resourceById, type PlayerProfile, type SyncedPlayer } from '@energy-duel/shared';
 import { Button, Progress, Tag } from 'antd';
 import { resolvePortraitUrl } from '../game/visualResolver';
 import PlayerProfileBanner from './PlayerProfileBanner';
@@ -6,6 +6,7 @@ import PlayerProfileBanner from './PlayerProfileBanner';
 export default function PlayerDetails({ player, profile, onOpenGuide, showPortrait = false }: { player: SyncedPlayer; profile?: PlayerProfile; onOpenGuide?: (characterId: string) => void; showPortrait?: boolean }) {
   const character = characterById.get(player.characterId);
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
+  const passiveIds = [...new Set([...(character?.passiveIds ?? []), ...(player.characterId === 'ye_qingxian' ? player.learnedPassiveIds : [])])];
   return (
     <div className="player-details">
       {profile && <PlayerProfileBanner profile={profile} />}
@@ -19,7 +20,8 @@ export default function PlayerDetails({ player, profile, onOpenGuide, showPortra
       <p className="form-line">{character?.name ?? player.characterId} · {form?.name ?? player.currentFormId}</p>
       {character?.description && <p className="muted">{character.description}</p>}
       {onOpenGuide && <Button size="small" onClick={() => onOpenGuide(player.characterId)}>查看{character?.name ?? '角色'}教程</Button>}
-      {Boolean(character?.passiveIds?.length) && <div className="buff-list"><strong>被动技能</strong>{character?.passiveIds?.map((id) => { const passive = passiveById.get(id); return <div className="buff-detail" key={id}><Tag color="purple">{passive?.name ?? id}</Tag><small>{passive?.description}</small></div>; })}</div>}
+      {passiveIds.length > 0 && <div className="buff-list"><strong>被动技能</strong>{passiveIds.map((id) => { const passive = passiveById.get(id); const learned = player.learnedPassiveIds.includes(id); return <div className="buff-detail" key={id}><Tag color="purple">{learned ? '已学 · ' : ''}{passive?.name ?? id}</Tag><small>{passive?.description}</small></div>; })}</div>}
+      {player.characterId === 'ye_qingxian' && player.learnedActionIds.length > 0 && <div className="buff-list"><strong>吞天已学技能</strong><div>{player.learnedActionIds.map((id) => <Tag color="gold" key={id}>{actionById.get(id)?.name ?? id}</Tag>)}</div></div>}
       <div className="detail-section">
         <span>{player.characterId === 'inner_guard' ? '装置' : '生命'} {player.currentHp}/{player.maxHp}</span>
         <Progress percent={player.maxHp > 0 ? Math.round(player.currentHp / player.maxHp * 100) : 0} showInfo={false} status={player.alive ? 'active' : 'exception'} />

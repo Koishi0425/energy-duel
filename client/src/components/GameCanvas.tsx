@@ -4,6 +4,7 @@ import { assetById, boardObjectById, characterById, isResourceVisibleForCharacte
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 import { HEALTH_BAR_COLORS, unitHealthBarModel } from '../game/unitHealthBar';
+import { boardUnitSlot, lotusSeatBoardStatus } from '../game/lotusSeatBoard';
 import { playerRoomStatus } from '../playerRoomStatus';
 
 interface ScreenPoint { x: number; y: number }
@@ -35,11 +36,13 @@ interface BoardObjectView {
   root: Container;
   overlay: Container;
   overlayHit: Graphics;
+  telemetryPanel: Graphics;
   shape: Graphics;
   ring: Graphics;
   portrait: Sprite;
   label: Text;
   status: Text;
+  telemetry: Text;
   assetUrl: string;
 }
 
@@ -69,13 +72,7 @@ export default function GameCanvas(props: Props) {
       const keys = unitKeysByCell.get(object.gridIndex) ?? []; keys.push(`object:${object.objectId}`); unitKeysByCell.set(object.gridIndex, keys);
     }
     for (const keys of unitKeysByCell.values()) keys.sort();
-    const layout = (cell: number, key: string) => {
-      const keys = unitKeysByCell.get(cell) ?? [key]; const index = Math.max(0, keys.indexOf(key));
-      const columns = Math.ceil(Math.sqrt(keys.length)); const rows = Math.ceil(keys.length / columns);
-      const column = index % columns; const row = Math.floor(index / columns);
-      const scale = keys.length <= 1 ? 1 : Math.max(0.48, Math.min(0.82, 1.18 / Math.sqrt(keys.length)));
-      return { x: (column - (columns - 1) / 2) * 50 * scale, y: (row - (rows - 1) / 2) * 44 * scale, scale };
-    };
+    const layout = (cell: number, key: string) => boardUnitSlot(unitKeysByCell.get(cell) ?? [key], key);
     for (const player of propsRef.current.players) {
       const view = tokenViewsRef.current.get(player.playerId);
       if (!view) continue;
@@ -88,7 +85,8 @@ export default function GameCanvas(props: Props) {
       const point = map.getGridCoordinates(object.gridIndex);
       const slot = object.kind === 'summon' ? layout(object.gridIndex, `object:${object.objectId}`) : { x: 0, y: 0, scale: 1 };
       view.root.scale.set(slot.scale); view.root.position.set(point.x + slot.x, point.y + slot.y);
-      view.overlay.position.set(point.x, point.y);
+      view.overlay.scale.set(object.kind === 'summon' ? Math.max(0.78, slot.scale) : 1);
+      view.overlay.position.set(point.x + slot.x, point.y + slot.y);
     }
   };
 
@@ -145,7 +143,7 @@ export default function GameCanvas(props: Props) {
       }
       const definition = boardObjectById.get(object.definitionId); const color = Number.parseInt((definition?.color ?? '#94a3b8').slice(1), 16);
       view.root.eventMode = propsRef.current.gridTargeting ? 'none' : 'static'; view.overlay.eventMode = propsRef.current.gridTargeting ? 'none' : 'static';
-      view.shape.clear(); view.ring.clear(); view.overlayHit.clear(); view.portrait.visible = object.kind === 'summon'; view.status.visible = object.kind === 'summon';
+      view.shape.clear(); view.ring.clear(); view.overlayHit.clear(); view.telemetryPanel.clear(); view.portrait.visible = object.kind === 'summon'; view.status.visible = object.kind === 'summon'; view.telemetry.visible = false;
       if (object.kind === 'terrain') {
         view.shape.ellipse(0, 7, 31, 14).fill({ color, alpha: 0.3 }).stroke({ color, width: 3, alpha: 0.9 });
         const occupied = propsRef.current.players.some((player) => player.alive && player.gridIndex === object.gridIndex)
@@ -173,6 +171,19 @@ export default function GameCanvas(props: Props) {
         view.label.anchor.set(0.5, 0); view.label.text = definition?.name ?? object.definitionId; view.label.position.set(0, 11);
         view.status.text = object.maxHp > 0 ? `HP ${formatResource(object.currentHp)}/${formatResource(object.maxHp)}${owner ? ` · ${truncate(owner.nickname, 8)}` : ''}` : owner ? `归属 ${truncate(owner.nickname, 8)}` : '召唤物';
         view.status.position.set(0, propsRef.current.players.length > 12 ? 23 : 27);
+        if (object.definitionId === 'lotus_seat') {
+          const occupants = propsRef.current.players.filter((player) => player.gridIndex === object.gridIndex).length
+            + propsRef.current.boardObjects.filter((candidate) => candidate.kind === 'summon' && candidate.currentHp > 0 && candidate.gridIndex === object.gridIndex).length;
+          const compact = propsRef.current.players.length > 8 || occupants > 1;
+          view.telemetry.text = lotusSeatBoardStatus(object, compact);
+          view.telemetry.style.fontSize = compact ? 8 : 9;
+          view.telemetry.position.set(0, propsRef.current.players.length > 12 ? 34 : 40);
+          const panelWidth = Math.max(64, view.telemetry.width + 10);
+          view.telemetryPanel.roundRect(-panelWidth / 2, view.telemetry.y - 2, panelWidth, view.telemetry.height + 4, 4)
+            .fill({ color: 0x07111f, alpha: 0.86 }).stroke({ color, width: 1, alpha: 0.8 });
+          view.overlayHit.roundRect(-panelWidth / 2, 8, panelWidth, view.telemetry.y + view.telemetry.height - 6, 4).fill({ color: 0x000000, alpha: 0.001 });
+          view.telemetry.visible = true;
+        }
         view.root.alpha = object.maxHp > 0 && object.currentHp <= 0 ? 0.38 : propsRef.current.targeting && !targetable ? 0.28 : 1;
       }
     }
@@ -249,11 +260,12 @@ export default function GameCanvas(props: Props) {
 }
 
 function createBoardObjectView(objectId: string, propsRef: React.MutableRefObject<Props>): BoardObjectView {
-  const root = new Container(); const overlay = new Container(); const overlayHit = new Graphics(); const shape = new Graphics(); const ring = new Graphics();
+  const root = new Container(); const overlay = new Container(); const overlayHit = new Graphics(); const telemetryPanel = new Graphics(); const shape = new Graphics(); const ring = new Graphics();
   const portrait = new Sprite(Texture.from(FALLBACK_PORTRAIT_URL)); portrait.anchor.set(0.5, 1);
   const label = new Text({ style: { fill: 0xffffff, fontSize: 10, fontWeight: '700', dropShadow: true, align: 'center' } });
   const status = new Text({ style: { fill: 0xcbd1ed, fontSize: 9, dropShadow: true, align: 'center' } }); status.anchor.set(0.5, 0);
-  root.addChild(shape, ring, portrait); overlay.addChild(overlayHit, label, status);
+  const telemetry = new Text({ style: { fill: 0xf8fafc, fontSize: 9, fontWeight: '700', align: 'center' } }); telemetry.anchor.set(0.5, 0);
+  root.addChild(shape, ring, portrait); overlay.addChild(overlayHit, telemetryPanel, label, status, telemetry);
   const inspect = () => {
     if (propsRef.current.gridTargeting) return;
     const object = propsRef.current.boardObjects.find((candidate) => candidate.objectId === objectId);
@@ -271,7 +283,7 @@ function createBoardObjectView(objectId: string, propsRef: React.MutableRefObjec
   for (const target of [root, overlay]) {
     target.eventMode = 'static'; target.cursor = 'pointer'; target.on('pointertap', inspect);
   }
-  return { root, overlay, overlayHit, shape, ring, portrait, label, status, assetUrl: FALLBACK_PORTRAIT_URL };
+  return { root, overlay, overlayHit, telemetryPanel, shape, ring, portrait, label, status, telemetry, assetUrl: FALLBACK_PORTRAIT_URL };
 }
 
 function createTokenView(playerId: string, propsRef: React.MutableRefObject<Props>): TokenView {

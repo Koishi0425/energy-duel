@@ -68,11 +68,12 @@ export function colorForAccount(accountId: string, usedColors: Set<number>): num
 
 export interface UnlockBuff { buffId: string; stacks: number }
 
-export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>, resources: Readonly<Record<string, number>> = {}, commandBuffer = ''): boolean {
+export function isActionUnlocked(characterId: string, formId: string, actionId: string, buffs: Iterable<string | UnlockBuff>, resources: Readonly<Record<string, number>> = {}, commandBuffer = '', learnedActionIds: readonly string[] = []): boolean {
   const currentBuffs = new Map(Array.from(buffs, (buff) => typeof buff === 'string' ? [buff, 1] : [buff.buffId, buff.stacks]));
   const visibleInTree = characterById.get(characterId)?.forms.find((form) => form.id === formId)?.unlockedActions.includes(actionId) === true;
   const grantedByBuff = Array.from(currentBuffs.keys()).some((buffId) => buffById.get(buffId)?.grantedActionIds?.includes(actionId));
-  if (!visibleInTree && !grantedByBuff) return false;
+  const learnedByYeQingxian = characterId === 'ye_qingxian' && learnedActionIds.includes(actionId);
+  if (!visibleInTree && !grantedByBuff && !learnedByYeQingxian) return false;
   const action = actionById.get(actionId);
   if (action?.napoleonSequence && !canExecuteNapoleonStrategy(commandBuffer, action.napoleonSequence)
     && napoleonStrategyFromCommand(commandBuffer, action.napoleonSequence.at(-1) as 'A' | 'D' | 'T')?.id !== action.id) return false;

@@ -75,15 +75,16 @@
     ,{ "id": "tremble_cooldown", "name": "战栗冷却", "description": "战栗在下一回合不可使用。", "color": "#9a3412", "scope": "character" }
     ,{ "id": "dominate_cooldown", "name": "主宰冷却", "description": "主宰在下一回合不可使用。", "color": "#7c2d12", "scope": "character" }
     ,{ "id": "regain_spirit_lock", "name": "重振精神", "description": "持续期间只能提交攻击分类技能。", "color": "#475569", "scope": "character" }
+    ,{ "id": "sacrifice_path_progress", "name": "祭道计数", "description": "累计获得的气与蓄力总量；达到 3 后永久激活祭道。", "color": "#f59e0b", "scope": "character" }
   ],
   "passives": [
     { "id": "sword_dao", "name": "剑道", "description": "无法使用拳；斩只消耗1/3气。" },
-    { "id": "practice_makes_perfect", "name": "熟能生巧", "description": "主动资源行动成功时升级凹与吸；依次获得0.5等级、后发选择、再加1等级、可造成伤害。" },
+    { "id": "practice_makes_perfect", "name": "熟能生巧", "description": "凹、紫翼双凹或吸成功截获资源时升级；气和蓄力自身产出的资源不计入。依次获得0.5等级、后发选择、再加1等级、可造成伤害。" },
     { "id": "shadow_blade_passive", "name": "暗影之刃", "description": "无法使用拳和斩；开局可释放一次范围斩击，使用后需完成四次梦魇专属招式恢复。" },
     { "id": "child_of_earth", "name": "土石之子", "description": "无斩；拳不再脆弱，但使用拳时若承受至少0.5等级差的伤害会直接死亡；每次使用拳永久提高拳0.5级。" },
     { "id": "fertile_soil", "name": "沃土予身", "description": "变身当回合开始计数；无屏障时每第四回合获得一层屏障，屏障失去时恢复一个健康状态。" }
-    ,{ "id": "sacrifice_path", "name": "祭道", "description": "气与蓄力合计不少于 3 时，每次技能至多以左移一个健康状态抵免 1 点资源缺口。" }
-    ,{ "id": "devour_heaven", "name": "吞天", "description": "专属招式令其他玩家左移后，获得提交时选择的 1 点气或蓄力。" }
+    ,{ "id": "sacrifice_path", "name": "祭道", "description": "累计获得 3 点气与蓄力后永久激活；每次技能至多以左移一个健康状态抵免 1 点资源缺口，进入濒死时仍正常获得气。" }
+    ,{ "id": "devour_heaven", "name": "吞天", "description": "任意招式令其他玩家左移后获得所选基础资源；直接击杀后可学习目标当前角色的一个专属技能或被动。" }
     ,{ "id": "napoleon_command", "name": "皇帝的指挥", "description": "无法产生或消耗基础资源，只能通过攻击、防守、战术指令组织策略。" }
     ,{ "id": "star_body_passive", "name": "神体", "description": "非真实攻击在等级比较前先减去神体层数。" }
     ,{ "id": "tempered_passive", "name": "千锤百炼", "description": "成功阻止对手行动的预期效果时获得 0.5 气并永久成长，最多 4 层。" }
@@ -252,7 +253,7 @@
     { "id": "filthy_bloodline", "name": "秽壤的血脉", "category": "special", "description": "消耗3气进入最多三回合沉睡；可提前苏醒并按未沉睡回合返还气。苏醒后获得斩，并按沉睡时长获得等时长攻击加成。", "cost": { "energy": 3 }, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "filthy_bloodline" }], "vfxId": "filthy_bloodline" },
     { "id": "continue_sleep", "name": "继续沉睡", "category": "special", "description": "保持沉睡一回合；第三个沉睡回合结束后自动苏醒。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 0, "level": 0, "effects": [{ "handler": "continue_sleep" }], "vfxId": "sleep" },
     { "id": "immortal_palm", "name": "掌仙术", "category": "attack", "description": "对一名玩家发动 3 级魔法攻击。吞天收益由提交时选择气或蓄力。", "cost": { "energy": 3 }, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 3, "damageType": "magic", "effects": [{ "handler": "immortal_palm" }], "vfxId": "immortal_palm" },
-    { "id": "rule_the_world", "name": "君临天下", "category": "special", "description": "选择一个地块，对该地块及两侧各 2 格内行动等级不高于 3 的其他玩家施加恐惧，不造成伤害。", "cost": { "energy": 1, "charge": 2 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 2, "level": 3, "effects": [{ "handler": "rule_the_world" }], "vfxId": "rule_the_world" },
+    { "id": "rule_the_world", "name": "君临天下", "category": "attack", "description": "选择一个地块，以 3 级技能对抗覆盖该地块及两侧各 2 格内的其他玩家；胜出时施加恐惧，不造成伤害。", "cost": { "energy": 1, "charge": 2 }, "target": { "mode": "none" }, "targetsGridCell": true, "speedPriority": 2, "level": 3, "skillLevel": 3, "damageLevel": 0, "effects": [{ "handler": "rule_the_world", "kind": "attack" }], "vfxId": "rule_the_world" },
     { "id": "attack_order", "name": "攻击指令 A", "category": "attack", "description": "发布攻击指令并对一名玩家造成 1 级钝击。", "cost": {}, "target": { "mode": "single_enemy" }, "speedPriority": 1, "level": 1, "damageType": "blunt", "effects": [{ "handler": "attack_order" }], "vfxId": "attack_order" },
     { "id": "defense_order", "name": "防守指令 D", "category": "defense", "description": "发布防守指令并生成 1.5 级临时格挡。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 1.5, "effects": [{ "handler": "defense_order" }], "vfxId": "defense_order", "defenseBreak": { "mode": "recreated" } },
     { "id": "tactical_order", "name": "战术指令 T", "category": "special", "description": "发布战术指令并追加到缓冲。", "cost": {}, "target": { "mode": "none" }, "speedPriority": 1, "level": 0, "effects": [{ "handler": "tactical_order" }], "vfxId": "tactical_order" },

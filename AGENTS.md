@@ -156,6 +156,13 @@ Run commands from the repository root:
   Transformation preserves the player's current healthy or near-death state;
   it never heals by resetting HP. Inner Guard maps near-death to one device and
   retains its two-or-three-device count while the player remains healthy.
+  Ye Qingxian's Sacrifice Path permanently activates after her character-scoped
+  cumulative Energy and Charge gains reach three. Sacrifice fills one payment
+  shortfall by shifting health, then a healthy-to-near-death shift grants Energy
+  normally and may do so again after recovery. Devour learning is an optional,
+  server-authoritative post-round choice after a direct elimination; learned
+  actions and passives are character-scoped, persist across form switches, and
+  become usable from the next round.
   Regent unlocks the persistent `stars` resource and receives three Stars only
   on the first transformation each game. Stardust always spends every Star the
   actor currently holds; its authoritative power equals that full amount.
@@ -197,7 +204,9 @@ Run commands from the repository root:
   Pikachu's quick-move waiver, Ao mastery, Nightmare cooldown/path/darkness,
   and Mudrock counters/sleep are character-scoped unless their definitions
   explicitly use player scope. Transforming into Ao grants every player the
-  player-scoped Cut action for the rest of that game.
+  player-scoped Cut action for the rest of that game. Ao mastery advances only
+  when Steal, Double Steal, or Absorb successfully intercepts another player's
+  generated resource; self-generated Energy or Charge never advances it.
 - Player combat state carries character/form IDs, HP, a general resource map,
   and a buff map. Do not reintroduce top-level resource fields such as `energy`.
 - Terrain and summons are first-class synchronized board objects. Their stable

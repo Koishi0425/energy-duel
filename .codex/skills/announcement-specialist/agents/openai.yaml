@@ -1,0 +1,4 @@
+interface:
+  display_name: "公告专员"
+  short_description: "根据项目最新提交、工作区变更和既有格式生成简洁版本公告"
+  default_prompt: "Use $announcement-specialist to publish a concise announcement for the version I provide."

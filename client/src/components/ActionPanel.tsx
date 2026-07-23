@@ -47,7 +47,8 @@ export default function ActionPanel({ player, resourceSponsor, selectedActionId,
   const character = characterById.get(player.characterId);
   const form = character?.forms.find((candidate) => candidate.id === player.currentFormId);
   const grantedIds = player.buffs.flatMap((buff) => buffById.get(buff.buffId)?.grantedActionIds ?? []);
-  const unlockedIds = [...new Set([...(form?.unlockedActions.filter((id) => id !== 'transform') ?? []), ...grantedIds])];
+  const learnedIds = player.characterId === 'ye_qingxian' ? player.learnedActionIds : [];
+  const unlockedIds = [...new Set([...(form?.unlockedActions.filter((id) => id !== 'transform') ?? []), ...grantedIds, ...learnedIds])];
   const unlockedActions = unlockedIds.map((id) => actionById.get(id)).filter((action): action is ActionDefinition => Boolean(action))
     .filter((action) => !action.napoleonSequence || canExecuteNapoleonStrategy(player.commandBuffer, action.napoleonSequence)
       || napoleonStrategyFromCommand(player.commandBuffer, action.napoleonSequence.at(-1) as NapoleonCommand)?.id === action.id);
