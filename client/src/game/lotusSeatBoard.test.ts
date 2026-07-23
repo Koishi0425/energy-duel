@@ -20,12 +20,12 @@ describe('Lotus Seat board presentation', () => {
       .toBe('顺时针 · 速度 4 · 气 0 · 蓄力 0');
   });
 
-  it('gives crowded cell occupants distinct, scaled slots', () => {
+  it('gives crowded cell occupants wider slots without shrinking them', () => {
     const keys = ['object:lotus', 'player:a', 'player:b', 'player:c'];
     const slots = keys.map((key) => boardUnitSlot(keys, key));
     expect(new Set(slots.map(({ x, y }) => `${x},${y}`)).size).toBe(keys.length);
-    expect(slots.every((slot) => slot.scale < 1)).toBe(true);
-    expect(slots[0].x).toBeLessThan(slots[1].x);
-    expect(slots[0].y).toBeLessThan(slots[2].y);
+    expect(slots.every((slot) => slot.scale === 1)).toBe(true);
+    expect(slots[1].x - slots[0].x).toBe(112);
+    expect(slots[2].y - slots[0].y).toBe(96);
   });
 });

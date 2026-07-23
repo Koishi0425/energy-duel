@@ -12,11 +12,10 @@ export function boardUnitSlot(keys: readonly string[], key: string): BoardUnitSl
   const rows = Math.ceil(keys.length / columns);
   const column = index % columns;
   const row = Math.floor(index / columns);
-  const scale = keys.length <= 1 ? 1 : Math.max(0.48, Math.min(0.82, 1.18 / Math.sqrt(keys.length)));
   return {
-    x: (column - (columns - 1) / 2) * 50 * scale,
-    y: (row - (rows - 1) / 2) * 44 * scale,
-    scale,
+    x: (column - (columns - 1) / 2) * 112,
+    y: (row - (rows - 1) / 2) * 96,
+    scale: 1,
   };
 }
 

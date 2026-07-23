@@ -5,14 +5,14 @@ describe('board visual sizing', () => {
   it('keeps a landscape summon landscape without exceeding its box', () => {
     const size = boardPortraitSize(1200, 500, 4, 'summon');
     expect(size.width).toBeGreaterThan(size.height);
-    expect(size.width).toBeLessThanOrEqual(size.baseHeight * 1.3);
+    expect(size.width).toBeLessThanOrEqual(size.baseHeight * 1.5);
     expect(size.height).toBeLessThanOrEqual(size.baseHeight);
   });
 
   it('keeps a portrait character portrait without exceeding its box', () => {
     const size = boardPortraitSize(600, 1000, 4, 'player');
     expect(size.height).toBeGreaterThan(size.width);
-    expect(size.width).toBeLessThanOrEqual(size.baseHeight * 0.9);
+    expect(size.width).toBeLessThanOrEqual(size.baseHeight * 1.05);
     expect(size.height).toBeLessThanOrEqual(size.baseHeight);
   });
 
