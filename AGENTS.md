@@ -160,7 +160,8 @@ Run commands from the repository root:
   it never heals by resetting HP. Inner Guard maps near-death to one device and
   retains its two-or-three-device count while the player remains healthy.
   Ye Qingxian's Sacrifice Path permanently activates after her character-scoped
-  cumulative Energy and Charge gains reach three. Sacrifice fills one payment
+  cumulative Energy and Charge gains reach three and records that activation as
+  an explicit permanent Buff. Sacrifice fills one payment
   shortfall by shifting health, then a healthy-to-near-death shift grants Energy
   normally and may do so again after recovery. Devour learning is an optional,
   server-authoritative post-round choice after a direct elimination; learned
@@ -189,6 +190,7 @@ Run commands from the repository root:
   direction, speed, HP, and per-player resource cargo. They coexist with other units, move once
   per round, may be attacked through `targetBoardObjectId`, deliver cargo on return,
   and refund it when destroyed or when their owner dies.
+  Chimei is disabled in standard rooms and remains available in training rooms.
   Chimei owns the character-visible Soul resource. Hellwalker adds one server-validated
   arbitrary-resource surcharge to affected attack actions for the next two rounds, while
   Resentment marks exactly one highest-resource living player at each choosing phase.
@@ -206,7 +208,7 @@ Run commands from the repository root:
   selected as flexible-payment units. Resource
   definitions declare whether they are always visible or belong to characters;
   unrelated special resources are hidden only while their value is zero.
-  Pikachu's quick-move waiver, Ao mastery, Nightmare cooldown/path/darkness,
+  Pikachu's quick-move waiver, Ao mastery, Nightmare cooldown/darkness,
   and Mudrock counters/sleep are character-scoped unless their definitions
   explicitly use player scope. Transforming into Ao grants every player the
   player-scoped Cut action for the rest of that game. Ao mastery advances only
@@ -221,6 +223,11 @@ Run commands from the repository root:
   IDs or client-only state. Dominion is a unique permanent marker per
   owner/cell and never displays or gains stacks. Summons render as
   character-like entities with portrait, name, ownership, and health state.
+  Dream Path selects a player endpoint and clockwise or counterclockwise direction,
+  damages every other player on that inclusive path, and lets Nightmare move to any
+  path cell, including its origin or an occupied cell. Each covered cell is a timed
+  three-round terrain object; reapplication refreshes it, and every Nightmare standing
+  on any Dream Path gains 0.5 attack skill and damage level.
 - Room state synchronizes asset IDs only. Original imported art belongs under
   `art-source/runtime-imports/` and is excluded from the Docker context; only
   optimized, content-hashed WebP files and their manifest belong under

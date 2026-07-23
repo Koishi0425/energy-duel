@@ -181,9 +181,10 @@ export const characterGuides: CharacterGuideDefinition[] = [
   {
     characterId: 'nightmare', role: '控制、遮蔽与追击', difficulty: '专家',
     summary: '用梦径、恐惧和黑暗限制对手，再寻找一次决定胜负的锁定冲刺。',
-    gamePlan: ['暗影之刃由梦魇专属招式缩减冷却；通用招式不推进冷却。', '无言恐惧的 2 级只用于控制判定、不造成伤害；鬼影重重的黑暗不会致盲梦魇自己。'],
+    gamePlan: ['魇之梦径可选择顺、逆时针方向并落在路径任意格；重复覆盖会刷新地块的 3 回合持续时间。', '暗影之刃由梦魇专属招式缩减冷却；通用招式不推进冷却。', '无言恐惧的 2 级只用于控制判定、不造成伤害；鬼影重重的黑暗不会致盲梦魇自己。'],
     keyMechanics: [
       { title: '暗影之刃', description: '开局即可使用一次，之后按角色被动说明重新准备。' },
+      { title: '魇之梦径', description: '路径对所有其他玩家造成伤害并形成地块；任何梦魇站在任意梦径上，攻击技能与伤害等级均提高 0.5。' },
       { title: '鬼影冲刺', description: '目标在行动公开后锁定；击杀与未击杀会落在不同位置。' },
     ],
     featuredActionIds: ['shadow_blade', 'dream_path', 'silent_fear', 'haunting_shadows', 'nightmare_dash'],
@@ -234,19 +235,19 @@ export const characterGuides: CharacterGuideDefinition[] = [
     featuredActionIds: ['dissipation', 'collapsing_fear'],
   },
   {
-    characterId: 'quilon', role: '召唤范围压制与复生反击', difficulty: '专家',
-    summary: '在相邻地块铺设尼卢火效果，用每次攻击引燃范围，再以无忧觉的复生把局势翻到菩萨辩阶段。',
-    gamePlan: ['优先把尼卢火布在能覆盖多名玩家的地块，并用火焰数量抬高惩五戒的技能等级。', '无忧觉累计达到门槛后，还需保留足够资源才能使用承三身；濒死时仍要为第一次死亡后的反击预留空间。'],
+    characterId: 'quilon', role: '火群增幅攻击与复生反击', difficulty: '专家',
+    summary: '灵活支付资源批量布置尼卢火，火群增幅每次攻击的伤害等级，再以无忧觉的复生翻到菩萨辩阶段。',
+    gamePlan: ['优先用呼吸法灵活支付资源批量布置尼卢火，火群覆盖目标时直接抬高攻击伤害等级。', '无忧觉从游戏开始累计气与蓄力，变身前已在后台累积；门槛降低后更快解锁承三身与复活。'],
     keyMechanics: [
-      { title: '无忧觉', description: '第一次受到致死伤害后，先完成本回合剩余伤害，最后恢复至健康并进入菩萨辩；等待复生期间不能继续出招。' },
-      { title: '尼卢火', description: '呼吸法可在任意没有单位的地块布置尼卢火；每团火提供伤害减免，场上有火时获得负面状态抵抗，治疗可改为熄灭一团火。' },
-      { title: '托生莲座', description: '莲座沿所选方向逐格移动，吸收途经玩家一半的气与蓄力；它可以被攻击，返回起点后把资源交给奎隆。' },
+      { title: '无忧觉', description: '玩家级被动，从游戏开始累计气与蓄力获得量；首次受到致死伤害后先完成本回合剩余伤害，最后恢复至健康并进入菩萨辩。' },
+      { title: '尼卢火', description: '呼吸法可灵活支付任意资源批量布置尼卢火；每团火为奎隆提供伤害减免与抵抗；攻击时覆盖目标的火直接叠加到伤害等级，治疗可改为熄灭一团火。' },
+      { title: '托生莲座', description: '莲座沿所选方向每回合移动两格，途经两格均吸收玩家一半的气与蓄力；可被攻击摧毁，返回起点后把资源交给奎隆。' },
     ],
     featuredActionIds: ['breathing_method', 'five_precepts', 'fire_purification', 'three_bodies'],
   },
   {
     characterId: 'chimei', role: '资源压制与行动控制', difficulty: '专家',
-    summary: '以魂强化恫吓和度神决，通过夺魂、摄魄与地狱行者持续压缩其他玩家的攻击选择。',
+    summary: '仅训练房可用。以魂强化恫吓和度神决，通过夺魂、摄魄与地狱行者持续压缩其他玩家的攻击选择。',
     gamePlan: ['观察幽怨标记，优先从标记者取得资源或发动攻击。', '度神决会公开行动后再选择 X、支付和目标；X 越高越容易成功，但控制结束所需的累计行动消耗也越高。'],
     keyMechanics: [
       { title: '地狱行者', description: '不造成伤害的非基础招式会令目标及附近两名玩家在之后两回合为攻击额外支付 1 点任意资源。' },
@@ -257,7 +258,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
   {
     characterId: 'warrior', role: '自伤成长与护甲爆发', difficulty: '专家',
     summary: '主动左移健康状态积累力量和攻击段数，再以易伤、护甲与多段攻击建立爆发回合。',
-    gamePlan: ['用放血或血墙启动撕裂成长，并根据生存压力在资源与护甲之间选择。', '先施加易伤，再用拆卸、欺凌或主宰兑现；高护甲时可用全身撞击制造压力。'],
+    gamePlan: ['用放血或消耗 1 气的血墙启动撕裂成长，并根据生存压力在资源与护甲之间选择。', '先施加易伤，再用拆卸、欺凌或主宰兑现；高护甲时可用全身撞击制造压力。'],
     keyMechanics: [
       { title: '撕裂', description: '每次自身健康状态左移都会获得力量并永久增加扯碎段数；力量通常只提高技能等级，但扯碎每段伤害会跟随最终技能等级。' },
       { title: '护甲', description: '格挡结算后，护甲按等级消耗并抵消剩余的非真实、非穿刺伤害；未用完的护甲保留，死亡时清零。' },

@@ -5,10 +5,12 @@ import {
   characterById,
   resourceById,
   canExecuteNapoleonStrategy,
+  isCharacterAvailableInRoomMode,
   napoleonStrategyFromCommand,
   type NapoleonCommand,
   type ActionCategory,
   type ActionDefinition,
+  type RoomMode,
   type SyncedPlayer,
 } from '@energy-duel/shared';
 import { Button, Dropdown, Input, Tabs, Tooltip } from 'antd';
@@ -19,6 +21,7 @@ interface Props {
   resourceSponsor?: SyncedPlayer;
   selectedActionId?: string;
   submittedLabel?: string;
+  roomMode: RoomMode;
   onSelect: (action: ActionDefinition) => void;
   onTransform: (characterId: string) => void;
   onCancel: () => void;
@@ -36,7 +39,7 @@ const STORAGE_KEY = 'energy-duel-action-layout-v3';
 const categoryLabels: Record<ActionCategory, string> = { base: '基础', attack: '攻击', defense: '防御', resource: '资源', special: '特殊' };
 const defaultCategories = (Object.keys(categoryLabels) as ActionCategory[]).map((id) => ({ id, label: categoryLabels[id] }));
 
-export default function ActionPanel({ player, resourceSponsor, selectedActionId, submittedLabel, onSelect, onTransform, onCancel }: Props) {
+export default function ActionPanel({ player, resourceSponsor, selectedActionId, submittedLabel, roomMode, onSelect, onTransform, onCancel }: Props) {
   const [layout, setLayout] = useState<ActionLayout>(loadLayout);
   const [editing, setEditing] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState('base');
@@ -58,7 +61,7 @@ export default function ActionPanel({ player, resourceSponsor, selectedActionId,
   const normalizedLayout = reconcileLayout(layout, unlockedActions);
   const detachedIds = new Set(normalizedLayout.detachedCategoryIds);
   const regularCategories = normalizedLayout.categories.filter((category) => !detachedIds.has(category.id));
-  const transformations = character?.transformations ?? [];
+  const transformations = (character?.transformations ?? []).filter((characterId) => isCharacterAvailableInRoomMode(characterId, roomMode));
   const transformItems = transformations.map((characterId) => {
     const target = characterById.get(characterId);
     const affordable = canAffordCost(player, target?.transformationCost ?? {});

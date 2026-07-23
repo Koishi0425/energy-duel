@@ -645,11 +645,47 @@ describe('RoundResolver JSON-driven actions', () => {
     resolveRound(players, actions(['a', { actionId: 'charge' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.shadow_blade_cooldown).toBe(4);
     for (const remaining of [3, 2, 1]) {
-      resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+      resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b', targetGridIndex: 0, pathDirection: 1 }], ['b', { actionId: 'defend' }]));
       expect(actor.buffStacks?.shadow_blade_cooldown).toBe(remaining);
     }
-    resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b' }], ['b', { actionId: 'defend' }]));
+    resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b', targetGridIndex: 0, pathDirection: 1 }], ['b', { actionId: 'defend' }]));
     expect(actor.buffs?.has('shadow_blade_cooldown')).toBe(false);
+  });
+
+  it('lays Dream Path in either direction, damages every player on it, and moves onto an occupied path cell', () => {
+    const players = roster(['a', 3], ['b', 0], ['c', 0]);
+    const nightmare = players.get('a')!; nightmare.characterId = 'nightmare'; nightmare.currentHp = nightmare.maxHp = 2; nightmare.gridIndex = 0;
+    const target = players.get('b')!; target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+    const middle = players.get('c')!; middle.currentHp = middle.maxHp = 2; middle.gridIndex = 4;
+    const boardObjects = new Map<string, CombatBoardObject>();
+
+    resolveRound(players, actions(
+      ['a', { actionId: 'dream_path', targetId: 'b', targetGridIndex: 4, pathDirection: -1 }],
+      ['b', { actionId: 'charge' }],
+      ['c', { actionId: 'charge' }],
+    ), boardObjects);
+
+    expect(target.currentHp).toBe(1);
+    expect(middle.currentHp).toBe(1);
+    expect(nightmare.gridIndex).toBe(4);
+    expect(Array.from(boardObjects.values()).map((object) => object.gridIndex).sort()).toEqual([0, 2, 3, 4, 5]);
+    expect(Array.from(boardObjects.values()).every((object) => object.definitionId === 'dream_path' && object.remainingTurns === 3)).toBe(true);
+  });
+
+  it('refreshes overlapping Dream Path terrain and grants its attack bonus to every Nightmare', () => {
+    const players = roster(['a', 2], ['b', 0]); const nightmare = players.get('a')!; const target = players.get('b')!;
+    nightmare.characterId = 'nightmare'; nightmare.currentHp = nightmare.maxHp = 2; nightmare.gridIndex = 0;
+    target.currentHp = target.maxHp = 2; target.gridIndex = 2;
+    const path: CombatBoardObject = { objectId: 'dream_path:0', definitionId: 'dream_path', kind: 'terrain', ownerPlayerId: 'other-nightmare', sourceCharacterId: 'nightmare', gridIndex: 0, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 1, permanent: false };
+    const boardObjects = new Map([[path.objectId, path]]);
+
+    target.resources.energy = 1;
+    resolveRound(players, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'wave', targetId: 'a' }]), boardObjects);
+    expect(target.currentHp).toBe(1);
+
+    nightmare.resources.energy = 2;
+    resolveRound(players, actions(['a', { actionId: 'dream_path', targetId: 'b', targetGridIndex: 0, pathDirection: 1 }], ['b', { actionId: 'defend' }]), boardObjects);
+    expect(boardObjects.get('dream_path:0')?.remainingTurns).toBe(3);
   });
 
   it('uses Silent Fear level only for control and deals no damage', () => {
@@ -718,7 +754,28 @@ describe('RoundResolver JSON-driven actions', () => {
     actor.characterId = 'napoleon'; actor.commandBuffer = 'TT'; actor.currentHp = actor.maxHp = 2;
     resolveRound(players, actions(['a', { actionId: 'nap_strategy_tt', napoleonStrategySource: 'buffer' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.tactical_advantage).toBe(2);
+    expect(actor.buffRemainingTurns?.tactical_advantage).toBe(3);
     expect(actor.commandBuffer).toBe('');
+  });
+
+  it.each([
+    ['AT', 'nap_strategy_at', 1, 3],
+    ['DT', 'nap_strategy_dt', 1, 3],
+    ['TT', 'nap_strategy_tt', 2, 3],
+    ['TTT', 'nap_strategy_ttt', 3, 3],
+    ['TTTT', 'nap_strategy_tttt', 4, 4],
+    ['TTTTT', 'nap_strategy_ttttt', 5, 5],
+  ] as const)('gives %s strategy tactical advantage its shortened duration', (sequence, actionId, stacks, storedTurnsBeforeRoomTick) => {
+    const players = roster(['a', 0], ['b', 0]); const actor = players.get('a')!;
+    actor.characterId = 'napoleon'; actor.commandBuffer = sequence; actor.currentHp = actor.maxHp = 2;
+
+    resolveRound(players, actions(
+      ['a', { actionId, targetId: sequence === 'AT' ? 'b' : undefined, napoleonStrategySource: 'buffer' }],
+      ['b', { actionId: 'defend' }],
+    ));
+
+    expect(actor.buffStacks?.tactical_advantage).toBe(stacks);
+    expect(actor.buffRemainingTurns?.tactical_advantage).toBe(storedTurnsBeforeRoomTick);
   });
 
   it('keeps the longest duration when multiple Napoleon engines grant tactical advantage', () => {
@@ -763,6 +820,7 @@ describe('RoundResolver JSON-driven actions', () => {
     resolveRound(players, actions(['a', { actionId: 'gain_charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
     resolveRound(players, actions(['a', { actionId: 'charge', resourceChoice: 'energy' }], ['b', { actionId: 'defend' }]));
     expect(actor.buffStacks?.sacrifice_path_progress).toBe(3);
+    expect(actor.buffs?.has('sacrifice_path_active')).toBe(true);
     actor.resources.energy = 2; actor.resources.charge = 0;
     expect(() => validateAction(actor, { actionId: 'immortal_palm', targetId: 'b', resourceChoice: 'energy' }, players)).not.toThrow();
   });

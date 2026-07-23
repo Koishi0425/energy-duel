@@ -90,6 +90,7 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .game-header > * { pointer-events: auto; }
 .game-header h1 { font-size: clamp(24px, 3vw, 34px); }
 .game-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; color: #abb3d2; flex-wrap: wrap; }
+.mobile-game-header-actions, .mobile-battle-dock, .mobile-control-sheet-handle { display: none; }
 .room-id { padding: 7px 10px; border-radius: 8px; background: #11172c; font-family: "Cascadia Code", Consolas, monospace; }
 .reconnecting-banner { position: fixed; z-index: 30; top: 12px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border: 1px solid #e4ad54; border-radius: 999px; color: #ffe0a1; background: rgba(70,47,15,.96); }
 .room-notice-stack { position: fixed; z-index: 29; top: 78px; left: 24px; display: grid; gap: 8px; width: min(320px, calc(100vw - 48px)); pointer-events: none; }
@@ -125,7 +126,7 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .mobile-roster { display: none; }
 .emote-trigger.ant-btn { width: 30px; padding: 0; font-size: 18px; line-height: 1; }
 .emote-picker { display: grid; grid-template-columns: repeat(4, 42px); gap: 6px; }
-.emote-picker button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 1px solid #35405f; border-radius: 6px; color: #fff; background: #121a31; font-size: 24px; cursor: pointer; }
+.emote-picker button { display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 1px solid #35405f; border-radius: 6px; color: #fff; background: #121a31; font-size: 24px; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .emote-picker button:hover, .emote-picker button:focus-visible { border-color: #7b89ff; outline: none; background: #202b52; }
 .emote-wheel { position: fixed; z-index: 90; width: 236px; height: 236px; transform: translate(-50%,-50%); border: 1px solid rgba(123,137,255,.64); border-radius: 50%; background: rgba(8,12,26,.94); box-shadow: 0 18px 55px rgba(0,0,0,.52); pointer-events: none; }
 .emote-wheel-option { position: absolute; display: grid; width: 46px; height: 46px; place-items: center; transform: translate(-50%,-50%); border: 2px solid #35405f; border-radius: 50%; background: #121a31; font-size: 25px; transition: border-color 80ms ease, background-color 80ms ease, transform 80ms ease; }
@@ -189,27 +190,54 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
   .lobby-main-grid, .lobby-main-grid-modern { grid-template-columns: 1fr; }
   .lobby-hub { height: auto; min-height: 0; }
   .room-directory, .online-directory { min-height: 260px; }
-  .game-shell { height: auto; min-height: 100dvh; display: grid; grid-template-rows: auto clamp(340px, 45dvh, 520px) auto auto; gap: 10px; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); overflow: visible; }
-  .game-header { min-width: 0; gap: 8px; }
-  .game-header h1 { font-size: 22px; }
+  .game-shell { height: 100dvh; min-height: 0; padding: max(8px, env(safe-area-inset-top)) 10px calc(64px + env(safe-area-inset-bottom)); overflow: hidden; }
+  .game-header { min-width: 0; height: 48px; align-items: center; gap: 8px; }
+  .game-header h1 { max-width: 46vw; margin: 0; overflow: hidden; font-size: 19px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
   .game-header .eyebrow { display: none; }
-  .game-actions { gap: 6px; font-size: 12px; }
-  .room-id { max-width: 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .battlefield-region { position: relative; inset: auto; height: 100%; min-height: 0; overflow: hidden; border: 1px solid #202a49; border-radius: 16px; background: rgba(5,8,19,.32); }
-  .targeting-hint { top: 48px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; }
-  .skip-grid-move { top:88px; }
+  .desktop-game-actions { display: none; }
+  .mobile-game-header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; color: #aeb7d8; font-size: 11px; }
+  .mobile-game-header-actions .ant-btn { min-width: 44px; min-height: 36px; }
+  .mobile-room-code { max-width: 28vw; min-height: 36px; padding: 0 9px; overflow: hidden; border: 1px solid #303b60; border-radius: 7px; color: #dce2fa; background: #11172c; font: 700 11px/1 "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-network-state { display: inline-flex; align-items: center; gap: 4px; }
+  .mobile-network-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #30d6a3; }
+  .mobile-network-state.reconnecting::before { background: #e4ad54; }
+  .mobile-network-state.offline::before { background: #e0697b; }
+  .battlefield-region { position: absolute; inset: calc(max(8px, env(safe-area-inset-top)) + 52px) 8px calc(62px + env(safe-area-inset-bottom)); min-height: 0; overflow: hidden; border: 1px solid #202a49; border-radius: 12px; background: rgba(5,8,19,.32); }
+  .targeting-hint { top: 10px; max-width: calc(100% - 20px); overflow: hidden; padding: 8px 11px; font-size: 12px; text-overflow: ellipsis; }
+  .skip-grid-move { top:52px; min-height: 40px; }
   .desktop-roster { display: none; }
-  .mobile-roster { display: block; z-index: 8; background: rgba(10,14,29,.88); }
-  .game-control-panel { position: relative; right: auto; bottom: auto; width: 100%; min-width: 0; min-height: 0; max-width: none; max-height: none; overflow: visible; resize: none; padding: 13px; }
+  .game-control-panel { position: fixed; z-index: 45; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); left: 8px !important; top: auto !important; width: auto; min-width: 0; min-height: 0; max-width: none; max-height: min(64dvh, 640px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; resize: none; padding: 0 13px 14px; border-radius: 12px 12px 0 0; background: rgba(8,12,25,.985); transition: height .18s ease, transform .18s ease; }
+  .game-control-panel.mobile-closed { height: 47px; overflow: hidden; padding-bottom: 0; }
+  .game-control-panel.mobile-closed > :not(.mobile-control-sheet-handle) { display: none; }
+  .mobile-control-sheet-handle { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: 24px minmax(0,1fr) auto; align-items: center; width: calc(100% + 26px); min-height: 46px; margin: 0 -13px 10px; padding: 5px 13px; border: 0; border-bottom: 1px solid #293456; color: #edf0ff; text-align: left; background: #111832; }
+  .mobile-control-sheet-handle > span { justify-self: center; width: 18px; height: 4px; border-radius: 4px; background: #69759e; }
+  .mobile-control-sheet-handle strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-control-sheet-handle small { color: #9da7ca; font-size: 11px; }
+  .mobile-battle-dock { position: fixed; z-index: 50; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, 1fr); height: calc(60px + env(safe-area-inset-bottom)); padding: 4px 8px env(safe-area-inset-bottom); border-top: 1px solid #303b60; background: rgba(8,12,25,.985); box-shadow: 0 -8px 28px rgba(0,0,0,.34); }
+  .mobile-battle-dock button { position: relative; display: grid; min-width: 0; min-height: 52px; place-items: center; align-content: center; gap: 2px; padding: 2px; border: 0; border-radius: 7px; color: #aeb7d8; background: transparent; touch-action: manipulation; }
+  .mobile-battle-dock button > span { font-size: 21px; line-height: 1; }
+  .mobile-battle-dock button > small { font-size: 10px; }
+  .mobile-battle-dock button.active { color: #fff; background: #28366d; }
+  .mobile-battle-dock button > b { position: absolute; top: 2px; left: calc(50% + 10px); display: grid; min-width: 16px; height: 16px; place-items: center; padding: 0 4px; border-radius: 8px; color: #07101c; background: #55f2b0; font-size: 9px; }
+  .mobile-roster-drawer .roster { position: static; width: 100%; max-height: none; padding: 0; overflow: visible; border: 0; background: transparent; backdrop-filter: none; }
+  .mobile-roster-drawer .roster-player { min-height: 52px; padding: 9px 7px; }
   .round-result { max-height: 76px; }
   .floating-error, .lobby-error { top: 68px; right: 12px; }
-  .room-notice-stack { top: 112px; left: 12px; width: calc(100vw - 24px); }
+  .room-notice-stack { top: 58px; left: 12px; width: calc(100vw - 24px); }
+  .selection-toast, .timeline-chip { top: 58px; max-width: calc(100vw - 20px); }
 }
 
 @media (max-width: 520px) {
   .shell { padding: 14px; }
   .panel { padding: 24px; }
-  .lobby-hub { padding: 18px; }
+  .auth-shell { align-items: start; padding-top: max(22px, env(safe-area-inset-top)); }
+  .auth-panel { border-radius: 12px; }
+  .lobby-shell { display: block; padding: 0; }
+  .lobby-hub { min-height: 100dvh; padding: max(16px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; }
+  .lobby-header .identity { align-items: flex-start; gap: 10px; }
+  .lobby-header .identity > div:first-child { display: grid; gap: 3px; }
+  .identity-nickname { margin-left: 0; }
+  .identity-actions .compact-button { min-height: 42px; }
   .lobby-title-row { display: grid; gap: 8px; }
   .lobby-support { padding-top: 0; }
   .nickname-field { max-width: none; }
@@ -217,14 +245,23 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
   .lobby-card { padding: 16px; }
   .room-list-item { grid-template-columns: minmax(0,1fr) auto; }
   .room-list-item .room-population { grid-column: 2; grid-row: 1; }
-  .room-list-item button { grid-column: 1 / -1; }
+  .room-list-item button { grid-column: 1 / -1; min-height: 44px; }
+  .online-player-card { min-height: 62px; }
+  .online-player-main { min-height: 44px; }
+  .training-room-card { align-items: stretch; flex-direction: column; }
+  .training-room-card button { width: 100%; }
+  .modal-backdrop { align-items: end; padding: 0; }
+  .create-room-dialog { max-height: calc(100dvh - env(safe-area-inset-top)); padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 14px 14px 0 0; }
   .create-room-dialog footer { align-items: stretch; flex-direction: column; }
   .create-room-dialog footer div { display: grid; grid-template-columns: 1fr 1fr; }
   .create-room-section form { grid-template-columns: 1fr; }
   .create-room-section form .text-button { margin-top: 0; }
-  .game-header { flex-direction: column; }
-  .game-actions { justify-content: flex-start; }
   .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-button.ant-btn { height: 72px; }
+  .action-panel-tools { align-items: flex-start; gap: 8px; }
+  .action-panel-tools > span { padding-top: 5px; line-height: 1.35; }
+  .action-panel-content .ant-tabs-tab { min-height: 42px; padding-block: 8px; }
+  .action-panel-content .ant-tabs-nav-wrap { touch-action: pan-x; }
   .lobby-actions { grid-template-columns: 1fr; }
   .hover-player-card { display: none; }
 }
@@ -425,7 +462,6 @@ input:focus { border-color: #7b89ff; box-shadow: 0 0 0 3px rgba(123,137,255,.16)
 .rating-result header,.rating-result footer { display:flex; align-items:center; justify-content:space-between; gap:10px; }.rating-result header strong { color:#ffe978; font-size:32px; }.rating-result > div { display:flex; flex-wrap:wrap; gap:6px; }.rating-result > div span { padding:5px 8px; border-radius:999px; color:#bfc8e8; background:#0c142c; font-size:11px; }.rating-result footer { flex-wrap:wrap; padding-top:9px; border-top:1px solid #33416d; }.rating-result footer strong { color:#67edb5; }.rating-result footer small { width:100%; color:#8f9abd; }
 @media (max-width: 900px) {
   .control-panel-drag-handle { display: none; }
-  .game-control-panel { left: auto !important; top: auto !important; }
   .floating-window { position: fixed; inset: 8px !important; width: auto !important; height: auto !important; min-width: 0; min-height: 0; resize: none; }
   .action-panel-content.is-editing .action-grid, .inline-floating-window .action-grid { grid-template-columns: 1fr; }
   .mobile-action-edit-controls { display: grid; grid-template-columns: auto auto minmax(0,1fr); gap: 5px; margin-top: 5px; }

@@ -317,6 +317,7 @@ export interface SubmitActionMessage {
   transformCharacterId?: string;
   power?: number;
   targetGridIndex?: number;
+  pathDirection?: -1 | 1;
   targetBoardObjectId?: string;
   resourceSpend?: Record<string, number>;
   extraResourceSpend?: Record<string, number>;

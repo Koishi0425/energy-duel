@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { circularDistance } from './geometry.js';
-import { canExecuteNapoleonStrategy, effectSpeedPriority, gameConfig, napoleonStrategyFromCommand, validateGameConfig } from './config.js';
+import { canExecuteNapoleonStrategy, effectSpeedPriority, gameConfig, isCharacterAvailableInRoomMode, napoleonStrategyFromCommand, validateGameConfig } from './config.js';
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(25);
+    expect(gameConfig.version).toBe(26);
     expect(gameConfig.actions).toHaveLength(109);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku', 'inner_guard', 'quilon', 'chimei', 'warrior']);
@@ -25,6 +25,7 @@ describe('game configuration', () => {
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
     expect(gameConfig.boardObjects.find((object) => object.id === 'dominion')).toMatchObject({ kind: 'terrain', displayMode: 'marker' });
+    expect(gameConfig.boardObjects.find((object) => object.id === 'dream_path')).toMatchObject({ kind: 'terrain', displayMode: 'marker' });
     expect(gameConfig.assets.every((asset) => asset.url.endsWith('.webp') && asset.previewUrl?.endsWith('.webp'))).toBe(true);
     expect(gameConfig.characters.slice(4, 9).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
   });
@@ -60,6 +61,7 @@ describe('game configuration', () => {
     expect(gameConfig.characters.find((character) => character.id === 'chimei')?.forms[0].unlockedActions).toEqual(expect.arrayContaining(['soul_reap', 'soul_capture', 'intimidate', 'deify']));
     expect(gameConfig.resources.find((resource) => resource.id === 'soul')?.characterIds).toEqual(['chimei']);
     expect(gameConfig.characters.find((character) => character.id === 'warrior')?.forms[0].unlockedActions).toEqual(expect.arrayContaining(['bleed', 'taunt', 'tremble', 'molten_fist', 'dismantle', 'bully', 'regain_spirit', 'dominate', 'blood_wall', 'shred', 'body_slam']));
+    expect(gameConfig.actions.find((action) => action.id === 'blood_wall')?.cost).toEqual({ energy: 1 });
     expect(gameConfig.actions.find((action) => action.id === 'dismantle')?.repeatAttack).toEqual({ baseHits: 1, targetBuffId: 'vulnerability', extraHitsWhenTargetBuffed: 1 });
   });
 
@@ -128,6 +130,12 @@ describe('game configuration', () => {
     expect(napoleonStrategyFromCommand('A', 'A')?.napoleonSequence).toBe('AA');
     expect(napoleonStrategyFromCommand('TTTT', 'T')?.napoleonSequence).toBe('TTTTT');
     expect(napoleonStrategyFromCommand('TAD', 'D')?.napoleonSequence).toBe('DD');
+  });
+
+  it('disables Chimei only in standard rooms', () => {
+    expect(isCharacterAvailableInRoomMode('chimei', 'standard')).toBe(false);
+    expect(isCharacterAvailableInRoomMode('chimei', 'training')).toBe(true);
+    expect(isCharacterAvailableInRoomMode('nightmare', 'standard')).toBe(true);
   });
 
   it('marks Stardust as all-in and assigns special-resource visibility', () => {

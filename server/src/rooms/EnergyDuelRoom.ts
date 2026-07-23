@@ -3,6 +3,7 @@ import {
   buffById,
   characterById,
   gameConfig,
+  isCharacterAvailableInRoomMode,
   isRoomEmoteId,
   type SessionIdentity,
   type RoomNoticeType,
@@ -323,6 +324,7 @@ export class EnergyDuelRoom extends Room {
       transformCharacterId: typeof payload.transformCharacterId === 'string' ? payload.transformCharacterId : undefined,
       power: typeof payload.power === 'number' ? payload.power : undefined,
       targetGridIndex: typeof payload.targetGridIndex === 'number' ? payload.targetGridIndex : undefined,
+      pathDirection: payload.pathDirection === -1 || payload.pathDirection === 1 ? payload.pathDirection : undefined,
       targetBoardObjectId: typeof payload.targetBoardObjectId === 'string' ? payload.targetBoardObjectId : undefined,
       resourceSpend: payload.resourceSpend && typeof payload.resourceSpend === 'object'
         && Object.values(payload.resourceSpend).every((amount) => typeof amount === 'number') ? payload.resourceSpend : undefined,
@@ -341,6 +343,9 @@ export class EnergyDuelRoom extends Room {
         return this.sendError(client, '该变身尚未解锁', requestId, 'submit_action');
       }
       const targetCharacter = characterById.get(action.transformCharacterId);
+      if (!isCharacterAvailableInRoomMode(action.transformCharacterId, this.state.roomMode)) {
+        return this.sendError(client, '标准房间暂时禁用魑魅', requestId, 'submit_action');
+      }
       for (const [resourceId, amount] of Object.entries(targetCharacter?.transformationCost ?? {})) {
         if ((player.resources.get(resourceId)?.current ?? 0) < amount) return this.sendError(client, `变身所需的${resourceId}资源不足`, requestId, 'submit_action');
       }

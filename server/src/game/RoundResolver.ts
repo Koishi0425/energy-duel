@@ -56,6 +56,7 @@ export interface SubmittedAction {
   transformCharacterId?: string;
   power?: number;
   targetGridIndex?: number;
+  pathDirection?: -1 | 1;
   targetBoardObjectId?: string;
   resourceSpend?: Record<string, number>;
   extraResourceSpend?: Record<string, number>;
@@ -174,7 +175,7 @@ export function validateAction(player: CombatPlayer, action: SubmittedAction, pl
     if (!Array.from(boardObjects.values()).some((object) => object.definitionId === 'nilu_fire' && object.gridIndex === action.targetGridIndex)) throw new Error('请选择尼卢火所在的地块');
   }
   else if (action.targetGridIndex !== undefined && action.actionId !== 'dream_path') throw new Error('该行动不接受地块目标');
-  if (action.actionId === 'dream_path' && action.targetGridIndex !== undefined) validateAdjacentDestination(player, action.targetGridIndex, players, boardObjects);
+  if (action.actionId === 'dream_path') validateDreamPathSelection(player, players.get(targets[0]), action.targetGridIndex, action.pathDirection, players.size * 2);
 }
 
 function validateFlexibleSpend(player: CombatPlayer, action: SubmittedAction, definition: ActionDefinition): void {
@@ -485,7 +486,12 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     else if (effect === 'napoleon_strategy') resolveNapoleonStrategy(actor, submitted, definition, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     else if (effect === 'shadow_blade') { resolveSpatialAttack(actor, submitted, definition, cellsAround(actor.gridIndex ?? 0, players.size * 2, 1), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); setBuff(actor, 'shadow_blade_cooldown', 4); }
     else if (effect === 'ten_volt' || effect === 'hundred_thousand_volt') { const targets = firstPlayersInBothDirections(actor, players); resolveAttackTargets(actor, submitted, definition, targets, submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); if (effect === 'ten_volt') removeBuff(actor, 'quick_attack_ready'); }
-    else if (effect === 'dream_path') { const target = players.get(actionTargets(submitted)[0]); const start = actor.gridIndex ?? 0; const cells = target ? clockwiseCells(start, target.gridIndex ?? 0, players.size * 2) : []; resolveSpatialAttack(actor, submitted, definition, cells, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); if (target) { setBuff(actor, 'dream_path', (target.gridIndex ?? 0) + 1, 3); setBuff(actor, 'dream_path_start', start + 1, 3); } }
+    else if (effect === 'dream_path') {
+      const start = actor.gridIndex ?? 0; const endpoint = submitted.targetGridIndices?.[0] ?? start;
+      const cells = directedPathCells(start, endpoint, players.size * 2, submitted.pathDirection ?? 1);
+      resolveSpatialAttack(actor, submitted, definition, cells, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+      layDreamPath(actor, cells, summary);
+    }
     else if (effect === 'rockfall_hammer') { resolveSpatialAttack(actor, submitted, definition, cellsAround(actor.gridIndex ?? 0, players.size * 2, 2), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); setBuff(actor, 'hammer_ready', Math.max(0, buffStacks(actor, 'hammer_ready') - 1)); }
     else if (effect === 'haunting_shadows') { for (const player of players.values()) if (player.id !== actor.id) applyDebuff(actor, player, 'darkness', 1, 2); setBuff(actor, 'nightmare_dash_ready', 1, 2); if (actionTargets(submitted).length) { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); } summary.push(`${actor.nickname} 令其他玩家陷入黑暗。`); }
     else if (effect === 'nightmare_dash') { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); }
@@ -519,7 +525,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     if (hasPassive(player, 'fertile_soil') && !player.buffs?.has('mud_barrier')) { const count = buffStacks(player, 'mud_round_counter') + (effect === 'transform' ? 0 : 1); if (count >= 4) { setBuff(player, 'mud_barrier'); setBuff(player, 'mud_round_counter', 0); summary.push(`${player.nickname} 的沃土予身生成一层屏障。`); } else setBuff(player, 'mud_round_counter', count); }
     if (effect === 'dark_shelter' && darkShelterAbsorbs.has(player.id)) { setBuff(player, 'dark_shelter_power', 1, 4); summary.push(`${player.nickname} 的黑暗庇护成功吸收攻击。`); }
     removeBuff(player, 'fear_action_canceled');
-    if (effect === 'dream_path' && actions.get(player.id)?.targetGridIndex !== undefined && player.buffs?.has('dream_path')) tryMove(player, actions.get(player.id)?.targetGridIndex, players);
+    if (effect === 'dream_path') tryMove(player, actions.get(player.id)?.targetGridIndex, players);
     if (player.buffs?.has('shock') && actions.get(player.id) && requireAction(actions.get(player.id)!.actionId).category === 'attack' && player.alive) { damagePlayer(player, 0, 0, false, eliminated, true, true, actions.get(player.id), false, player.gridIndex); summary.push(`${player.nickname} 因震荡使用攻击，进入${healthStateName(player)}。`); }
     if (player.buffs?.has('transcendence') || player.buffs?.has('transcendence_permanent')) {
       const before = player.currentHp;
@@ -541,6 +547,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   resolvePendingWuyouRevives(players, eliminated, summary);
   for (const id of eliminated) { const player = players.get(id); if (player) { player.alive = false; player.currentHp = 0; } }
   removeQuilonObjectsForDeadOwners(boardObjects, players, summary);
+  tickBoardObjects(boardObjects);
   for (const player of players.values()) roundDamageStates.delete(player);
   const learningTargets = aliveAtStart.flatMap((player) => Array.from(roundLearningTargets.get(player) ?? [], (targetPlayerId) => ({ learnerPlayerId: player.id, targetPlayerId })));
   return { summary, eliminated: Array.from(eliminated), steps: buildResolutionSteps(actions, players), performance, learningTargets };
@@ -579,13 +586,13 @@ function resolveNapoleonStrategy(actor: CombatPlayer, submitted: SubmittedAction
     resolveAttackTargets(actor, submitted, definition, targets, levelBefore + tactical * 0.5, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
     removeBuff(actor, 'tactical_advantage');
   }
-  if (sequence === 'AT') addTacticalAdvantage(actor, 1, 3);
-  if (sequence === 'DT') { setBuff(actor, 'defense_deployment', 1, 2); addTacticalAdvantage(actor, 1, 3); }
-  if (sequence === 'TT') addTacticalAdvantage(actor, 2, 3);
-  if (sequence === 'TTT') addTacticalAdvantage(actor, 3, 3);
-  if (sequence === 'TTTT') { addTacticalAdvantage(actor, 4, 4); setBuff(actor, 'napoleon_divine', Math.min(3, buffStacks(actor, 'napoleon_divine') + 1)); }
+  if (sequence === 'AT') addTacticalAdvantage(actor, 1, 2);
+  if (sequence === 'DT') { setBuff(actor, 'defense_deployment', 1, 2); addTacticalAdvantage(actor, 1, 2); }
+  if (sequence === 'TT') addTacticalAdvantage(actor, 2, 2);
+  if (sequence === 'TTT') addTacticalAdvantage(actor, 3, 2);
+  if (sequence === 'TTTT') { addTacticalAdvantage(actor, 4, 3); setBuff(actor, 'napoleon_divine', Math.min(3, buffStacks(actor, 'napoleon_divine') + 1)); }
   if (sequence === 'DDDDD') setBuff(actor, 'unfallen_fortress', 1, 4);
-  if (sequence === 'TTTTT') { addTacticalAdvantage(actor, 5, 5); setBuff(actor, 'napoleon_emperor', 1, 6); }
+  if (sequence === 'TTTTT') { addTacticalAdvantage(actor, 5, 4); setBuff(actor, 'napoleon_emperor', 1, 6); }
   if (sequence === 'TATAT') { setBuff(actor, 'elba_unlocked'); setBuff(actor, 'hundred_days'); }
   summary.push(`${actor.nickname} 执行「${definition.name}」，剩余指令缓冲为 ${actor.commandBuffer || '空'}。`);
 }
@@ -597,8 +604,8 @@ function resolveNapoleonCounter(actor: CombatPlayer, submitted: SubmittedAction 
   const defense = submittedDefenseLevel(actor, submitted, requireAction(submitted.actionId));
   const incoming = Array.from(actions.entries()).filter(([attackerId, action]) => {
     const attacker = players.get(attackerId); if (!attacker?.alive || attackerId === actor.id || !actionCanDealAttackDamage(attacker, action) || !potentialTargets(attacker, action, players).includes(actor.id)) return false;
-    return adjustedAttackLevel(attacker, actor, action, players.size * 2) - defense < 0.5;
-  }).sort(([leftId, left], [rightId, right]) => adjustedAttackLevel(players.get(rightId)!, actor, right, players.size * 2) - adjustedAttackLevel(players.get(leftId)!, actor, left, players.size * 2));
+    return adjustedAttackLevel(attacker, actor, action) - defense < 0.5;
+  }).sort(([leftId, left], [rightId, right]) => adjustedAttackLevel(players.get(rightId)!, actor, right) - adjustedAttackLevel(players.get(leftId)!, actor, left));
   const targetId = incoming[0]?.[0]; if (!targetId) return;
   const level = 1.5 + buffStacks(actor, 'tactical_advantage') * 0.5;
   const hpBefore = players.get(targetId)?.currentHp;
@@ -606,11 +613,11 @@ function resolveNapoleonCounter(actor: CombatPlayer, submitted: SubmittedAction 
   const target = players.get(targetId); if (sequence === 'DAD' && target?.alive && hpBefore !== undefined && target.currentHp < hpBefore) applyDebuff(actor, target, 'swayed', 1, 2);
 }
 
-function adjustedAttackLevel(attacker: CombatPlayer, target: CombatPlayer, action: SubmittedAction, boardCellCount: number): number {
+function adjustedAttackLevel(attacker: CombatPlayer, target: CombatPlayer, action: SubmittedAction): number {
   let level = submittedDamageLevel(attacker, action) + (target.buffs?.has('fear') ? 1 : 0) + (target.buffs?.has('calibrated') ? 1 : 0);
   if (target.buffs?.has('defense_deployment')) level = Math.max(0, level - 1);
   if (attacker.buffs?.has('dark_shelter_power')) level += 0.5;
-  if (attacker.buffs?.has('dream_path') && dreamPathContains(attacker, attacker.gridIndex ?? 0, boardCellCount)) level += 0.5;
+  if (hasDreamPathBonus(attacker)) level += 0.5;
   return level;
 }
 
@@ -656,7 +663,14 @@ function resolveAttackTargets(attacker: CombatPlayer, submitted: SubmittedAction
   }
 }
 
-function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, attack: ActionDefinition, rawLevel: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, boardCellCount: number, summary: string[], performance: Record<string, RoundPerformance>, explicitDamageLevel?: number): DamageOutcome {
+function validateDreamPathSelection(player: CombatPlayer, target: CombatPlayer | undefined, destination: number | undefined, direction: -1 | 1 | undefined, cellCount: number): void {
+  if (!target || (direction !== -1 && direction !== 1)) throw new Error('请选择魇之梦径的顺时针或逆时针方向');
+  if (!Number.isInteger(destination) || !directedPathCells(player.gridIndex ?? 0, target.gridIndex ?? 0, cellCount, direction).includes(destination!)) {
+    throw new Error('请选择魇之梦径路径内的移动地块');
+  }
+}
+
+function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, attack: ActionDefinition, rawLevel: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, _boardCellCount: number, summary: string[], performance: Record<string, RoundPerformance>, explicitDamageLevel?: number): DamageOutcome {
   if (!target || target.id === attacker.id) return 'none';
   if (target.buffs?.has('sleeping')) { summary.push(`${target.nickname} 在沉睡中免疫了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
   const trueDamage = attack.damageType === 'true';
@@ -673,7 +687,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   if (target.buffs?.has('calibrated')) { attackerLevel += 1; damageLevel += 1; }
   if (target.buffs?.has('defense_deployment')) { attackerLevel = Math.max(0, attackerLevel - 1); damageLevel = Math.max(0, damageLevel - 1); }
   if (attacker.buffs?.has('dark_shelter_power')) { attackerLevel += 0.5; damageLevel += 0.5; }
-  if (attacker.buffs?.has('dream_path') && dreamPathContains(attacker, attacker.gridIndex ?? 0, boardCellCount)) { attackerLevel += 0.5; damageLevel += 0.5; }
+  if (hasDreamPathBonus(attacker)) { attackerLevel += 0.5; damageLevel += 0.5; }
   if (attack.id !== 'bully' && target.buffs?.has('vulnerability')) damageLevel += 0.5;
   const sourceDamageLevel = damageLevel;
   const block = piercingDamage ? undefined : blockers.get(target.id);
@@ -942,8 +956,20 @@ function directTargets(actor: CombatPlayer, action: SubmittedAction, players: Ma
 function movementPriority(action: SubmittedAction): number { return requireAction(action.actionId).movement ? 1 : 0; }
 function isDirectAttack(effect: EffectHandlerId): boolean { return ['wave', 'fist', 'slash', 'atomic_breath', 'sovereign_blade', 'stardust', 'hangup', 'sword_aura', 'open_heaven_gate', 'aoao_divine', 'immortal_palm', 'void_pierce', 'hollow_fist', 'dissipation', 'dismantle', 'bully', 'shred', 'body_slam'].includes(effect); }
 function clockwiseCells(from: number, to: number, count: number): number[] { const cells: number[] = []; for (let cell = (from + 1) % count; ; cell = (cell + 1) % count) { cells.push(cell); if (cell === to || cells.length >= count - 1) break; } return cells; }
+function directedPathCells(from: number, to: number, count: number, direction: -1 | 1): number[] {
+  const cells = [from];
+  if (from === to) return cells;
+  for (let cell = (from + direction + count) % count; cells.length < count; cell = (cell + direction + count) % count) {
+    cells.push(cell);
+    if (cell === to) break;
+  }
+  return cells;
+}
 function cellsAround(center: number, count: number, radius: number): number[] { const cells = [center]; for (let offset = 1; offset <= radius; offset += 1) cells.push((center + offset) % count, (center - offset + count) % count); return cells; }
-function dreamPathContains(player: CombatPlayer, cell: number, count: number): boolean { const endpoint = buffStacks(player, 'dream_path') - 1; const start = buffStacks(player, 'dream_path_start') - 1; return endpoint >= 0 && start >= 0 && clockwiseCells(start, endpoint, count).includes(cell); }
+function hasDreamPathBonus(player: CombatPlayer): boolean {
+  return player.characterId === 'nightmare' && Array.from(roundBoardObjects.get(player)?.values() ?? [])
+    .some((object) => object.definitionId === 'dream_path' && object.gridIndex === player.gridIndex);
+}
 
 export function requireAction(actionId: string): ActionDefinition { const definition = actionById.get(actionId); if (!definition) throw new Error('未知行动'); return definition; }
 function primaryEffect(action: SubmittedAction | undefined): EffectHandlerId | undefined { return action ? requireAction(action.actionId).effects[0]?.handler : undefined; }
@@ -953,7 +979,11 @@ function rewardDevour(player: CombatPlayer, action: SubmittedAction | undefined,
 function gainResource(player: CombatPlayer, resourceId: string, amount: number): void {
   if (amount <= 0) return;
   player.resources[resourceId] = resourceValue(player, resourceId) + amount;
-  if (hasPassive(player, 'sacrifice_path') && (resourceId === 'energy' || resourceId === 'charge')) setBuff(player, 'sacrifice_path_progress', buffStacks(player, 'sacrifice_path_progress') + amount);
+  if (hasPassive(player, 'sacrifice_path') && (resourceId === 'energy' || resourceId === 'charge')) {
+    const progress = buffStacks(player, 'sacrifice_path_progress') + amount;
+    setBuff(player, 'sacrifice_path_progress', progress);
+    if (progress >= 3) setBuff(player, 'sacrifice_path_active');
+  }
   if (hasPassive(player, 'wuyou_awareness') && (resourceId === 'energy' || resourceId === 'charge')) setBuff(player, 'wuyou_awareness', buffStacks(player, 'wuyou_awareness') + amount);
 }
 function buffStacks(player: CombatPlayer, buffId: string): number { return player.buffs?.has(buffId) ? player.buffStacks?.[buffId] ?? 1 : 0; }
@@ -1057,6 +1087,33 @@ function summonNiluFire(actor: CombatPlayer, gridIndex: number | undefined, play
   objects.set(objectId, { objectId, definitionId: 'nilu_fire', kind: 'terrain', ownerPlayerId: actor.id, sourceCharacterId: 'quilon', gridIndex, stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 0, permanent: true });
   syncNiluResistance(actor);
   summary.push(`${actor.nickname} 在 ${gridIndex} 号地块布置了尼卢火。`);
+}
+
+function layDreamPath(actor: CombatPlayer, cells: readonly number[], summary: string[]): void {
+  const objects = roundBoardObjects.get(actor); if (!objects) return;
+  for (const gridIndex of cells) {
+    const objectId = `dream_path:${gridIndex}`;
+    const existing = objects.get(objectId);
+    if (existing) {
+      existing.ownerPlayerId = actor.id;
+      existing.remainingTurns = 4;
+      existing.permanent = false;
+      continue;
+    }
+    objects.set(objectId, {
+      objectId, definitionId: 'dream_path', kind: 'terrain', ownerPlayerId: actor.id, sourceCharacterId: 'nightmare', gridIndex,
+      stacks: 1, currentHp: 0, maxHp: 0, remainingTurns: 4, permanent: false,
+    });
+  }
+  summary.push(`${actor.nickname} 铺设了持续 3 回合的魇之梦径。`);
+}
+
+function tickBoardObjects(boardObjects: Map<string, CombatBoardObject>): void {
+  for (const object of Array.from(boardObjects.values())) {
+    if (object.permanent) continue;
+    object.remainingTurns = Math.max(0, object.remainingTurns - 1);
+    if (object.remainingTurns === 0) boardObjects.delete(object.objectId);
+  }
 }
 
 function triggerNiluFires(actor: CombatPlayer, triggeringDefinition: ActionDefinition, count: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
@@ -1325,7 +1382,7 @@ function consumeNapoleonStrategy(buffer: string, sequence: string, command?: 'A'
 }
 
 function sacrificeResource(player: CombatPlayer, action: SubmittedAction): string | undefined {
-  if (!hasPassive(player, 'sacrifice_path') || buffStacks(player, 'sacrifice_path_progress') < 3 || player.currentHp <= 0) return undefined;
+  if (!hasPassive(player, 'sacrifice_path') || (!player.buffs?.has('sacrifice_path_active') && buffStacks(player, 'sacrifice_path_progress') < 3) || player.currentHp <= 0) return undefined;
   const deficits = Object.entries(costForSubmittedAction(player, action)).filter(([resourceId, amount]) => amount - resourceValue(player, resourceId) > 1e-6);
   return deficits.length === 1 && Math.abs(deficits[0][1] - resourceValue(player, deficits[0][0]) - 1) < 1e-6 ? deficits[0][0] : undefined;
 }

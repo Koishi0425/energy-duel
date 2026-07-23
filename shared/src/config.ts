@@ -1,5 +1,5 @@
 import rawGameConfig from '../config/game.json' with { type: 'json' };
-import type { ActionCategory, BoardObjectKind, TargetMode } from './types.js';
+import type { ActionCategory, BoardObjectKind, RoomMode, TargetMode } from './types.js';
 
 export const EFFECT_HANDLERS = [
   'charge', 'gain_charge', 'steal', 'double_steal', 'chop', 'wave', 'fist', 'slash',
@@ -380,6 +380,10 @@ export const actionById = new Map(gameConfig.actions.map((action) => [action.id,
 export const resourceById = new Map(gameConfig.resources.map((resource) => [resource.id, resource]));
 export const buffById = new Map(gameConfig.buffs.map((buff) => [buff.id, buff]));
 export const passiveById = new Map(gameConfig.passives.map((passive) => [passive.id, passive]));
+
+export function isCharacterAvailableInRoomMode(characterId: string, roomMode: RoomMode): boolean {
+  return roomMode !== 'standard' || characterId !== 'chimei';
+}
 export const boardObjectById = new Map(gameConfig.boardObjects.map((object) => [object.id, object]));
 export const characterById = new Map(gameConfig.characters.map((character) => [character.id, character]));
 export const assetById = new Map(gameConfig.assets.map((asset) => [asset.id, asset]));

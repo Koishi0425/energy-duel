@@ -29,7 +29,7 @@ import {
   type SyncedRoundLogEntry,
 } from '@energy-duel/shared';
 import type { Room } from '@colyseus/sdk';
-import { Button, Card, Collapse, ConfigProvider, Drawer, Input, InputNumber, Modal, Popover, Select, Tag, message, theme } from 'antd';
+import { Button, Card, ConfigProvider, Drawer, Input, InputNumber, Modal, Popover, Select, Tag, message, theme } from 'antd';
 import 'antd/dist/reset.css';
 import type { DemoRoomState } from './App';
 import ActionPanel from './components/ActionPanel';
@@ -54,6 +54,8 @@ interface EmoteWheelState {
 }
 const LAST_EMOTE_STORAGE_KEY = 'energy-duel-last-wheel-emote';
 const EMOTE_ANIMATION_MS = 1_600;
+const EMOTE_LONG_PRESS_DELAY_MS = 320;
+const EMOTE_REPEAT_INTERVAL_MS = 180;
 const ROOM_NOTICE_VISIBLE_MS = 2_800;
 const ROOM_NOTICE_EXIT_MS = 360;
 type VisibleRoomNotice = RoomNoticeMessage & { isLeaving: boolean };
@@ -91,7 +93,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [resourceChoiceAction, setResourceChoiceAction] = useState<ActionDefinition>();
   const [pendingResourceChoice, setPendingResourceChoice] = useState<'energy' | 'charge'>();
   const [pendingNapoleonStrategy, setPendingNapoleonStrategy] = useState<{ source: 'buffer' | 'command'; command?: NapoleonCommand }>();
-  const [gridAction, setGridAction] = useState<{ action: ActionDefinition; targetIds: string[] }>();
+  const [gridAction, setGridAction] = useState<{ action: ActionDefinition; targetIds: string[]; pathDirection?: -1 | 1; selectingDirection?: boolean }>();
   const [optionalGridAction, setOptionalGridAction] = useState<ActionDefinition>();
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [learningRequest, setLearningRequest] = useState<LearningRequiredMessage>();
@@ -115,6 +117,8 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [emoteWheel, setEmoteWheel] = useState<EmoteWheelState>();
   const [coarsePointer, setCoarsePointer] = useState(false);
   const [compactLayout, setCompactLayout] = useState(() => window.matchMedia('(max-width: 900px)').matches);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(true);
+  const [mobileRosterOpen, setMobileRosterOpen] = useState(false);
   const [tutorialRequest, setTutorialRequest] = useState<{ page: GuidePageId; characterId?: string }>();
   const [panelPosition, setPanelPosition] = useState<{ x: number; y: number } | null>(() => {
     try { return JSON.parse(localStorage.getItem('energy-duel-panel-position') ?? 'null'); } catch { return null; }
@@ -122,6 +126,9 @@ function RoomContent({ room, session, onLeave }: Props) {
   const mounted = useRef(true);
   const profileRequests = useRef(new Set<string>());
   const emoteTimers = useRef(new Map<string, number>());
+  const emoteLongPressTimer = useRef<number>();
+  const emoteRepeatTimer = useRef<number>();
+  const emoteLongPressActive = useRef(false);
   const noticeTimers = useRef(new Map<string, number[]>());
   const seenEmoteIds = useRef(new Map<string, number>());
   const pointerPosition = useRef<EmoteWheelPoint>({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
@@ -176,6 +183,30 @@ function RoomContent({ room, session, onLeave }: Props) {
       localStorage.setItem(LAST_EMOTE_STORAGE_KEY, emoteId);
     }
   }, [enqueueEmote, localPlayerId, room]);
+
+  const stopEmoteBurst = useCallback(() => {
+    if (emoteLongPressTimer.current !== undefined) window.clearTimeout(emoteLongPressTimer.current);
+    if (emoteRepeatTimer.current !== undefined) window.clearInterval(emoteRepeatTimer.current);
+    emoteLongPressTimer.current = undefined;
+    emoteRepeatTimer.current = undefined;
+  }, []);
+  const startEmoteBurst = useCallback((emoteId: RoomEmoteId) => {
+    stopEmoteBurst();
+    emoteLongPressActive.current = false;
+    emoteLongPressTimer.current = window.setTimeout(() => {
+      emoteLongPressActive.current = true;
+      sendRoomEmote(emoteId, false);
+      emoteRepeatTimer.current = window.setInterval(() => sendRoomEmote(emoteId, false), EMOTE_REPEAT_INTERVAL_MS);
+    }, EMOTE_LONG_PRESS_DELAY_MS);
+  }, [sendRoomEmote, stopEmoteBurst]);
+  const updateEmotePickerOpen = useCallback((open: boolean) => {
+    if (!open) {
+      stopEmoteBurst();
+      emoteLongPressActive.current = false;
+    }
+    setEmotePickerOpen(open);
+  }, [stopEmoteBurst]);
+  useEffect(() => stopEmoteBurst, [stopEmoteBurst]);
 
   useEffect(() => {
     mounted.current = true;
@@ -301,6 +332,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     return () => query.removeEventListener('change', update);
   }, []);
   useEffect(() => {
+    updateEmotePickerOpen(false);
+  }, [compactLayout, updateEmotePickerOpen]);
+  useEffect(() => {
     if (gameState.phase !== 'deferred') {
       setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined);
     }
@@ -322,6 +356,10 @@ function RoomContent({ room, session, onLeave }: Props) {
   const targetableBoardObjectIds = useMemo(() => !deferredRequest && selectedAction?.category === 'attack' && selectedAction.target.mode === 'single_enemy'
     ? boardObjects.filter((object) => object.definitionId === 'lotus_seat' && object.currentHp > 0).map((object) => object.objectId) : [], [boardObjects, deferredRequest, selectedAction]);
   const darknessActive = activeActor?.buffs.some((buff) => buff.buffId === 'darkness') === true;
+
+  useEffect(() => {
+    if (compactLayout && (targeting || gridAction || deferredRequest)) setMobilePanelOpen(false);
+  }, [compactLayout, deferredRequest, gridAction, targeting]);
   const battleLogGroups = useMemo(() => groupBattleLog(battleLog), [battleLog]);
   const variableMax = parameterAction?.variable
     ? Math.max(parameterAction.variable.minPower, Math.min(
@@ -330,7 +368,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     ))
     : 1;
 
-  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number, targetGridIndex?: number, spend?: Record<string, number>, resourceChoiceOverride?: 'energy' | 'charge' | null, napoleonStrategyOverride?: { source: 'buffer' | 'command'; command?: NapoleonCommand } | null, targetBoardObjectId?: string) => {
+  const submit = (action: ActionDefinition, targetIds: string[] = [], transformCharacterId?: string, power?: number, targetGridIndex?: number, spend?: Record<string, number>, resourceChoiceOverride?: 'energy' | 'charge' | null, napoleonStrategyOverride?: { source: 'buffer' | 'command'; command?: NapoleonCommand } | null, targetBoardObjectId?: string, pathDirection?: -1 | 1) => {
     const resourceChoice = resourceChoiceOverride === undefined ? pendingResourceChoice : resourceChoiceOverride ?? undefined;
     const napoleonStrategy = napoleonStrategyOverride === undefined ? pendingNapoleonStrategy : napoleonStrategyOverride ?? undefined;
     const targetNames = targetIds.map((id) => players.find((player) => player.playerId === id)?.nickname ?? id);
@@ -343,7 +381,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       requestId: requestId(), actionId: action.id,
       targetId: action.target.mode === 'single_enemy' ? targetIds[0] : undefined,
       targetIds: action.target.mode === 'multiple_enemies' && targetIds.length > 0 ? targetIds : undefined,
-      transformCharacterId, power, targetGridIndex, targetBoardObjectId, resourceSpend: spend, resourceChoice,
+      transformCharacterId, power, targetGridIndex, pathDirection, targetBoardObjectId, resourceSpend: spend, resourceChoice,
       extraResourceSpend: paymentPrepared.current.surcharge,
       controllerResourceGrant: paymentPrepared.current.grant,
       napoleonStrategySource: napoleonStrategy?.source, napoleonCommand: napoleonStrategy?.command,
@@ -416,7 +454,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     if (!selectedAction) return;
     const next = [...selectedTargetIds, player.playerId];
     setSelectedTargetIds(next);
-    if (selectedAction.id === 'dream_path') { setGridAction({ action: selectedAction, targetIds: next }); return; }
+    if (selectedAction.id === 'dream_path') { setGridAction({ action: selectedAction, targetIds: next, selectingDirection: true }); return; }
     if (selectedAction.target.mode === 'single_enemy' || next.length >= (selectedAction.target.maxTargets ?? 1)) { submit(selectedAction, next, undefined, undefined, undefined, pendingSpend); setPendingSpend(undefined); }
     else void api.info({ content: `已选择 ${player.nickname}，还需选择 ${(selectedAction.target.maxTargets ?? 1) - next.length} 次`, duration: 1.2 });
   };
@@ -458,7 +496,14 @@ function RoomContent({ room, session, onLeave }: Props) {
     (activeActor.gridIndex - 1 + players.length * 2) % (players.length * 2),
     (activeActor.gridIndex + 1) % (players.length * 2),
   ] : [];
-  const gridDestinations = gridAction?.action.id === 'heal'
+  const dreamPathTarget = gridAction?.action.id === 'dream_path' ? players.find((player) => player.playerId === gridAction.targetIds[0]) : undefined;
+  const gridDestinations = gridAction?.action.id === 'dream_path'
+    ? gridAction.selectingDirection
+      ? adjacentDestinations
+      : activeActor && dreamPathTarget && gridAction.pathDirection
+        ? circularPathCells(activeActor.gridIndex, dreamPathTarget.gridIndex, players.length * 2, gridAction.pathDirection)
+        : []
+    : gridAction?.action.id === 'heal'
     ? boardObjects.filter((object) => object.definitionId === 'nilu_fire').map((object) => object.gridIndex)
     : gridAction?.action.id === 'breathing_method'
       ? Array.from({ length: players.length * 2 }, (_, cell) => cell).filter((cell) =>
@@ -474,7 +519,12 @@ function RoomContent({ room, session, onLeave }: Props) {
     : adjacentDestinations;
   const chooseGridDestination = (cell: number | undefined) => {
     if (!gridAction) return;
-    submit(gridAction.action, gridAction.targetIds, undefined, undefined, cell, pendingSpend);
+    if (gridAction.action.id === 'dream_path' && gridAction.selectingDirection && activeActor && cell !== undefined) {
+      const direction: -1 | 1 = cell === (activeActor.gridIndex + 1) % (players.length * 2) ? 1 : -1;
+      setGridAction({ ...gridAction, pathDirection: direction, selectingDirection: false });
+      return;
+    }
+    submit(gridAction.action, gridAction.targetIds, undefined, undefined, cell, pendingSpend, undefined, undefined, undefined, gridAction.pathDirection);
     setGridAction(undefined); setPendingSpend(undefined);
   };
 
@@ -515,7 +565,9 @@ function RoomContent({ room, session, onLeave }: Props) {
     ? selectedTargetIds.length === deferredRequest.allocationCount
       ? `后发分配完成 ${selectedTargetIds.length}/${deferredRequest.allocationCount}，请在面板确认提交`
       : `后发分配 ${selectedTargetIds.length}/${deferredRequest.allocationCount}（可重复点击同一目标）`
-    : gridAction ? '点击地图上绿色高亮的编号地块'
+    : gridAction?.action.id === 'dream_path' && gridAction.selectingDirection ? '点击相邻地块选择梦径方向'
+      : gridAction?.action.id === 'dream_path' ? '点击梦径上的任意地块选择落点'
+      : gridAction ? '点击地图上绿色高亮的编号地块'
       : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : targetableBoardObjectIds.length ? '点击高亮角色或托生莲座选择目标' : '点击高亮角色选择目标') : undefined;
 
   return <main className="game-shell">
@@ -523,7 +575,8 @@ function RoomContent({ room, session, onLeave }: Props) {
     {emoteWheel && <EmoteWheel state={emoteWheel} />}
     <header className="game-header">
       <div><p className="eyebrow">CIRCULAR GRID</p><h1>{phaseTitle(gameState)}</h1></div>
-      <div className="game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
+      <div className="game-actions desktop-game-actions"><span className="room-id">房间 {room.roomId}</span><Button size="small" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>复制</Button><Button size="small" onClick={() => setResetViewKey((value) => value + 1)}>重置视角</Button><Button size="small" onClick={() => setLogOpen(true)}>日志</Button><AnnouncementLauncher compact /><Button size="small" onClick={() => setTutorialRequest({ page: 'start' })}>教程</Button><Tag color={networkState === 'online' ? 'success' : networkState === 'reconnecting' ? 'warning' : 'error'}>{networkState === 'online' ? `在线${rtt === undefined ? '' : ` · ${rtt}ms`}` : networkState === 'reconnecting' ? '重连中' : '离线'}</Tag><span>{players.length}/20</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
+      <div className="mobile-game-header-actions"><button className="mobile-room-code" type="button" onClick={() => { void navigator.clipboard?.writeText(room.roomId); void api.success('房间号已复制'); }}>#{room.roomId}</button><span className={`mobile-network-state ${networkState}`}>{networkState === 'online' ? '在线' : networkState === 'reconnecting' ? '重连' : '离线'}</span><Button size="small" danger onClick={() => void leave()}>离开</Button></div>
     </header>
     {roomNotices.length > 0 && <div className="room-notice-stack">{roomNotices.map((notice) => <div key={notice.eventId} className={`room-notice ${notice.type}${notice.isLeaving ? ' is-leaving' : ''}`}>{roomNoticeText(notice)}</div>)}</div>}
     {networkState === 'reconnecting' && <div className="reconnecting-banner">连接中断，正在保留席位并自动重连…</div>}
@@ -536,18 +589,16 @@ function RoomContent({ room, session, onLeave }: Props) {
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       {targetHint && <div className="targeting-hint">{targetHint}</div>}
-      {gridAction?.action.id === 'dream_path' && <Button className="skip-grid-move" size="small" onClick={() => chooseGridDestination(undefined)}>留在原地</Button>}
     </section>
     <aside className="roster desktop-roster">{roster}</aside>
-    <Collapse className="mobile-roster" items={[{ key: 'players', label: `玩家列表（${players.length}）`, children: roster }]} />
-
-    <section className="game-control-panel" style={panelPosition ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' } : undefined}>
-      <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动操作面板</span><div className="control-panel-header-actions" onPointerDown={(event) => event.stopPropagation()}><Popover open={emotePickerOpen} onOpenChange={setEmotePickerOpen} trigger="click" placement="topRight" content={<EmotePicker onSelect={(emoteId) => { sendRoomEmote(emoteId, false); setEmotePickerOpen(false); }} />}><Button size="small" className="emote-trigger" aria-label="发表情" title="发表情">☺</Button></Popover>{panelPosition && <Button size="small" type="text" onClick={() => { setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div></div>
+    <section className={`game-control-panel${mobilePanelOpen ? ' mobile-open' : ' mobile-closed'}`} style={panelPosition ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' } : undefined}>
+      <button className="mobile-control-sheet-handle" type="button" aria-expanded={mobilePanelOpen} onClick={() => setMobilePanelOpen((open) => !open)}><span aria-hidden="true" /><strong>{mobilePanelOpen ? '收起操作面板' : selectedAction ? `已选：${selectedAction.name}` : phaseTitle(gameState)}</strong><small>{mobilePanelOpen ? '向下收起' : '展开'}</small></button>
+      <div className="control-panel-drag-handle" onPointerDown={beginPanelDrag}><span>拖动操作面板</span><div className="control-panel-header-actions" onPointerDown={(event) => event.stopPropagation()}>{!compactLayout && <Popover open={emotePickerOpen} onOpenChange={updateEmotePickerOpen} trigger="click" placement="topRight" content={<EmotePicker onSelect={(emoteId) => { sendRoomEmote(emoteId, false); updateEmotePickerOpen(false); }} />}><Button size="small" className="emote-trigger" aria-label="发表情" title="发表情">☺</Button></Popover>}{panelPosition && <Button size="small" type="text" onClick={() => { setPanelPosition(null); localStorage.removeItem('energy-duel-panel-position'); }}>复位</Button>}</div></div>
       <div className="round-result">{darknessActive ? <p>黑暗笼罩战场，无法获知其他地块的状态变化。</p> : gameState.lastResult.split('\n').map((line, index) => <p key={`${index}-${line}`}>{line}</p>)}</div>
       {gameState.roomMode === 'training' && gameState.phase === 'waiting' && <TrainingSetup actors={controlledActors} room={room} />}
       {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
       {gameState.phase === 'choosing' && controlledActors.length > 1 && <div className="actor-switcher"><span>当前操控</span>{controlledActors.map((actor) => <Button key={actor.playerId} size="small" type={actor.playerId === activeActor?.playerId ? 'primary' : 'default'} disabled={!actor.alive} onClick={() => { setActiveActorId(actor.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }}>{actor.nickname}{actor.submitted ? ' ✓' : ''}</Button>)}</div>}
-      {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} resourceSponsor={canSponsorActiveActor ? me : undefined} selectedActionId={selectedActionId} submittedLabel={submittedLabel} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }} />}
+      {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} resourceSponsor={canSponsorActiveActor ? me : undefined} selectedActionId={selectedActionId} submittedLabel={submittedLabel} roomMode={gameState.roomMode} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }} />}
       {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}，完成后确认提交。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div>{deferredRequest.flexibleResourceIds && <div className="deferred-payment"><p>度神决 X：<InputNumber min={deferredRequest.minPower ?? 1} max={deferredRequest.maxPower ?? 1} precision={0} value={deferredPower} onChange={(value) => setDeferredPower(Math.trunc(value ?? 1))} />（已支付 {deferredSelected}/{deferredPower}）</p>{deferredRequest.flexibleResourceIds.map((resourceId) => { const current = activeActor?.resources[resourceId]?.current ?? 0; return <div className="resource-payment-row" key={resourceId}><span>{resourceById.get(resourceId)?.name ?? resourceId}（持有 {formatNumber(current)}）</span><InputNumber min={0} max={Math.floor(current)} precision={0} value={deferredSpend[resourceId] ?? 0} onChange={(value) => setDeferredSpend((existing) => ({ ...existing, [resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>; })}</div>}<p className="deferred-allocation-summary">当前分配：{selectedTargetIds.length ? formatTargetAllocation(selectedTargetIds, players) : '尚未选择'}（{selectedTargetIds.length}/{deferredRequest.allocationCount}）</p><div className="deferred-selection-actions"><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds((current) => current.slice(0, -1))}>撤销上一次</Button><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds([])}>清空重选</Button><Button type="primary" disabled={selectedTargetIds.length !== deferredRequest.allocationCount || Boolean(deferredRequest.flexibleResourceIds && deferredSelected !== deferredPower)} onClick={confirmDeferredTargets}>确认提交</Button>{deferredRequest.allowSkip && <Button disabled={selectedTargetIds.length > 0} onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div></div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'learning' && <p className="resolving-notice">等待叶倾仙选择吞天学习，或放弃本次学习…</p>}
@@ -555,6 +606,14 @@ function RoomContent({ room, session, onLeave }: Props) {
       {gameState.phase === 'choosing' && me && !me.alive && <p className="eliminated-notice">你已淘汰，正在观战</p>}
       {gameState.phase === 'finished' && <p className="finished-hint">{me?.resultConfirmed ? '你已确认，等待其他玩家。' : '请确认本局结算。'}</p>}
     </section>
+    <nav className="mobile-battle-dock" aria-label="战斗快捷操作">
+      <button type="button" onClick={() => setMobileRosterOpen(true)}><span aria-hidden="true">●</span><small>玩家</small><b>{players.length}</b></button>
+      <button type="button" onClick={() => setResetViewKey((value) => value + 1)}><span aria-hidden="true">↻</span><small>视角</small></button>
+      <button className={mobilePanelOpen ? 'active' : ''} type="button" aria-expanded={mobilePanelOpen} onClick={() => setMobilePanelOpen((open) => !open)}><span aria-hidden="true">◆</span><small>行动</small>{selectedAction && !activeActor?.submitted && <b>1</b>}</button>
+      <button type="button" onClick={() => setLogOpen(true)}><span aria-hidden="true">≡</span><small>日志</small></button>
+      {compactLayout && <Popover open={emotePickerOpen} onOpenChange={updateEmotePickerOpen} trigger="click" placement="topRight" content={<EmotePicker onSelect={(emoteId) => { if (emoteLongPressActive.current) { updateEmotePickerOpen(false); return; } sendRoomEmote(emoteId, false); updateEmotePickerOpen(false); }} onPressStart={startEmoteBurst} onPressEnd={stopEmoteBurst} />}><button type="button"><span aria-hidden="true">☺</span><small>表情</small></button></Popover>}
+    </nav>
+    <Drawer className="mobile-roster-drawer" title={`玩家（${players.length}）`} placement="left" width="min(360px, 88vw)" open={mobileRosterOpen} onClose={() => setMobileRosterOpen(false)}>{roster}</Drawer>
     <Drawer title="角色详情" placement="bottom" height="min(82dvh, 720px)" open={Boolean(inspectedPlayer)} onClose={() => setInspectedPlayer(undefined)}>{inspectedPlayer && <><PlayerDetails player={players.find((player) => player.playerId === inspectedPlayer.playerId) ?? inspectedPlayer} profile={profileCache[inspectedPlayer.accountId]} showPortrait onOpenGuide={(characterId) => { setInspectedPlayer(undefined); setTutorialRequest({ page: 'characters', characterId }); }} />{!inspectedPlayer.isTrainingDummy && !profileCache[inspectedPlayer.accountId] && <p className={profileErrors[inspectedPlayer.accountId] ? 'error' : 'muted'}>{profileErrors[inspectedPlayer.accountId] || '正在读取基础个人资料…'}</p>}</>}</Drawer>
     <Modal title={inspectedBoardObjectIds.length > 1 ? '地块上的全部效果' : '棋盘对象详情'} footer={null} open={inspectedBoardObjectIds.length > 0} onCancel={() => setInspectedBoardObjectIds([])} destroyOnHidden><div className="board-object-details-list">{inspectedBoardObjectIds.map((objectId) => boardObjects.find((object) => object.objectId === objectId)).filter((object): object is SyncedBoardObject => Boolean(object)).map((object) => <BoardObjectDetails key={object.objectId} object={object} owner={players.find((player) => player.playerId === object.ownerPlayerId)} />)}</div></Modal>
     <Modal title="选择治疗方式" open={Boolean(optionalGridAction)} onCancel={() => setOptionalGridAction(undefined)} footer={[<Button key="self" onClick={() => { const action = optionalGridAction; setOptionalGridAction(undefined); if (action) submit(action); }}>治疗自己</Button>, <Button key="fire" type="primary" onClick={() => { const action = optionalGridAction; setOptionalGridAction(undefined); if (action) setGridAction({ action, targetIds: [] }); }}>熄灭尼卢火</Button>]}><p>你可以正常恢复一个健康状态，或选择场上的一团尼卢火将其熄灭。</p></Modal>
@@ -617,9 +676,9 @@ function hoverCardStyle(x: number, y: number) {
   };
 }
 
-function EmotePicker({ onSelect }: { onSelect: (emoteId: RoomEmoteId) => void }) {
+function EmotePicker({ onSelect, onPressStart, onPressEnd }: { onSelect: (emoteId: RoomEmoteId) => void; onPressStart?: (emoteId: RoomEmoteId) => void; onPressEnd?: () => void }) {
   return <div className="emote-picker" role="menu" aria-label="房间表情">
-    {roomEmotes.map((emote) => <button key={emote.id} type="button" role="menuitem" title={emote.label} aria-label={emote.label} onClick={() => onSelect(emote.id)}>{emote.emoji}</button>)}
+    {roomEmotes.map((emote) => <button key={emote.id} type="button" role="menuitem" title={emote.label} aria-label={emote.label} onPointerDown={(event) => { event.currentTarget.setPointerCapture?.(event.pointerId); onPressStart?.(emote.id); }} onPointerUp={onPressEnd} onPointerCancel={onPressEnd} onClick={() => onSelect(emote.id)}>{emote.emoji}</button>)}
   </div>;
 }
 
@@ -690,6 +749,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 function formatNumber(value: number): string { if (Math.abs(value - 1 / 3) < 0.001) return '1/3'; if (Math.abs(value - 2 / 3) < 0.001) return '2/3'; return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
+function circularPathCells(from: number, to: number, count: number, direction: -1 | 1): number[] {
+  const cells = [from];
+  if (from === to) return cells;
+  for (let cell = (from + direction + count) % count; cells.length < count; cell = (cell + direction + count) % count) {
+    cells.push(cell);
+    if (cell === to) break;
+  }
+  return cells;
+}
 function formatTargetAllocation(targetIds: string[], players: SyncedPlayer[]): string {
   const counts = new Map<string, number>();
   for (const targetId of targetIds) counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
