@@ -650,7 +650,7 @@ function attackEffectWins(attacker: CombatPlayer, target: CombatPlayer | undefin
   if (!equalDamageAttack && actionEffectSpeed(target.id, targetAction, target, 'attack', players, actions) < attackSpeed) return true;
   const attackerLevel = adjustedEffectLevel(attacker, target, rawEffectLevel);
   const targetLevel = adjustedEffectLevel(target, attacker, actionEffectLevelAgainst(target, targetAction, attacker.id, players));
-  return attackerLevel - targetLevel >= 0.5 - 1e-6;
+  return attackerLevel + 1e-6 >= targetLevel;
 }
 
 function resolveSpatialAttack(attacker: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, cells: number[], players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
@@ -747,8 +747,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
     : 0;
   if (hasOpposingEffect) {
     const opposingDamageLevel = adjustedSubmittedDamageLevel(target, attacker, targetAction!);
-    const effectDifference = attackerLevel - opposingEffectLevel;
-    const effectResult = effectDifference >= 0.5 - 1e-6 ? '附带效果成功' : '附带效果失败';
+    const effectResult = attackerLevel + 1e-6 >= opposingEffectLevel ? '附带效果成功' : '附带效果失败';
     if (damageLevel <= opposingDamageLevel + 1e-6) {
       summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}，${effectResult}）伤害 ${formatLevel(damageLevel)} 未高于 ${target.nickname} 的${targetDefinition!.name}伤害 ${formatLevel(opposingDamageLevel)}，不产生伤害。`);
       return 'none';
@@ -1207,7 +1206,7 @@ function resolveFivePrecepts(actor: CombatPlayer, submitted: SubmittedAction, de
   const targetAttackLevel = targetAction && requireAction(targetAction.actionId).category === 'attack' ? submittedEffectLevel(target, targetAction) : 0;
   const matchedSkill = Math.max(1.5, targetAttackLevel) + niluFires(actor).length * 0.5 + (actor.buffs?.has('bodhisattva_debate') ? 0.5 : 0);
   const opposing = target ? actionEffectLevelAgainst(target, targetAction, actor.id, players) : 0;
-  if (!target || matchedSkill - opposing < 0.5) { summary.push(`${actor.nickname} 的惩五戒未能胜过目标招式，五戒不落。`); return; }
+  if (!target || matchedSkill + 1e-6 < opposing) { summary.push(`${actor.nickname} 的惩五戒效果等级低于目标招式，五戒不落。`); return; }
   for (const damageLevel of [0.5, 0.5, 1, 1.5, 1.5]) {
     const hit = { ...definition, effectLevel: matchedSkill, damageLevel };
     resolveAttackTargets(actor, submitted, hit, [targetId], matchedSkill, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);

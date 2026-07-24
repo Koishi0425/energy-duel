@@ -306,8 +306,9 @@ Run commands from the repository root:
   defense applies only when its speed is at least the incoming attack speed; slower
   defense and movement are bypassed at the attack's original damage level. Defense and
   targetless actions apply generally; targeted/spatial actions apply only when
-  the attacker is one of their actual targets. An effect difference below 0.5
-  cancels only the attached effect; it does not cancel independently positive damage.
+  the attacker is one of their actual targets. Equal effect levels let both
+  attached effects succeed; unequal effect levels let only the higher effect
+  level succeed. This result does not cancel independently positive damage.
   Effective damage below 0.5 does not shift health. Without an original damage
   level of at least 3 and remaining damage of at least 1, all attacks received in
   one round can shift health left at most once. All final effects remain server authoritative.

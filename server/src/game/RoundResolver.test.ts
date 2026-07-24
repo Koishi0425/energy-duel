@@ -1556,6 +1556,49 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(result.summary.join('\n')).toContain('伤害差 1');
   });
 
+  it('lets both attached effects succeed when opposing effect levels are equal', () => {
+    const players = roster(['a', 0], ['b', 0]); const left = players.get('a')!; const right = players.get('b')!;
+    left.currentHp = left.maxHp = 2; right.currentHp = right.maxHp = 2;
+
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'nebula_shock', targetId: 'b' }],
+      ['b', { actionId: 'nebula_shock', targetId: 'a' }],
+    ));
+
+    expect(left.buffs?.has('shock')).toBe(true);
+    expect(right.buffs?.has('shock')).toBe(true);
+    expect(left.currentHp).toBe(1);
+    expect(right.currentHp).toBe(1);
+    expect(result.summary.join('\n').match(/附带效果成功/g)).toHaveLength(2);
+  });
+
+  it('lets only the strictly higher attached effect succeed even when the difference is below 0.5', () => {
+    const template = actionById.get('nebula_shock')!;
+    const higher = structuredClone(template) as ActionDefinition;
+    const lower = structuredClone(template) as ActionDefinition;
+    higher.id = 'test_effect_2'; higher.name = '2级效果'; higher.effectLevel = 2; higher.damageLevel = 0; higher.cost = {};
+    lower.id = 'test_effect_1_75'; lower.name = '1.75级效果'; lower.effectLevel = 1.75; lower.damageLevel = 0; lower.cost = {};
+    actionById.set(higher.id, higher); actionById.set(lower.id, lower);
+    try {
+      const players = roster(['a', 0], ['b', 0]); const winner = players.get('a')!; const loser = players.get('b')!;
+      winner.currentHp = winner.maxHp = 2; loser.currentHp = loser.maxHp = 2;
+
+      const result = resolveRound(players, actions(
+        ['a', { actionId: higher.id, targetId: 'b' }],
+        ['b', { actionId: lower.id, targetId: 'a' }],
+      ));
+
+      expect(Boolean(winner.buffs?.has('shock'))).toBe(false);
+      expect(loser.buffs?.has('shock')).toBe(true);
+      expect(winner.currentHp).toBe(2);
+      expect(loser.currentHp).toBe(1);
+      expect(result.summary.join('\n')).toContain('效果 2，附带效果成功');
+      expect(result.summary.join('\n')).toContain('效果 1.8，附带效果失败');
+    } finally {
+      actionById.delete(higher.id); actionById.delete(lower.id);
+    }
+  });
+
   it('applies an attached effect when effect 2 wins even though damage 0.5 loses to damage 1.5', () => {
     const players = roster(['a', 0], ['b', 1]); const attacker = players.get('a')!; const target = players.get('b')!;
     attacker.characterId = 'warrior'; attacker.currentHp = attacker.maxHp = 2; attacker.resources.charge = 1;
