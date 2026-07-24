@@ -340,6 +340,11 @@ export interface RevealedAction {
   playerId: string;
   actionId: string;
   power?: number;
+  targetIds: string[];
+  targetGridIndex?: number;
+  pathDirection?: -1 | 1;
+  targetBoardObjectId?: string;
+  transformCharacterId?: string;
 }
 
 export interface DeferredActionRequiredMessage {
@@ -387,6 +392,7 @@ export interface ResolutionActor {
   transformCharacterId?: string;
   power?: number;
   targetGridIndex?: number;
+  pathDirection?: -1 | 1;
   targetBoardObjectId?: string;
 }
 

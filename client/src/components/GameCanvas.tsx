@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Application, Assets, Container, FederatedPointerEvent, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
-import { assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RoomEmoteMessage, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
+import { actionById, assetById, boardObjectById, characterById, isResourceVisibleForCharacter, resourceById, roomEmotes, type GamePhase, type ResolutionStep, type RevealedAction, type RoomEmoteMessage, type SyncedBoardObject, type SyncedPlayer } from '@energy-duel/shared';
 import { CircularMap } from '../game/CircularMap';
 import { FALLBACK_PORTRAIT_URL, resolvePortraitPreviewUrl } from '../game/visualResolver';
 import { HEALTH_BAR_COLORS, unitHealthBarModel } from '../game/unitHealthBar';
@@ -21,6 +21,7 @@ interface Props {
   gridTargeting?: boolean;
   targetableGridIndices?: number[];
   selectedGridIndex?: number;
+  actionPreviews?: RevealedAction[];
   obscuredPlayerIds?: string[];
   resetViewKey?: number;
   resolutionStep?: ResolutionStep;
@@ -55,6 +56,7 @@ export default function GameCanvas(props: Props) {
   const boardObjectLayerRef = useRef<Container | null>(null);
   const boardEntityLayerRef = useRef<Container | null>(null);
   const boardObjectOverlayLayerRef = useRef<Container | null>(null);
+  const actionPreviewLayerRef = useRef<Container | null>(null);
   const effectLayerRef = useRef<Container | null>(null);
   const tokenViewsRef = useRef(new Map<string, TokenView>());
   const boardObjectViewsRef = useRef(new Map<string, BoardObjectView>());
@@ -89,6 +91,7 @@ export default function GameCanvas(props: Props) {
       view.overlay.scale.set(object.kind === 'summon' ? Math.max(0.78, slot.scale) : 1);
       view.overlay.position.set(point.x + slot.x, point.y + slot.y);
     }
+    syncActionPreviews();
   };
 
   const syncViews = () => {
@@ -199,6 +202,18 @@ export default function GameCanvas(props: Props) {
     );
   };
 
+  const syncActionPreviews = () => {
+    const layer = actionPreviewLayerRef.current;
+    const map = mapRef.current;
+    if (!layer || !map) return;
+    layer.removeChildren().forEach((child) => child.destroy({ children: true }));
+    for (const preview of propsRef.current.actionPreviews ?? []) {
+      const actor = propsRef.current.players.find((player) => player.playerId === preview.playerId);
+      if (!actor) continue;
+      drawActionTrajectory(layer, preview, actor, propsRef.current.players, propsRef.current.boardObjects, map, tokenViewsRef.current, 0.72);
+    }
+  };
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -225,16 +240,17 @@ export default function GameCanvas(props: Props) {
       if (cancelled) { app.destroy(true); return; }
       host.appendChild(app.canvas); appRef.current = app;
       const map = new CircularMap(Math.max(1, propsRef.current.players.length));
-      const boardObjectLayer = new Container(); const boardEntityLayer = new Container(); const tokenLayer = new Container(); const boardObjectOverlayLayer = new Container(); const effectLayer = new Container();
-      app.stage.addChild(map, boardObjectLayer, boardEntityLayer, tokenLayer, boardObjectOverlayLayer, effectLayer);
+      const boardObjectLayer = new Container(); const boardEntityLayer = new Container(); const tokenLayer = new Container(); const boardObjectOverlayLayer = new Container(); const actionPreviewLayer = new Container(); const effectLayer = new Container();
+      actionPreviewLayer.eventMode = 'none'; effectLayer.eventMode = 'none';
+      app.stage.addChild(map, boardObjectLayer, boardEntityLayer, tokenLayer, boardObjectOverlayLayer, actionPreviewLayer, effectLayer);
       app.stage.eventMode = 'static'; app.stage.hitArea = new Rectangle(0, 0, host.clientWidth, host.clientHeight);
-      mapRef.current = map; boardObjectLayerRef.current = boardObjectLayer; boardEntityLayerRef.current = boardEntityLayer; tokenLayerRef.current = tokenLayer; boardObjectOverlayLayerRef.current = boardObjectOverlayLayer; effectLayerRef.current = effectLayer;
+      mapRef.current = map; boardObjectLayerRef.current = boardObjectLayer; boardEntityLayerRef.current = boardEntityLayer; tokenLayerRef.current = tokenLayer; boardObjectOverlayLayerRef.current = boardObjectOverlayLayer; actionPreviewLayerRef.current = actionPreviewLayer; effectLayerRef.current = effectLayer;
       installRotationGestures(app, map, positionViews);
-      map.resize(host.clientWidth, host.clientHeight); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection(); observer.observe(host);
+      map.resize(host.clientWidth, host.clientHeight); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection(); syncActionPreviews(); observer.observe(host);
       propsRef.current.onLoadProgress?.(100, '战场已就绪');
     });
     return () => {
-      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; boardObjectLayerRef.current = null; boardEntityLayerRef.current = null; tokenLayerRef.current = null; boardObjectOverlayLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear(); boardObjectViewsRef.current.clear(); animatedEmoteIdsRef.current.clear();
+      cancelled = true; observer.disconnect(); appRef.current = null; mapRef.current = null; boardObjectLayerRef.current = null; boardEntityLayerRef.current = null; tokenLayerRef.current = null; boardObjectOverlayLayerRef.current = null; actionPreviewLayerRef.current = null; effectLayerRef.current = null; tokenViewsRef.current.clear(); boardObjectViewsRef.current.clear(); animatedEmoteIdsRef.current.clear();
       if (initialized) app.destroy(true, { children: true });
     };
   }, []);
@@ -242,8 +258,8 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection();
-  }, [props.players, props.phase, props.boardObjects, props.emoteEvents, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.targetableBoardObjectIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex]);
+    map.setPlayerCount(Math.max(1, props.players.length)); syncBoardObjects(); syncViews(); syncEmoteAnimations(); syncGridSelection(); syncActionPreviews();
+  }, [props.players, props.phase, props.boardObjects, props.emoteEvents, props.targeting, props.selectedTargetIds, props.targetablePlayerIds, props.targetableBoardObjectIds, props.gridTargeting, props.targetableGridIndices, props.selectedGridIndex, props.actionPreviews]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -254,7 +270,7 @@ export default function GameCanvas(props: Props) {
   useEffect(() => {
     const app = appRef.current; const layer = effectLayerRef.current;
     if (!app || !layer || !props.resolutionStep) return;
-    return animateResolutionStep(app, layer, props.resolutionStep, props.players, mapRef.current, tokenViewsRef.current);
+    return animateResolutionStep(app, layer, props.resolutionStep, props.players, props.boardObjects, mapRef.current, tokenViewsRef.current);
   }, [props.resolutionStep]);
 
   return <div className={`game-canvas${props.targeting || props.gridTargeting ? ' is-targeting' : ''}`} ref={hostRef} aria-label="可旋转圆形战棋地图，地块带有编号" />;
@@ -413,21 +429,30 @@ function animatePlayerEmote(app: Application, root: Container, emoji: string, ev
   app.ticker.add(update);
 }
 
-function animateResolutionStep(app: Application, layer: Container, step: ResolutionStep, players: SyncedPlayer[], map: CircularMap | null, views: Map<string, TokenView>): () => void {
+function animateResolutionStep(app: Application, layer: Container, step: ResolutionStep, players: SyncedPlayer[], boardObjects: SyncedBoardObject[], map: CircularMap | null, views: Map<string, TokenView>): () => void {
   layer.removeChildren().forEach((child) => child.destroy());
   const animations: Array<{ display: Text; from: ScreenPoint; to: ScreenPoint; lift: number; stationary: boolean }> = [];
   const impacts: Text[] = [];
-  const defendingPlayerIds = new Set(step.actors.filter((actor) => isDefenseAction(actor.actionId)).map((actor) => actor.playerId));
   for (const actor of step.actors) {
     const sourcePlayer = players.find((player) => player.playerId === actor.playerId); if (!sourcePlayer || !map) continue;
-    const source = map.getGridCoordinates(sourcePlayer.gridIndex); const targetPlayer = players.find((player) => player.playerId === actor.targetIds[0]); const target = targetPlayer ? map.getGridCoordinates(targetPlayer.gridIndex) : { x: source.x, y: source.y - 52 };
+    drawActionTrajectory(layer, actor, sourcePlayer, players, boardObjects, map, views, 1);
+    const source = map.getGridCoordinates(sourcePlayer.gridIndex);
+    const targetPlayer = players.find((player) => player.playerId === actor.targetIds[0]);
+    const targetObject = boardObjects.find((object) => object.objectId === actor.targetBoardObjectId);
+    const target = targetPlayer
+      ? map.getGridCoordinates(targetPlayer.gridIndex)
+      : targetObject
+        ? map.getGridCoordinates(targetObject.gridIndex)
+        : actor.targetGridIndex !== undefined
+          ? map.getGridCoordinates(actor.targetGridIndex)
+          : { x: source.x, y: source.y - 52 };
     const stationary = isDefenseAction(actor.actionId);
     const from = { x: source.x, y: source.y - 28 };
     const to = stationary ? from : { x: target.x, y: target.y - 28 };
     const display = new Text({ text: effectEmoji(actor.actionId), style: { fontSize: stationary ? 42 : 30, dropShadow: true } });
     display.anchor.set(0.5); display.position.set(from.x, from.y); layer.addChild(display);
     animations.push({ display, from, to, lift: targetPlayer ? 0 : 12, stationary });
-    if (targetPlayer && defendingPlayerIds.has(targetPlayer.playerId) && isAttackAction(actor.actionId)) {
+    if (targetPlayer && isAttackAction(actor.actionId)) {
       const impact = new Text({ text: '💥', style: { fontSize: 26, dropShadow: true } });
       impact.anchor.set(0.5); impact.position.set(target.x, target.y - 28); impact.alpha = 0; impact.scale.set(0.2); layer.addChild(impact); impacts.push(impact);
     }
@@ -451,8 +476,104 @@ function animateResolutionStep(app: Application, layer: Container, step: Resolut
   return () => { app.ticker.remove(update); layer.removeChildren().forEach((child) => child.destroy()); };
 }
 
-function isDefenseAction(actionId: string): boolean { return ['defend', 'axe_defend', 'super_defend'].includes(actionId); }
-function isAttackAction(actionId: string): boolean { return ['fist', 'slash', 'wave', 'atomic_breath', 'chop', 'hangup'].includes(actionId); }
+function drawActionTrajectory(layer: Container, action: Pick<RevealedAction, 'playerId' | 'actionId' | 'targetIds' | 'targetGridIndex' | 'pathDirection' | 'targetBoardObjectId'>, actor: SyncedPlayer, players: SyncedPlayer[], boardObjects: SyncedBoardObject[], map: CircularMap, views: Map<string, TokenView>, alpha: number): void {
+  const source = playerVisualCenter(actor, map, views, players.length);
+  const actionDefinition = actionById.get(action.actionId);
+  const color = actionDefinition?.category === 'attack' ? 0xff6b6b
+    : actionDefinition?.movement ? 0x55f2b0
+      : actionDefinition?.category === 'defense' ? 0x72a7ff
+        : 0xffdf68;
+  const groupedTargets = new Map<string, { point: ScreenPoint; count: number }>();
+  for (const targetId of action.targetIds) {
+    const target = players.find((player) => player.playerId === targetId);
+    if (target) {
+      const existing = groupedTargets.get(targetId);
+      groupedTargets.set(targetId, {
+        point: playerVisualCenter(target, map, views, players.length),
+        count: (existing?.count ?? 0) + 1,
+      });
+    }
+  }
+  const targetObject = boardObjects.find((object) => object.objectId === action.targetBoardObjectId);
+  if (targetObject) groupedTargets.set(`object:${targetObject.objectId}`, { point: map.getGridCoordinates(targetObject.gridIndex), count: 1 });
+
+  if (action.actionId === 'dream_path' && action.pathDirection && action.targetIds.length > 0) {
+    const endpoint = players.find((player) => player.playerId === action.targetIds[0]);
+    if (endpoint) {
+      const cells = circularPath(actor.gridIndex, endpoint.gridIndex, players.length * 2, action.pathDirection);
+      const pathPoints = cells.map((cell) => cell === endpoint.gridIndex
+        ? playerVisualCenter(endpoint, map, views, players.length)
+        : map.getGridCoordinates(cell));
+      drawPolylineArrow(layer, [source, ...pathPoints], color, alpha, '路径');
+      if (action.targetGridIndex !== undefined) {
+        const landing = map.getGridCoordinates(action.targetGridIndex);
+        drawTargetMarker(layer, landing, color, alpha, '落点');
+      }
+      return;
+    }
+  }
+
+  for (const { point, count } of groupedTargets.values()) {
+    drawPolylineArrow(layer, [source, point], color, alpha, count > 1 ? `×${count}` : undefined);
+  }
+  if (action.targetGridIndex !== undefined && groupedTargets.size === 0) {
+    const target = map.getGridCoordinates(action.targetGridIndex);
+    drawPolylineArrow(layer, [source, target], color, alpha, actionDefinition?.movement ? '移动' : '地块');
+  }
+}
+
+function playerVisualCenter(player: SyncedPlayer, map: CircularMap, views: Map<string, TokenView>, playerCount: number): ScreenPoint {
+  const view = views.get(player.playerId);
+  if (view) {
+    return {
+      x: view.root.x + view.portrait.x * view.root.scale.x,
+      y: view.root.y + (view.portrait.y - view.portrait.height / 2) * view.root.scale.y,
+    };
+  }
+  const point = map.getGridCoordinates(player.gridIndex);
+  return { x: point.x, y: point.y + 8 - boardPortraitBaseHeight(playerCount) / 2 };
+}
+
+function drawPolylineArrow(layer: Container, points: ScreenPoint[], color: number, alpha: number, label?: string): void {
+  if (points.length < 2) return;
+  const line = new Graphics();
+  line.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) line.lineTo(point.x, point.y);
+  line.stroke({ color, width: 4, alpha, cap: 'round', join: 'round' });
+  const end = points.at(-1)!;
+  const previous = points.at(-2)!;
+  const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
+  const headLength = 13;
+  line.moveTo(end.x, end.y)
+    .lineTo(end.x - Math.cos(angle - Math.PI / 6) * headLength, end.y - Math.sin(angle - Math.PI / 6) * headLength)
+    .moveTo(end.x, end.y)
+    .lineTo(end.x - Math.cos(angle + Math.PI / 6) * headLength, end.y - Math.sin(angle + Math.PI / 6) * headLength)
+    .stroke({ color, width: 4, alpha, cap: 'round' });
+  layer.addChild(line);
+  if (label) drawTargetMarker(layer, end, color, alpha, label);
+}
+
+function drawTargetMarker(layer: Container, point: ScreenPoint, color: number, alpha: number, label: string): void {
+  const marker = new Container();
+  const background = new Graphics().roundRect(-17, -10, 34, 20, 10).fill({ color: 0x091023, alpha: Math.min(0.94, alpha + 0.12) }).stroke({ color, width: 2, alpha });
+  const text = new Text({ text: label, style: { fill: 0xffffff, fontSize: 10, fontWeight: '700' } });
+  text.anchor.set(0.5); marker.addChild(background, text); marker.position.set(point.x, point.y - 32); layer.addChild(marker);
+}
+
+function circularPath(from: number, to: number, count: number, direction: -1 | 1): number[] {
+  const cells: number[] = [];
+  for (let cell = (from + direction + count) % count; cells.length < count; cell = (cell + direction + count) % count) {
+    cells.push(cell);
+    if (cell === to) break;
+  }
+  return cells;
+}
+
+function isDefenseAction(actionId: string): boolean {
+  const action = actionById.get(actionId);
+  return action?.category === 'defense' || action?.defenseLevel !== undefined;
+}
+function isAttackAction(actionId: string): boolean { return actionById.get(actionId)?.category === 'attack'; }
 
 function effectEmoji(actionId: string): string {
   if (actionId === 'fist') return '👊'; if (actionId === 'slash' || actionId === 'chop') return '⚔️'; if (['defend', 'axe_defend', 'super_defend'].includes(actionId)) return '🛡️'; if (actionId === 'transform') return '✨'; if (actionId === 'atomic_breath') return '☄️'; if (actionId === 'heal') return '💚'; if (actionId === 'charge' || actionId === 'gain_charge') return '⚡'; return '💥';

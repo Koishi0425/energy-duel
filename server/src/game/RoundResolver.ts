@@ -204,22 +204,16 @@ export function buildResolutionSteps(actions: ReadonlyMap<string, SubmittedActio
     const speedDifference = actionSpeed(rightId, right, players?.get(rightId), players, actions) - actionSpeed(leftId, left, players?.get(leftId), players, actions);
     return speedDifference || movementPriority(right) - movementPriority(left) || leftId.localeCompare(rightId);
   });
-  const used = new Set<string>(); const steps: ResolutionStep[] = [];
-  for (const [playerId, action] of ordered) {
-    if (used.has(playerId)) continue;
-    const definition = requireAction(action.actionId); const actors = [resolutionActor(playerId, action)];
-    const primaryTarget = actors[0].targetIds[0]; let partnerId: string | undefined;
-    if (primaryTarget && !used.has(primaryTarget)) {
-      const reply = actions.get(primaryTarget);
-      if (reply && (actionTargets(reply).includes(playerId) || actionTargets(reply).length === 0)) partnerId = primaryTarget;
-    }
-    if (!partnerId && actors[0].targetIds.length === 0) partnerId = ordered.find(([id, candidate]) => id !== playerId && !used.has(id) && actionTargets(candidate).includes(playerId))?.[0];
-    if (!partnerId && actors[0].targetIds.length === 0) partnerId = ordered.find(([id, candidate]) => id !== playerId && !used.has(id) && requireAction(candidate.actionId).speedPriority === definition.speedPriority)?.[0];
-    if (partnerId) { actors.push(resolutionActor(partnerId, actions.get(partnerId)!)); used.add(partnerId); }
-    used.add(playerId);
-    steps.push({ sequence: steps.length, speedPriority: actionSpeed(playerId, action, players?.get(playerId), players, actions), actors, participantIds: Array.from(new Set(actors.flatMap((actor) => [actor.playerId, ...actor.targetIds]))), durationMs: 650 });
-  }
-  return steps;
+  return ordered.map(([playerId, action], sequence) => {
+    const actor = resolutionActor(playerId, action);
+    return {
+      sequence,
+      speedPriority: actionSpeed(playerId, action, players?.get(playerId), players, actions),
+      actors: [actor],
+      participantIds: Array.from(new Set([actor.playerId, ...actor.targetIds])),
+      durationMs: 800,
+    };
+  });
 }
 
 export function resolveRound(players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, boardObjects = new Map<string, CombatBoardObject>()): RoundResult {
@@ -320,6 +314,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     const speed = actionSpeed(right.id, actions.get(right.id)!, right, players, actions) - actionSpeed(left.id, actions.get(left.id)!, left, players, actions);
     return speed || movementPriority(actions.get(right.id)!) - movementPriority(actions.get(left.id)!) || left.id.localeCompare(right.id);
   });
+  const resolutionSteps = buildResolutionSteps(actions, players);
   const pendingRockfallRecoveries = aliveAtStart
     .filter((player) => actions.get(player.id)?.actionId === 'rockfall_hammer')
     .sort((left, right) => {
@@ -552,7 +547,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
   tickBoardObjects(boardObjects);
   for (const player of players.values()) roundDamageStates.delete(player);
   const learningTargets = aliveAtStart.flatMap((player) => Array.from(roundLearningTargets.get(player) ?? [], (targetPlayerId) => ({ learnerPlayerId: player.id, targetPlayerId })));
-  return { summary, eliminated: Array.from(eliminated), steps: buildResolutionSteps(actions, players), performance, learningTargets };
+  return { summary, eliminated: Array.from(eliminated), steps: resolutionSteps, performance, learningTargets };
 }
 
 function resolveGlobalCounter(effectIds: readonly EffectHandlerId[], targetName: string, counterName: string, counterEffect: EffectHandlerId, players: CombatPlayer[], actions: ReadonlyMap<string, SubmittedAction>, eliminated: Set<string>, summary: string[], fragile = new Set<string>()): void {
@@ -1515,7 +1510,7 @@ function redirectAttackTarget(attacker: CombatPlayer, targetId: string, players:
 }
 function formatLevel(value: number): string { if (Math.abs(value - 1 / 3) < 1e-6) return '1/3'; return Number.isInteger(value) ? String(value) : value.toFixed(1); }
 function healthStateName(player: CombatPlayer): string { if (!player.alive || player.currentHp <= 0) return '死亡状态'; if (player.maxHp > 1 && player.currentHp === 1) return '濒死状态'; return '健康状态'; }
-function resolutionActor(playerId: string, action: SubmittedAction) { const definition = requireAction(action.actionId); return { playerId, actionId: action.actionId, targetIds: actionTargets(action), poseId: definition.vfxId || undefined, transformCharacterId: action.transformCharacterId, power: action.power, targetGridIndex: action.targetGridIndex, targetBoardObjectId: action.targetBoardObjectId }; }
+function resolutionActor(playerId: string, action: SubmittedAction) { const definition = requireAction(action.actionId); return { playerId, actionId: action.actionId, targetIds: actionTargets(action), poseId: definition.vfxId || undefined, transformCharacterId: action.transformCharacterId, power: action.power, targetGridIndex: action.targetGridIndex, pathDirection: action.pathDirection, targetBoardObjectId: action.targetBoardObjectId }; }
 function describeSubmittedAction(player: CombatPlayer, action: SubmittedAction | undefined, players: ReadonlyMap<string, CombatPlayer>): string { if (!action) return `${player.nickname}：未提交`; const definition = requireAction(action.actionId); if (action.actionId === 'transform') return `${player.nickname}：变身为${characterById.get(action.transformCharacterId ?? '')?.name ?? action.transformCharacterId ?? '未知角色'}`; const targets = summarizeTargets(actionTargets(action), players); return `${player.nickname}：${definition.name}${action.power === undefined ? '' : `（n=${action.power}）`}${action.targetBoardObjectId ? ' → 托生莲座' : targets ? ` → ${targets}` : ''}`; }
 function summarizeTargets(targetIds: string[], players: ReadonlyMap<string, CombatPlayer>): string {
   const counts = new Map<string, number>();

@@ -411,7 +411,14 @@ export class EnergyDuelRoom extends Room {
       minPower: definition.deferredFlexibleCost?.minPower,
       maxPower: definition.deferredFlexibleCost ? Math.floor(definition.deferredFlexibleCost.resourceIds.reduce((sum, resourceId) => sum + (this.state.players.get(actorId)?.resources.get(resourceId)?.current ?? 0), 0)) : undefined,
       revealedActions: Array.from(this.actions.asReadonlyMap(), ([playerId, submitted]) => ({
-        playerId, actionId: submitted.actionId, power: submitted.power,
+        playerId,
+        actionId: submitted.actionId,
+        power: submitted.power,
+        targetIds: submitted.targetIds ?? (submitted.targetId ? [submitted.targetId] : []),
+        targetGridIndex: submitted.targetGridIndex,
+        pathDirection: submitted.pathDirection,
+        targetBoardObjectId: submitted.targetBoardObjectId,
+        transformCharacterId: submitted.transformCharacterId,
       })),
     });
   }

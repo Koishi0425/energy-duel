@@ -17,6 +17,7 @@ import {
   type GameRatingResultMessage,
   type LearningRequiredMessage,
   type PlayerProfile,
+  type RevealedAction,
   type ResolutionStep,
   type RoomEmoteId,
   type RoomEmoteMessage,
@@ -98,6 +99,7 @@ function RoomContent({ room, session, onLeave }: Props) {
   const [deferredRequest, setDeferredRequest] = useState<DeferredActionRequiredMessage>();
   const [learningRequest, setLearningRequest] = useState<LearningRequiredMessage>();
   const [submittedLabel, setSubmittedLabel] = useState<string>();
+  const [submittedPreviews, setSubmittedPreviews] = useState<Record<string, RevealedAction>>({});
   const [inspectedPlayer, setInspectedPlayer] = useState<SyncedPlayer>();
   const [inspectedBoardObjectIds, setInspectedBoardObjectIds] = useState<string[]>([]);
   const [profileViewer, setProfileViewer] = useState<SyncedPlayer>();
@@ -259,7 +261,7 @@ function RoomContent({ room, session, onLeave }: Props) {
     };
 
     async function playTimeline(payload: RoundResolutionMessage) {
-      setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined);
+      setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined); setSubmittedPreviews({});
       for (const step of payload.steps) {
         if (!mounted.current) return;
         setActiveStep(step);
@@ -339,6 +341,7 @@ function RoomContent({ room, session, onLeave }: Props) {
       setSelectedActionId(undefined); setSelectedTargetIds([]); setDeferredRequest(undefined);
     }
     setSubmittedLabel(undefined); setParameterAction(undefined); setFlexibleAction(undefined); setPendingSpend(undefined); setGridAction(undefined); setOptionalGridAction(undefined);
+    if (gameState.phase === 'choosing' || !['choosing', 'deferred'].includes(gameState.phase)) setSubmittedPreviews({});
     if (gameState.phase === 'choosing' && gameState.round === 1) setRatingResult(undefined);
   }, [gameState.phase, gameState.round]);
   useEffect(() => {
@@ -376,6 +379,21 @@ function RoomContent({ room, session, onLeave }: Props) {
       ? `已选择变身：${characterById.get(transformCharacterId)?.name ?? transformCharacterId}`
       : `已选择「${action.name}」${power === undefined ? '' : `（n=${power}）`}${targetNames.length ? ` → ${targetNames.join('、')}` : targetBoardObjectId ? ' → 托生莲座' : ''}`;
     setSubmittedLabel(label);
+    if (activeActor) {
+      setSubmittedPreviews((current) => ({
+        ...current,
+        [activeActor.playerId]: {
+          playerId: activeActor.playerId,
+          actionId: action.id,
+          power,
+          targetIds,
+          targetGridIndex,
+          pathDirection,
+          targetBoardObjectId,
+          transformCharacterId,
+        },
+      }));
+    }
     room.send('submit_action', {
       actorPlayerId: activeActor?.playerId,
       requestId: requestId(), actionId: action.id,
@@ -476,6 +494,15 @@ function RoomContent({ room, session, onLeave }: Props) {
     const spend = deferredRequest.flexibleResourceIds ? Object.fromEntries(Object.entries(deferredSpend).filter(([, amount]) => amount > 0)) : undefined;
     room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: selectedTargetIds, power: deferredRequest.flexibleResourceIds ? deferredPower : undefined, resourceSpend: spend });
     setSubmittedLabel(`后发目标已分配：${formatTargetAllocation(selectedTargetIds, players)}`);
+    setSubmittedPreviews((current) => ({
+      ...current,
+      [deferredRequest.actorPlayerId]: {
+        playerId: deferredRequest.actorPlayerId,
+        actionId: deferredRequest.actionId,
+        power: deferredRequest.flexibleResourceIds ? deferredPower : deferredRequest.power,
+        targetIds: selectedTargetIds,
+      },
+    }));
     setDeferredRequest(undefined); setSelectedTargetIds([]);
   };
 
@@ -569,6 +596,24 @@ function RoomContent({ room, session, onLeave }: Props) {
       : gridAction?.action.id === 'dream_path' ? '点击梦径上的任意地块选择落点'
       : gridAction ? '点击地图上绿色高亮的编号地块'
       : targeting ? (selectedAction?.target.mode === 'multiple_enemies' ? `选择目标 ${selectedTargetIds.length}/${selectedAction.target.maxTargets}` : targetableBoardObjectIds.length ? '点击高亮角色或托生莲座选择目标' : '点击高亮角色选择目标') : undefined;
+  const actionPreviews: RevealedAction[] = deferredRequest
+    ? deferredRequest.revealedActions.map((preview) => preview.playerId === deferredRequest.actorPlayerId
+      ? { ...preview, targetIds: selectedTargetIds }
+      : preview)
+    : Array.from(new Map<string, RevealedAction>([
+      ...Object.values(submittedPreviews),
+      ...(selectedAction && selectedTargetIds.length > 0 && !activeActor?.submitted
+        ? [{ playerId: activeActor?.playerId ?? '', actionId: selectedAction.id, targetIds: selectedTargetIds }]
+        : []),
+      ...(gridAction && activeActor
+        ? [{
+          playerId: activeActor.playerId,
+          actionId: gridAction.action.id,
+          targetIds: gridAction.targetIds,
+          pathDirection: gridAction.pathDirection,
+        }]
+        : []),
+    ].filter((preview) => preview.playerId).map((preview) => [preview.playerId, preview])).values());
 
   return <main className="game-shell">
     {contextHolder}
@@ -585,7 +630,7 @@ function RoomContent({ room, session, onLeave }: Props) {
 
     <section className="battlefield-region">
       <Suspense fallback={<div className="battle-load-overlay"><div><strong>正在加载绘图引擎</strong><div className="loading-track"><span style={{ width: '35%' }} /></div><small>战斗面板已就绪</small></div></div>}>
-        <GameCanvas players={players} phase={gameState.phase} boardObjects={boardObjects} emoteEvents={emoteEvents} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} targetableBoardObjectIds={targetableBoardObjectIds} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onBoardObjectSelect={chooseBoardObjectTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { window.clearTimeout(hoverDismissTimer.current); if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) hoverDismissTimer.current = window.setTimeout(() => setHovered(undefined), 120); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(objects) => { setHovered(undefined); setInspectedBoardObjectIds(objects.map((object) => object.objectId)); }} />
+        <GameCanvas players={players} phase={gameState.phase} boardObjects={boardObjects} emoteEvents={emoteEvents} targeting={targeting} targetablePlayerIds={validTargets.map((player) => player.playerId)} targetableBoardObjectIds={targetableBoardObjectIds} selectedTargetIds={selectedTargetIds} gridTargeting={Boolean(gridAction)} targetableGridIndices={gridDestinations} actionPreviews={actionPreviews} onGridSelect={chooseGridDestination} obscuredPlayerIds={darknessActive ? players.filter((player) => player.gridIndex !== activeActor?.gridIndex).map((player) => player.playerId) : []} resetViewKey={resetViewKey} resolutionStep={activeStep} onLoadProgress={(progress, label) => setBattleLoad({ progress, label })} onPlayerSelect={chooseTarget} onBoardObjectSelect={chooseBoardObjectTarget} onPlayerInspect={(player) => { if (!darknessActive || player.gridIndex === activeActor?.gridIndex) inspectPlayer(player); }} onPlayerHover={(player, point) => { window.clearTimeout(hoverDismissTimer.current); if (coarsePointer || !player || !point || (darknessActive && player.gridIndex !== activeActor?.gridIndex)) hoverDismissTimer.current = window.setTimeout(() => setHovered(undefined), 120); else setHovered({ player, x: point.x, y: point.y }); }} onBoardObjectInspect={(objects) => { setHovered(undefined); setInspectedBoardObjectIds(objects.map((object) => object.objectId)); }} />
       </Suspense>
       {battleLoad.progress < 100 && <div className="battle-load-overlay"><div><strong>{battleLoad.label}</strong><div className="loading-track"><span style={{ width: `${battleLoad.progress}%` }} /></div><small>{battleLoad.progress}%</small></div></div>}
       {targetHint && <div className="targeting-hint">{targetHint}</div>}
@@ -598,8 +643,8 @@ function RoomContent({ room, session, onLeave }: Props) {
       {gameState.roomMode === 'training' && gameState.phase === 'waiting' && <TrainingSetup actors={controlledActors} room={room} />}
       {gameState.phase === 'waiting' && <div className="ready-controls">{gameState.roomMode === 'standard' && <Button type={me?.ready ? 'default' : 'primary'} onClick={sendReady}>{me?.ready ? '取消准备' : '准备'}</Button>}{isHost ? <Button type="primary" onClick={() => room.send('start_game', { requestId: requestId() })} disabled={players.length < 2 || (gameState.roomMode === 'standard' && players.some((player) => !player.ready || !player.connected))}>{gameState.roomMode === 'training' ? '开始练习' : '开始游戏'}</Button> : <p className="muted compact-copy">等待房主开始</p>}</div>}
       {gameState.phase === 'choosing' && controlledActors.length > 1 && <div className="actor-switcher"><span>当前操控</span>{controlledActors.map((actor) => <Button key={actor.playerId} size="small" type={actor.playerId === activeActor?.playerId ? 'primary' : 'default'} disabled={!actor.alive} onClick={() => { setActiveActorId(actor.playerId); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }}>{actor.nickname}{actor.submitted ? ' ✓' : ''}</Button>)}</div>}
-      {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} resourceSponsor={canSponsorActiveActor ? me : undefined} selectedActionId={selectedActionId} submittedLabel={submittedLabel} roomMode={gameState.roomMode} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); }} />}
-      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}，完成后确认提交。</p><div>{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}</Tag>; })}</div>{deferredRequest.flexibleResourceIds && <div className="deferred-payment"><p>度神决 X：<InputNumber min={deferredRequest.minPower ?? 1} max={deferredRequest.maxPower ?? 1} precision={0} value={deferredPower} onChange={(value) => setDeferredPower(Math.trunc(value ?? 1))} />（已支付 {deferredSelected}/{deferredPower}）</p>{deferredRequest.flexibleResourceIds.map((resourceId) => { const current = activeActor?.resources[resourceId]?.current ?? 0; return <div className="resource-payment-row" key={resourceId}><span>{resourceById.get(resourceId)?.name ?? resourceId}（持有 {formatNumber(current)}）</span><InputNumber min={0} max={Math.floor(current)} precision={0} value={deferredSpend[resourceId] ?? 0} onChange={(value) => setDeferredSpend((existing) => ({ ...existing, [resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>; })}</div>}<p className="deferred-allocation-summary">当前分配：{selectedTargetIds.length ? formatTargetAllocation(selectedTargetIds, players) : '尚未选择'}（{selectedTargetIds.length}/{deferredRequest.allocationCount}）</p><div className="deferred-selection-actions"><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds((current) => current.slice(0, -1))}>撤销上一次</Button><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds([])}>清空重选</Button><Button type="primary" disabled={selectedTargetIds.length !== deferredRequest.allocationCount || Boolean(deferredRequest.flexibleResourceIds && deferredSelected !== deferredPower)} onClick={confirmDeferredTargets}>确认提交</Button>{deferredRequest.allowSkip && <Button disabled={selectedTargetIds.length > 0} onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div></div>}
+      {gameState.phase === 'choosing' && activeActor?.alive && <ActionPanel player={activeActor} resourceSponsor={canSponsorActiveActor ? me : undefined} selectedActionId={selectedActionId} submittedLabel={submittedLabel} roomMode={gameState.roomMode} onSelect={chooseAction} onTransform={chooseTransform} onCancel={() => { room.send('cancel_action', { requestId: requestId(), actorPlayerId: activeActor.playerId }); setSelectedActionId(undefined); setSelectedTargetIds([]); setGridAction(undefined); setPendingSpend(undefined); setSubmittedLabel(undefined); setSubmittedPreviews((current) => { const next = { ...current }; delete next[activeActor.playerId]; return next; }); }} />}
+      {gameState.phase === 'deferred' && deferredRequest && <div className="deferred-controls"><strong>{actionById.get(deferredRequest.actionId)?.name ?? deferredRequest.actionId} · 后发选择</strong><p>所有行动已经公开。点击战场角色选择 {deferredRequest.allocationCount} 次目标{deferredRequest.allocationCount > 1 ? '，可重复点击同一目标' : ''}，完成后确认提交。</p><div className="revealed-action-list">{deferredRequest.revealedActions.map((revealed) => { const player = players.find((candidate) => candidate.playerId === revealed.playerId); return <Tag key={revealed.playerId}>{player?.nickname ?? revealed.playerId}：{actionById.get(revealed.actionId)?.name ?? revealed.actionId}{revealed.power === undefined ? '' : ` n=${revealed.power}`}{describeRevealedSelection(revealed, players, boardObjects)}</Tag>; })}</div>{deferredRequest.flexibleResourceIds && <div className="deferred-payment"><p>度神决 X：<InputNumber min={deferredRequest.minPower ?? 1} max={deferredRequest.maxPower ?? 1} precision={0} value={deferredPower} onChange={(value) => setDeferredPower(Math.trunc(value ?? 1))} />（已支付 {deferredSelected}/{deferredPower}）</p>{deferredRequest.flexibleResourceIds.map((resourceId) => { const current = activeActor?.resources[resourceId]?.current ?? 0; return <div className="resource-payment-row" key={resourceId}><span>{resourceById.get(resourceId)?.name ?? resourceId}（持有 {formatNumber(current)}）</span><InputNumber min={0} max={Math.floor(current)} precision={0} value={deferredSpend[resourceId] ?? 0} onChange={(value) => setDeferredSpend((existing) => ({ ...existing, [resourceId]: Math.max(0, Math.trunc(value ?? 0)) }))} /></div>; })}</div>}<p className="deferred-allocation-summary">当前分配：{selectedTargetIds.length ? formatTargetAllocation(selectedTargetIds, players) : '尚未选择'}（{selectedTargetIds.length}/{deferredRequest.allocationCount}）</p><div className="deferred-selection-actions"><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds((current) => current.slice(0, -1))}>撤销上一次</Button><Button disabled={selectedTargetIds.length === 0} onClick={() => setSelectedTargetIds([])}>清空重选</Button><Button type="primary" disabled={selectedTargetIds.length !== deferredRequest.allocationCount || Boolean(deferredRequest.flexibleResourceIds && deferredSelected !== deferredPower)} onClick={confirmDeferredTargets}>确认提交</Button>{deferredRequest.allowSkip && <Button disabled={selectedTargetIds.length > 0} onClick={() => { room.send('submit_deferred_targets', { requestId: requestId(), actorPlayerId: deferredRequest.actorPlayerId, targetIds: [] }); setDeferredRequest(undefined); setSubmittedLabel('已保留鬼影冲刺至下一回合'); }}>本回合不冲刺</Button>}</div></div>}
       {gameState.phase === 'deferred' && !deferredRequest && <p className="resolving-notice">行动已经公开，等待后发玩家选择目标…</p>}
       {gameState.phase === 'learning' && <p className="resolving-notice">等待叶倾仙选择吞天学习，或放弃本次学习…</p>}
       {gameState.phase === 'resolving' && <p className="resolving-notice">正在播放本回合结算…</p>}
@@ -762,4 +807,21 @@ function formatTargetAllocation(targetIds: string[], players: SyncedPlayer[]): s
   const counts = new Map<string, number>();
   for (const targetId of targetIds) counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
   return Array.from(counts, ([targetId, count]) => `${players.find((player) => player.playerId === targetId)?.nickname ?? targetId}${count > 1 ? ` ×${count}` : ''}`).join('、');
+}
+
+function describeRevealedSelection(action: RevealedAction, players: SyncedPlayer[], boardObjects: SyncedBoardObject[]): string {
+  if (action.transformCharacterId) return ` → ${characterById.get(action.transformCharacterId)?.name ?? action.transformCharacterId}`;
+  if (action.targetIds.length > 0) {
+    const targets = formatTargetAllocation(action.targetIds, players);
+    const direction = action.pathDirection === 1 ? ' · 顺时针' : action.pathDirection === -1 ? ' · 逆时针' : '';
+    const landing = action.targetGridIndex === undefined ? '' : ` · 落点 ${action.targetGridIndex} 号`;
+    return ` → ${targets}${direction}${landing}`;
+  }
+  if (action.targetBoardObjectId) {
+    const object = boardObjects.find((candidate) => candidate.objectId === action.targetBoardObjectId);
+    return ` → ${object?.definitionId === 'lotus_seat' ? '托生莲座' : object?.definitionId ?? '棋盘对象'}`;
+  }
+  if (action.targetGridIndex !== undefined) return ` → ${action.targetGridIndex} 号地块`;
+  if (actionById.get(action.actionId)?.target.selectionTiming === 'deferred') return ' → 后发待选';
+  return '';
 }

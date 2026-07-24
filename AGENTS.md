@@ -250,6 +250,12 @@ Run commands from the repository root:
   Actions remain private on the server until every living player submits. A
   submitted player may send `cancel_action` and replace their choice before the
   final living player submits; the final submission resolves synchronously.
+  During deferred selection, revealed actions include their already-chosen
+  player, board-object, grid, direction, and landing selections. The client
+  renders those choices and the local player's submitted choice as board
+  trajectories. Resolution timeline steps remain one authoritative action per
+  step in the same speed, movement-priority, and player-ID order used by the
+  server resolver; do not visually merge actions from different steps.
   Player readiness, action submission, result confirmation, and connection
   state are synchronized and displayed consistently in the roster and on the
   board. Room emotes use a server-validated fixed ID set without a send

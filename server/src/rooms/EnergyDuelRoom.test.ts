@@ -14,8 +14,15 @@ describe('EnergyDuelRoom submitted targets', () => {
     const mastery = new BuffState(); mastery.instanceId = 'dummy:ao_mastery'; mastery.buffId = 'ao_mastery'; mastery.stacks = 2; mastery.sourcePlayerId = 'dummy';
     actor.buffs.set(mastery.instanceId, mastery); room.state.players.set(actor.playerId, actor);
     room.actions.submit(actor.playerId, { actionId: 'steal' });
+    room.actions.submit('other', { actionId: 'dream_path', targetId: 'dummy', targetGridIndex: 3, pathDirection: -1 });
     const send = vi.fn(); room.sendDeferredPrompt({ sessionId: 'host', send });
-    expect(send).toHaveBeenCalledWith('deferred_action_required', expect.objectContaining({ actorPlayerId: 'dummy', actionId: 'steal' }));
+    expect(send).toHaveBeenCalledWith('deferred_action_required', expect.objectContaining({
+      actorPlayerId: 'dummy',
+      actionId: 'steal',
+      revealedActions: expect.arrayContaining([
+        expect.objectContaining({ playerId: 'other', targetIds: ['dummy'], targetGridIndex: 3, pathDirection: -1 }),
+      ]),
+    }));
   });
 });
 

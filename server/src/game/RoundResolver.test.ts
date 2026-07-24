@@ -139,30 +139,29 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(() => validateAction(players.get('a')!, { actionId: 'defend', targetId: 'b' }, players)).toThrow(/不接受/);
   });
 
-  it('orders the client timeline by speed then player id and pairs mutual targets', () => {
+  it('orders the client timeline by speed then player id without merging authoritative action steps', () => {
     const steps = buildResolutionSteps(actions(
       ['b', { actionId: 'fist', targetId: 'a' }],
       ['a', { actionId: 'fist', targetId: 'b' }],
       ['c', { actionId: 'super_defend' }],
     ));
     expect(steps[0].actors[0].playerId).toBe('c');
-    expect(steps[1].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
+    expect(steps.slice(1).map((step) => step.actors[0].playerId)).toEqual(['a', 'b']);
   });
 
-  it('pairs a targetless action with the next action at the same speed', () => {
+  it('keeps targetless actions as their own timeline steps', () => {
     const steps = buildResolutionSteps(actions(
       ['a', { actionId: 'charge' }],
       ['b', { actionId: 'fist', targetId: 'c' }],
       ['c', { actionId: 'fist', targetId: 'b' }],
     ));
-    expect(steps[0].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
-    expect(steps[1].actors.map((actor) => actor.playerId)).toEqual(['c']);
+    expect(steps.map((step) => step.actors[0].playerId)).toEqual(['a', 'b', 'c']);
   });
 
-  it('groups a defense with its incoming attack even when their speeds differ', () => {
+  it('keeps defenses and incoming attacks at their own authoritative speeds', () => {
     const steps = buildResolutionSteps(actions(['a', { actionId: 'defend' }], ['b', { actionId: 'fist', targetId: 'a' }]));
-    expect(steps).toHaveLength(1);
-    expect(steps[0].actors.map((actor) => actor.playerId)).toEqual(['a', 'b']);
+    expect(steps).toHaveLength(2);
+    expect(steps.map((step) => step.actors[0].playerId)).toEqual(['a', 'b']);
   });
 
   it('limits attacks below level three to one health-state shift', () => {
