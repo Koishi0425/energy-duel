@@ -332,7 +332,10 @@ Run commands from the repository root:
   the legacy shared level. Effect clashes compare only effect level, and attached
   effects may succeed even when their damage does not. Damage clashes compare only
   damage level and may produce damage even when the attached effect fails. Defense does
-  not clash and instead subtracts from damage level. An action with `multiHit:
+  not clash and instead subtracts from damage level.
+  `attackActionIdsWithAttachedEffects` explicitly lists attacks whose effect-level
+  result controls a non-damage result; combat logs must not report attached-effect
+  success or failure for attacks absent from that list. An action with `multiHit:
   true` uses the global multi-hit resolver: repeated allocations against an
   attack-category action combine effect level only; allocations against other
   categories resolve separately; damage level never combines. Do not branch on

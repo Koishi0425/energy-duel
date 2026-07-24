@@ -4,7 +4,8 @@ import { canExecuteNapoleonStrategy, effectSpeedPriority, gameConfig, isCharacte
 
 describe('game configuration', () => {
   it('loads the checked-in configuration', () => {
-    expect(gameConfig.version).toBe(26);
+    expect(gameConfig.version).toBe(28);
+    expect(gameConfig.attackActionIdsWithAttachedEffects).toEqual(expect.arrayContaining(['nebula_shock', 'molten_fist', 'five_precepts']));
     expect(gameConfig.actions).toHaveLength(109);
     expect(gameConfig.actions.map((action) => action.category)).toContain('base');
     expect(gameConfig.characters.map((character) => character.id)).toEqual(['default_character', 'jiaosila', 'gonggang', 'regent', 'pikachu', 'li_chungang', 'ao', 'nightmare', 'mudrock', 'ye_qingxian', 'napoleon', 'star_god', 'ku', 'inner_guard', 'quilon', 'chimei', 'warrior']);
@@ -28,6 +29,8 @@ describe('game configuration', () => {
     expect(gameConfig.boardObjects.find((object) => object.id === 'dream_path')).toMatchObject({ kind: 'terrain', displayMode: 'marker' });
     expect(gameConfig.assets.every((asset) => asset.url.endsWith('.webp') && asset.previewUrl?.endsWith('.webp'))).toBe(true);
     expect(gameConfig.characters.slice(4, 9).every((character) => character.defaultAssetId !== 'portrait_default')).toBe(true);
+    expect(['ye_qingxian', 'chimei', 'ku'].map((characterId) => gameConfig.characters.find((character) => character.id === characterId)?.defaultAssetId))
+      .toEqual(['portrait_ye_qingxian', 'portrait_chimei', 'portrait_ku']);
   });
 
   it('keeps every base skill after transformation and only appends character skills', () => {

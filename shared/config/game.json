@@ -1,5 +1,21 @@
 {
-  "version": 26,
+  "version": 28,
+  "attackActionIdsWithAttachedEffects": [
+    "silent_fear",
+    "haunting_shadows",
+    "rule_the_world",
+    "nebula_shock",
+    "censure",
+    "see_through",
+    "shatter",
+    "nap_strategy_at",
+    "nap_strategy_ata",
+    "nap_strategy_tad",
+    "nap_strategy_tata",
+    "five_precepts",
+    "soul_reap",
+    "molten_fist"
+  ],
   "resources": [
     { "id": "energy", "name": "气", "shortName": "气", "color": "#f6c85f", "displayOrder": 10, "alwaysVisible": true },
     { "id": "charge", "name": "蓄力", "shortName": "蓄", "color": "#7bdff2", "displayOrder": 20, "alwaysVisible": true },
@@ -113,6 +129,9 @@
     { "id": "portrait_napoleon", "url": "/assets/characters/napoleon/base/portrait.ee3d260fa651.webp", "previewUrl": "/assets/characters/napoleon/base/preview.5786b87c9637.webp" },
     { "id": "portrait_inner_guard", "url": "/assets/characters/inner_guard/base/portrait.2b087fc85931.webp", "previewUrl": "/assets/characters/inner_guard/base/preview.aa332302c10b.webp" },
     { "id": "portrait_quilon", "url": "/assets/characters/quilon/base/portrait.96451e38ab2d.webp", "previewUrl": "/assets/characters/quilon/base/preview.7950016b6fca.webp" },
+    { "id": "portrait_ye_qingxian", "url": "/assets/characters/ye_qingxian/base/portrait.c8d14a2d8c9e.webp", "previewUrl": "/assets/characters/ye_qingxian/base/preview.d197aeb9b16a.webp" },
+    { "id": "portrait_chimei", "url": "/assets/characters/chimei/base/portrait.0813b7b1d067.webp", "previewUrl": "/assets/characters/chimei/base/preview.8adef7ffa48d.webp" },
+    { "id": "portrait_ku", "url": "/assets/characters/ku/base/portrait.eaee92cd117e.webp", "previewUrl": "/assets/characters/ku/base/preview.bee700ae57b3.webp" },
     { "id": "portrait_warrior", "url": "/assets/characters/warrior/base/portrait.195e2dd4b121.webp", "previewUrl": "/assets/characters/warrior/base/preview.db59f47046e1.webp" },
     { "id": "portrait_lotus_seat", "url": "/assets/characters/lotus_seat/base/portrait.8b769caea8b1.webp", "previewUrl": "/assets/characters/lotus_seat/base/preview.8bbf44f12fc0.webp" }
   ],
@@ -175,8 +194,8 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "ye_qingxian", "name": "叶倾仙", "defaultAssetId": "portrait_default", "passiveIds": ["sacrifice_path", "devour_heaven"],
-      "forms": [{ "id": "base", "name": "仙古形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "immortal_palm", "rule_the_world", "transform"] }],
+      "id": "ye_qingxian", "name": "叶倾仙", "defaultAssetId": "portrait_ye_qingxian", "passiveIds": ["sacrifice_path", "devour_heaven"],
+      "forms": [{ "id": "base", "name": "仙古形态", "defaultAssetId": "portrait_ye_qingxian", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "immortal_palm", "rule_the_world", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "napoleon", "star_god", "ku", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
@@ -190,8 +209,8 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "ku", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "ku", "name": "苦", "defaultAssetId": "portrait_default", "passiveIds": ["tempered_passive"],
-      "forms": [{ "id": "base", "name": "苦修形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "void_pierce", "censure", "redirect", "see_through", "shatter", "transform"] }],
+      "id": "ku", "name": "苦", "defaultAssetId": "portrait_ku", "passiveIds": ["tempered_passive"],
+      "forms": [{ "id": "base", "name": "苦修形态", "defaultAssetId": "portrait_ku", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "void_pierce", "censure", "redirect", "see_through", "shatter", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "inner_guard", "quilon", "chimei", "warrior"], "transformationCost": {}
     },
     {
@@ -205,8 +224,8 @@
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "chimei", "warrior"], "transformationCost": {}
     },
     {
-      "id": "chimei", "name": "魑魅", "defaultAssetId": "portrait_default", "passiveIds": ["hellwalker_passive", "resentment_passive"],
-      "forms": [{ "id": "base", "name": "幽冥形态", "defaultAssetId": "portrait_default", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "soul_reap", "soul_capture", "intimidate", "deify", "transform"] }],
+      "id": "chimei", "name": "魑魅", "defaultAssetId": "portrait_chimei", "passiveIds": ["hellwalker_passive", "resentment_passive"],
+      "forms": [{ "id": "base", "name": "幽冥形态", "defaultAssetId": "portrait_chimei", "poses": {}, "unlockedActions": ["charge", "gain_charge", "fist", "slash", "defend", "steal", "double_steal", "chop", "super_defend", "heal", "soul_reap", "soul_capture", "intimidate", "deify", "transform"] }],
       "transformations": ["jiaosila", "gonggang", "regent", "pikachu", "li_chungang", "ao", "nightmare", "mudrock", "ye_qingxian", "napoleon", "star_god", "ku", "inner_guard", "quilon", "warrior"], "transformationCost": {}
     },
     {

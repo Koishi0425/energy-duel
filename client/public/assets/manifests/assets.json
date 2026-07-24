@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-23T03:41:26.449Z",
+  "generatedAt": "2026-07-24T08:03:10.559Z",
   "assets": [
     {
       "id": "portrait_ao",
@@ -12,6 +12,17 @@
       "previewUrl": "/assets/characters/ao/base/preview.887d3b22e8f1.webp",
       "bytes": 20086,
       "previewBytes": 6264
+    },
+    {
+      "id": "portrait_chimei",
+      "type": "character-portrait",
+      "characterId": "chimei",
+      "formId": "base",
+      "name": "魑魅",
+      "url": "/assets/characters/chimei/base/portrait.0813b7b1d067.webp",
+      "previewUrl": "/assets/characters/chimei/base/preview.8adef7ffa48d.webp",
+      "bytes": 49332,
+      "previewBytes": 13996
     },
     {
       "id": "portrait_default",
@@ -56,6 +67,17 @@
       "previewUrl": "/assets/characters/jiaosila/base/preview.80db4c74a348.webp",
       "bytes": 23594,
       "previewBytes": 7054
+    },
+    {
+      "id": "portrait_ku",
+      "type": "character-portrait",
+      "characterId": "ku",
+      "formId": "base",
+      "name": "苦",
+      "url": "/assets/characters/ku/base/portrait.eaee92cd117e.webp",
+      "previewUrl": "/assets/characters/ku/base/preview.bee700ae57b3.webp",
+      "bytes": 39736,
+      "previewBytes": 11086
     },
     {
       "id": "portrait_li_chungang",
@@ -155,6 +177,17 @@
       "previewUrl": "/assets/characters/warrior/base/preview.db59f47046e1.webp",
       "bytes": 59308,
       "previewBytes": 15246
+    },
+    {
+      "id": "portrait_ye_qingxian",
+      "type": "character-portrait",
+      "characterId": "ye_qingxian",
+      "formId": "base",
+      "name": "叶倾仙",
+      "url": "/assets/characters/ye_qingxian/base/portrait.c8d14a2d8c9e.webp",
+      "previewUrl": "/assets/characters/ye_qingxian/base/preview.d197aeb9b16a.webp",
+      "bytes": 97212,
+      "previewBytes": 21090
     },
     {
       "id": "nameplate-13a9f90a2c",

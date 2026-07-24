@@ -742,13 +742,15 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
     : 0;
   if (hasOpposingEffect) {
     const opposingDamageLevel = adjustedSubmittedDamageLevel(target, attacker, targetAction!);
-    const effectResult = attackerLevel + 1e-6 >= opposingEffectLevel ? '附带效果成功' : '附带效果失败';
+    const effectResult = attack.hasAttachedEffect
+      ? `，${attackerLevel + 1e-6 >= opposingEffectLevel ? '附带效果成功' : '附带效果失败'}`
+      : '';
     if (damageLevel <= opposingDamageLevel + 1e-6) {
-      summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}，${effectResult}）伤害 ${formatLevel(damageLevel)} 未高于 ${target.nickname} 的${targetDefinition!.name}伤害 ${formatLevel(opposingDamageLevel)}，不产生伤害。`);
+      summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}${effectResult}）伤害 ${formatLevel(damageLevel)} 未高于 ${target.nickname} 的${targetDefinition!.name}伤害 ${formatLevel(opposingDamageLevel)}，不产生伤害。`);
       return 'none';
     }
     damageLevel -= opposingDamageLevel;
-    summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}，${effectResult}）以伤害差 ${formatLevel(damageLevel)} 进入防御结算。`);
+    summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}${effectResult}）以伤害差 ${formatLevel(damageLevel)} 进入防御结算。`);
   }
   const hpBefore = target.currentHp;
   if (damageLevel > 0 && target.buffs?.has('mud_barrier') && targetDefinition?.category !== 'defense') {

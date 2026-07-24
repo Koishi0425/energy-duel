@@ -268,7 +268,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(result.summary.join('\n')).not.toContain('合并 2 段效果等级');
   });
 
-  it.each([3, 4, 5])('keeps %i-hit Stardust effect success independent from losing per-hit damage', (stars) => {
+  it.each([3, 4, 5])('keeps %i-hit Stardust damage independent without reporting a nonexistent attached effect', (stars) => {
     const players = roster(['a', 0], ['b', 1]);
     const attacker = players.get('a')!;
     const target = players.get('b')!;
@@ -283,7 +283,8 @@ describe('RoundResolver JSON-driven actions', () => {
     ));
     expect(target.currentHp).toBe(2);
     expect(target.alive).toBe(true);
-    expect(result.summary.join('\n')).toContain('附带效果成功');
+    expect(result.summary.join('\n')).not.toContain('附带效果成功');
+    expect(result.summary.join('\n')).toContain('效果');
     expect(result.summary.join('\n')).toContain('伤害 1.5 未高于');
   });
 
@@ -1542,7 +1543,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(warrior.buffStacks?.armor).toBe(2);
   });
 
-  it('resolves effect and damage advantages independently in both directions', () => {
+  it('resolves damage advantages without reporting attached effects for pure-damage attacks', () => {
     const players = roster(['a', 0], ['b', 1]); const warrior = players.get('a')!; const target = players.get('b')!;
     warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
     warrior.buffs = new Set(['strength']); warrior.buffStacks = { strength: 3 };
@@ -1550,8 +1551,9 @@ describe('RoundResolver JSON-driven actions', () => {
     const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'slash', targetId: 'a' }]));
     expect(target.currentHp).toBe(2);
     expect(warrior.currentHp).toBe(0);
-    expect(result.summary.join('\n')).toContain('效果 2，附带效果成功');
-    expect(result.summary.join('\n')).toContain('效果 1.5，附带效果失败');
+    expect(result.summary.join('\n')).toContain('拳（效果 2）');
+    expect(result.summary.join('\n')).toContain('斩（效果 1.5）');
+    expect(result.summary.join('\n')).not.toContain('附带效果');
     expect(result.summary.join('\n')).toContain('伤害差 1');
   });
 

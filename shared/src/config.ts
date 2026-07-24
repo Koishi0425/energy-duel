@@ -117,6 +117,8 @@ export interface ActionDefinition {
   id: string;
   name: string;
   category: ActionCategory;
+  /** Derived from GameConfig.attackActionIdsWithAttachedEffects during validation. */
+  hasAttachedEffect?: boolean;
   description: string;
   cost: Record<string, number>;
   target: TargetDefinition;
@@ -181,6 +183,8 @@ export interface CharacterDefinition {
 
 export interface GameConfig {
   version: number;
+  /** Attack actions whose effect-level result controls an explicit non-damage result. */
+  attackActionIdsWithAttachedEffects: string[];
   resources: ResourceDefinition[];
   buffs: BuffDefinition[];
   passives: PassiveDefinition[];
@@ -197,7 +201,7 @@ const handlers = new Set<string>(EFFECT_HANDLERS);
 export function validateGameConfig(input: unknown): GameConfig {
   if (!input || typeof input !== 'object') throw new Error('Game config must be an object.');
   const config = input as Partial<GameConfig>;
-  if (!Number.isInteger(config.version) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.passives) || !Array.isArray(config.boardObjects) || !Array.isArray(config.assets)
+  if (!Number.isInteger(config.version) || !Array.isArray(config.attackActionIdsWithAttachedEffects) || !Array.isArray(config.resources) || !Array.isArray(config.buffs) || !Array.isArray(config.passives) || !Array.isArray(config.boardObjects) || !Array.isArray(config.assets)
     || !Array.isArray(config.characters) || !Array.isArray(config.actions)) {
     throw new Error('Game config is missing required collections or version.');
   }
@@ -214,6 +218,11 @@ export function validateGameConfig(input: unknown): GameConfig {
   const assetIds = new Set(config.assets.map((item) => item.id));
   const actionIds = new Set(config.actions.map((item) => item.id));
   const passiveIds = new Set(config.passives.map((item) => item.id));
+  if (new Set(config.attackActionIdsWithAttachedEffects).size !== config.attackActionIdsWithAttachedEffects.length
+    || config.attackActionIdsWithAttachedEffects.some((id) => !actionIds.has(id)
+      || config.actions!.find((action) => action.id === id)?.category !== 'attack')) {
+    throw new Error('Attached-effect attack action ids are invalid.');
+  }
   for (const object of config.boardObjects) {
     if (!['terrain', 'summon'].includes(object.kind) || !['marker', 'stacks', 'health'].includes(object.displayMode) || typeof object.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(object.color)) throw new Error(`Board object ${object.id} is invalid.`);
     if (object.defaultAssetId !== undefined && !assetIds.has(object.defaultAssetId)) throw new Error(`Board object ${object.id} references a missing asset.`);
@@ -233,6 +242,7 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (buff.grantedActionIds?.some((id) => !actionIds.has(id))) throw new Error(`Buff ${buff.id} grants a missing action.`);
   }
   for (const action of config.actions) {
+    action.hasAttachedEffect = config.attackActionIdsWithAttachedEffects.includes(action.id);
     if (!categories.has(action.category)) throw new Error(`Action ${action.id} has an invalid category.`);
     if (action.damageAttribute && !['physical', 'magic'].includes(action.damageAttribute)) throw new Error(`Action ${action.id} has an invalid damage attribute.`);
     if (action.damageType && !['normal', 'piercing', 'true', 'generic', 'blunt', 'slash', 'magic'].includes(action.damageType)) throw new Error(`Action ${action.id} has an invalid damage type.`);
