@@ -1,6 +1,6 @@
 import { MapSchema } from '@colyseus/schema';
 import { describe, expect, it, vi } from 'vitest';
-import { BuffState, EnergyDuelRoom, PlayerState, normalizeInitialTargetIds } from './EnergyDuelRoom.js';
+import { BoardObjectState, BuffState, EnergyDuelRoom, PlayerState, normalizeInitialTargetIds } from './EnergyDuelRoom.js';
 
 describe('EnergyDuelRoom submitted targets', () => {
   it('keeps an empty initial target list pending for deferred actions', () => {
@@ -31,6 +31,80 @@ describe('EnergyDuelRoom host reconnection', () => {
     expect(host.connected).toBe(false);
     expect(room.emitRoomNotice).toHaveBeenCalledWith('disconnect', host);
     expect(room.allowReconnection).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'host' }), 30);
+  });
+});
+
+describe('EnergyDuelRoom departures during a game', () => {
+  it.each(['choosing', 'deferred', 'resolving', 'learning'] as const)(
+    'keeps the %s game and board unchanged when an eliminated non-host leaves',
+    (phase) => {
+      const room = new EnergyDuelRoom() as any;
+      const host = new PlayerState(); host.playerId = 'host'; host.nickname = '房主'; host.gridIndex = 0; host.alive = true;
+      const eliminated = new PlayerState(); eliminated.playerId = 'eliminated'; eliminated.nickname = '观战者'; eliminated.gridIndex = 2; eliminated.alive = false;
+      const survivor = new PlayerState(); survivor.playerId = 'survivor'; survivor.nickname = '存活者'; survivor.gridIndex = 4; survivor.alive = true;
+      const terrain = new BoardObjectState(); terrain.objectId = 'terrain:stable'; terrain.definitionId = 'dominion'; terrain.gridIndex = 3;
+      room.state.hostPlayerId = host.playerId;
+      room.state.phase = phase;
+      room.state.lastResult = '本局继续。';
+      room.state.players.set(host.playerId, host);
+      room.state.players.set(eliminated.playerId, eliminated);
+      room.state.players.set(survivor.playerId, survivor);
+      room.state.boardObjects.set(terrain.objectId, terrain);
+      room.actions.submit(host.playerId, { actionId: 'charge' });
+      room.emitRoomNotice = vi.fn();
+
+      room.onLeave({ sessionId: eliminated.playerId });
+
+      expect(room.state.phase).toBe(phase);
+      expect(room.state.lastResult).toBe('本局继续。');
+      expect(Array.from(room.state.players.values(), (player: PlayerState) => [player.playerId, player.gridIndex])).toEqual([
+        ['host', 0],
+        ['eliminated', 2],
+        ['survivor', 4],
+      ]);
+      expect(room.state.boardObjects.get(terrain.objectId)).toBe(terrain);
+      expect(room.actions.has(host.playerId)).toBe(true);
+      expect(eliminated.connected).toBe(false);
+      expect(room.departedEliminatedPlayerIds.has(eliminated.playerId)).toBe(true);
+    },
+  );
+
+  it('retains the existing game-ending behavior when a living non-host leaves', () => {
+    const room = new EnergyDuelRoom() as any;
+    const host = new PlayerState(); host.playerId = 'host'; host.alive = true;
+    const guest = new PlayerState(); guest.playerId = 'guest'; guest.nickname = '离场者'; guest.alive = true;
+    room.state.hostPlayerId = host.playerId;
+    room.state.phase = 'choosing';
+    room.state.players.set(host.playerId, host);
+    room.state.players.set(guest.playerId, guest);
+    room.actions.submit(host.playerId, { actionId: 'charge' });
+    room.emitRoomNotice = vi.fn();
+
+    room.onLeave({ sessionId: guest.playerId });
+
+    expect(room.state.players.has(guest.playerId)).toBe(false);
+    expect(room.state.phase).toBe('finished');
+    expect(room.state.lastResult).toBe('离场者 已退出，游戏结束。');
+    expect(room.actions.has(host.playerId)).toBe(false);
+  });
+
+  it('does not wait for a departed spectator to confirm results and removes the snapshot on reset', () => {
+    const room = new EnergyDuelRoom() as any;
+    const host = new PlayerState(); host.playerId = 'host'; host.alive = true;
+    const eliminated = new PlayerState(); eliminated.playerId = 'eliminated'; eliminated.alive = false;
+    room.state.phase = 'finished';
+    room.state.players.set(host.playerId, host);
+    room.state.players.set(eliminated.playerId, eliminated);
+    room.departedEliminatedPlayerIds.add(eliminated.playerId);
+    room.sendSuccess = vi.fn();
+    room.unlock = vi.fn().mockResolvedValue(undefined);
+
+    room.acknowledgeResult({ sessionId: host.playerId });
+
+    expect(room.state.phase).toBe('waiting');
+    expect(room.state.players.has(eliminated.playerId)).toBe(false);
+    expect(room.state.players.has(host.playerId)).toBe(true);
+    expect(room.departedEliminatedPlayerIds.size).toBe(0);
   });
 });
 

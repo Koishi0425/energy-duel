@@ -289,8 +289,11 @@ Run commands from the repository root:
   seconds in every phase so a browser refresh can reconnect safely. Non-host
   reconnect seats remain limited to active matches; lobby and result-screen
   disconnects are immediate departures. A reconnect timeout becomes a permanent
-  departure. A non-host departure during play ends the current game and leaves
-  remaining clients on the result screen.
+  departure. A living non-host departure during play ends the current game and
+  leaves remaining clients on the result screen. An already-eliminated non-host
+  may leave without ending the game; retain that player's synchronized combat
+  snapshot until the game returns to waiting so the circular board size, player
+  grid indices, and board objects do not change mid-game.
 - Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
   attack target sets always exclude the attacker; intentional self-damage uses
   a dedicated effect instead of targeting the actor as an attack. Effect and

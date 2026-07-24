@@ -147,6 +147,7 @@ export class EnergyDuelRoom extends Room {
   private readonly gamePerformance = new Map<string, GamePerformance>();
   private currentGameId = '';
   private readonly pendingLearning = new Map<string, PendingLearning[]>();
+  private readonly departedEliminatedPlayerIds = new Set<string>();
 
   static async onAuth(token: string | undefined): Promise<SessionIdentity> {
     const identity = sessionService.validateToken(token);
@@ -256,18 +257,27 @@ export class EnergyDuelRoom extends Room {
       lobbyFeed.publish();
       return;
     }
+    const activeMatch = this.state.phase === 'choosing' || this.state.phase === 'deferred'
+      || this.state.phase === 'resolving' || this.state.phase === 'learning';
+    if (activeMatch && !leavingPlayer.alive) {
+      leavingPlayer.connected = false;
+      this.departedEliminatedPlayerIds.add(leavingPlayer.playerId);
+      this.emitRoomNotice('leave', leavingPlayer);
+      lobbyFeed.publish();
+      return;
+    }
     this.actions.cancel(client.sessionId);
     this.storedBuffs.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     assignGridIndices(this.state.players.values());
     this.emitRoomNotice('leave', leavingPlayer);
     lobbyFeed.publish();
-    if (this.state.phase === 'choosing' || this.state.phase === 'deferred' || this.state.phase === 'resolving' || this.state.phase === 'learning') {
+    if (activeMatch) {
       this.actions.clear();
       this.state.phase = 'finished';
       this.state.lastResult = `${leavingPlayer.nickname} 已退出，游戏结束。`;
       for (const player of this.state.players.values()) player.submitted = false;
-    } else if (this.state.phase === 'finished' && Array.from(this.state.players.values()).every((player) => player.resultConfirmed)) {
+    } else if (this.state.phase === 'finished' && this.allRemainingPlayersConfirmed()) {
       this.resetToWaiting();
     }
   }
@@ -629,12 +639,18 @@ export class EnergyDuelRoom extends Room {
     player.resultConfirmed = true;
     if (this.state.roomMode === 'training') for (const actor of this.state.players.values()) if (actor.controllerPlayerId === client.sessionId) actor.resultConfirmed = true;
     this.sendSuccess(client, requestId, 'acknowledge_result', '已确认结算');
-    if (Array.from(this.state.players.values()).every((candidate) => candidate.resultConfirmed)) this.resetToWaiting();
+    if (this.allRemainingPlayersConfirmed()) this.resetToWaiting();
   }
 
   private resetToWaiting(): void {
     this.actions.clear();
     this.pendingLearning.clear();
+    for (const playerId of this.departedEliminatedPlayerIds) {
+      this.state.players.delete(playerId);
+      this.storedBuffs.delete(playerId);
+      this.gamePerformance.delete(playerId);
+    }
+    this.departedEliminatedPlayerIds.clear();
     void this.unlock().then(() => lobbyFeed.publish(), () => undefined);
     this.state.phase = 'waiting';
     this.state.round = 0;
@@ -659,6 +675,11 @@ export class EnergyDuelRoom extends Room {
       this.storedBuffs.set(player.playerId, new Map());
       if (this.state.roomMode === 'standard') for (const resource of player.resources.values()) resource.current = 0;
     }
+  }
+
+  private allRemainingPlayersConfirmed(): boolean {
+    return Array.from(this.state.players.values()).every((player) =>
+      this.departedEliminatedPlayerIds.has(player.playerId) || player.resultConfirmed);
   }
 
   private authorizedActor(client: Client, requestedActorId?: string): PlayerState | undefined {
