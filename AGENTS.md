@@ -227,7 +227,7 @@ Run commands from the repository root:
   damages every other player on that inclusive path, and lets Nightmare move to any
   path cell, including its origin or an occupied cell. Each covered cell is a timed
   three-round terrain object; reapplication refreshes it, and every Nightmare standing
-  on any Dream Path gains 0.5 attack skill and damage level.
+  on any Dream Path gains 0.5 attack effect and damage level.
 - Room state synchronizes asset IDs only. Original imported art belongs under
   `art-source/runtime-imports/` and is excluded from the Docker context; only
   optimized, content-hashed WebP files and their manifest belong under
@@ -293,18 +293,21 @@ Run commands from the repository root:
   remaining clients on the result screen.
 - Base combat follows `docs/基础规则手册.md`: speed orders authoritative effects and the client timeline,
   attack target sets always exclude the attacker; intentional self-damage uses
-  a dedicated effect instead of targeting the actor as an attack. Damage
-  compares the incoming attack level with the target's selected
-  action level only when that action applies to the attacker and its effective
+  a dedicated effect instead of targeting the actor as an attack. Effect and
+  damage results are independent: effect level alone determines attached effects,
+  while damage level alone determines the damage difference. The target's selected
+  action opposes both only when that action applies to the attacker and its effective
   attack speed is at least the incoming attack effect's speed. Equal-damage attacks
   ignore this speed gate and clash normally. A slower, differently damaging attack
   cannot oppose a faster attack, but still resolves later if its actor can act. Active
   defense applies only when its speed is at least the incoming attack speed; slower
   defense and movement are bypassed at the attack's original damage level. Defense and
   targetless actions apply generally; targeted/spatial actions apply only when
-  the attacker is one of their actual targets. A difference below 0.5 cancels,
-  0.5 to below 1 shifts health left once, and 1 or more kills directly; attacks
-  below level 3 can shift at most once. All final effects remain server authoritative.
+  the attacker is one of their actual targets. An effect difference below 0.5
+  cancels only the attached effect; it does not cancel independently positive damage.
+  Effective damage below 0.5 does not shift health. Without an original damage
+  level of at least 3 and remaining damage of at least 1, all attacks received in
+  one round can shift health left at most once. All final effects remain server authoritative.
   Base characters have no near-death state; transformed
   characters have healthy/near-death/dead states and gain one energy on entering
   near-death. Legacy wave/hangup definitions remain configuration-only adapters
@@ -315,20 +318,22 @@ Run commands from the repository root:
   only for that use. Super Defense and Dark Shelter do not use this rule.
   Defend, Axe Defend, and Collect Light are persistent breakable defenses;
   Particle Wall, Iridescence, and Forge Wall are recreated defenses.
-  Actions have separate skill and damage levels; when unspecified both inherit
-  the legacy shared level. Skill clashes compare only skill level. Defense does
+  Actions have separate effect and damage levels; when unspecified both inherit
+  the legacy shared level. Effect clashes compare only effect level, and attached
+  effects may succeed even when their damage does not. Damage clashes compare only
+  damage level and may produce damage even when the attached effect fails. Defense does
   not clash and instead subtracts from damage level. An action with `multiHit:
   true` uses the global multi-hit resolver: repeated allocations against an
-  attack-category action combine skill level only; allocations against other
+  attack-category action combine effect level only; allocations against other
   categories resolve separately; damage level never combines. Do not branch on
   a character ID or action ID to implement these rules. Stardust only supplies
   its per-hit values and target allocations. A player resolves health from only
   the highest effective damage level received during the round, across repeated
   hits and multiple sources.
   Warrior gains one character-scoped Strength and one permanent Shred hit for
-  every health state shifted left. Strength increases attack skill level only.
-  Armor is an unbounded character-scoped consumable defense: after block resolves,
-  it absorbs equal non-true, non-piercing remaining damage before barriers and is
+  every health state shifted left. Strength increases attack effect level only.
+  Armor is an unbounded character-scoped consumable defense: after barrier, Star Body,
+  and block resolve, it absorbs equal non-true, non-piercing remaining damage and is
   cleared on death. Vulnerability adds a fixed 0.5 damage to ordinary attacks,
   while Bully explicitly scales by its stacks; those stacks decay once per round.
   Cooldown progress is action-configured through `cooldownReduction`; do not

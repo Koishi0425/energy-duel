@@ -81,9 +81,9 @@ export interface TargetDefinition {
 export interface VariableActionDefinition {
   resourceId: string;
   costPerPower: number;
-  /** Shared per-power level used when skill and damage levels are not split. */
+  /** Shared per-power level used when effect and damage levels are not split. */
   levelPerPower: number;
-  skillLevelPerPower?: number;
+  effectLevelPerPower?: number;
   damageLevelPerPower?: number;
   minPower: number;
   maxPower?: number;
@@ -92,7 +92,7 @@ export interface VariableActionDefinition {
 export interface DeferredFlexibleCostDefinition {
   resourceIds: string[];
   minPower: number;
-  skillLevelOffset: number;
+  effectLevelOffset: number;
 }
 
 export interface RepeatAttackDefinition {
@@ -121,9 +121,9 @@ export interface ActionDefinition {
   cost: Record<string, number>;
   target: TargetDefinition;
   speedPriority: number;
-  /** Shared level used when skillLevel/damageLevel are omitted. */
+  /** Shared level used when effectLevel/damageLevel are omitted. */
   level: number;
-  skillLevel?: number;
+  effectLevel?: number;
   damageLevel?: number;
   effects: EffectDefinition[];
   vfxId: string;
@@ -239,15 +239,15 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (action.movement !== undefined && typeof action.movement !== 'boolean') throw new Error(`Action ${action.id} has an invalid movement flag.`);
     if (action.locksTarget !== undefined && typeof action.locksTarget !== 'boolean') throw new Error(`Action ${action.id} has an invalid target lock flag.`);
     if (!Number.isFinite(action.level) || action.level < 0
-      || (action.skillLevel !== undefined && (!Number.isFinite(action.skillLevel) || action.skillLevel < 0))
+      || (action.effectLevel !== undefined && (!Number.isFinite(action.effectLevel) || action.effectLevel < 0))
       || (action.damageLevel !== undefined && (!Number.isFinite(action.damageLevel) || action.damageLevel < 0))) {
-      throw new Error(`Action ${action.id} has invalid skill or damage levels.`);
+      throw new Error(`Action ${action.id} has invalid effect or damage levels.`);
     }
     if (action.anyResourceCost !== undefined && (!Number.isInteger(action.anyResourceCost) || action.anyResourceCost < 1)) throw new Error(`Action ${action.id} has an invalid flexible cost.`);
     if (action.deferredFlexibleCost && (action.target.selectionTiming !== 'deferred'
       || action.target.mode !== 'single_enemy'
       || !Number.isInteger(action.deferredFlexibleCost.minPower) || action.deferredFlexibleCost.minPower < 1
-      || !Number.isFinite(action.deferredFlexibleCost.skillLevelOffset)
+      || !Number.isFinite(action.deferredFlexibleCost.effectLevelOffset)
       || action.deferredFlexibleCost.resourceIds.length === 0
       || action.deferredFlexibleCost.resourceIds.some((resourceId) => !resourceIds.has(resourceId)))) {
       throw new Error(`Action ${action.id} has an invalid deferred flexible cost.`);
@@ -318,7 +318,7 @@ export function validateGameConfig(input: unknown): GameConfig {
     if (action.variable && (!resourceIds.has(action.variable.resourceId)
       || !Number.isFinite(action.variable.costPerPower) || action.variable.costPerPower <= 0
       || !Number.isFinite(action.variable.levelPerPower) || action.variable.levelPerPower < 0
-      || (action.variable.skillLevelPerPower !== undefined && (!Number.isFinite(action.variable.skillLevelPerPower) || action.variable.skillLevelPerPower < 0))
+      || (action.variable.effectLevelPerPower !== undefined && (!Number.isFinite(action.variable.effectLevelPerPower) || action.variable.effectLevelPerPower < 0))
       || (action.variable.damageLevelPerPower !== undefined && (!Number.isFinite(action.variable.damageLevelPerPower) || action.variable.damageLevelPerPower < 0))
       || !Number.isInteger(action.variable.minPower) || action.variable.minPower < 1
       || (action.variable.maxPower !== undefined && (!Number.isInteger(action.variable.maxPower) || action.variable.maxPower < action.variable.minPower)))) {

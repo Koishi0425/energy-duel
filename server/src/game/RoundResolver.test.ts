@@ -219,17 +219,18 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.currentHp).toBe(2);
   });
 
-  it('combines Stardust skill levels against an attack but caps damage at one hit', () => {
+  it('combines Stardust effect levels, resolves every hit, and caps sub-three health loss per round', () => {
     const players = roster(['a', 0], ['b', 1]);
     players.get('a')!.resources.stars = 4;
     const target = players.get('b')!;
     target.currentHp = target.maxHp = 2;
-    resolveRound(players, actions(
+    const result = resolveRound(players, actions(
       ['a', { actionId: 'stardust', power: 4, targetIds: ['b', 'b', 'b', 'b'] }],
       ['b', { actionId: 'wave', targetId: 'a' }],
     ));
     expect(target.alive).toBe(true);
     expect(target.currentHp).toBe(1);
+    expect(result.summary.filter((line) => line.includes('结算第'))).toHaveLength(4);
   });
 
   it('resolves multi-hit behavior from configuration instead of the effect id', () => {
@@ -249,13 +250,13 @@ describe('RoundResolver JSON-driven actions', () => {
       ));
       expect(target.currentHp).toBe(1);
       expect(result.summary.join('\n')).toContain('测试多段攻击');
-      expect(result.summary.join('\n')).toContain('合并 4 段技能等级');
+      expect(result.summary.join('\n')).toContain('合并 4 段效果等级');
     } finally {
       actionById.delete(genericMultiHit.id);
     }
   });
 
-  it('does not combine multi-hit skill levels when the target attack is unrelated', () => {
+  it('does not combine multi-hit effect levels when the target attack is unrelated', () => {
     const players = roster(['a', 0], ['b', 1], ['c', 0]);
     players.get('a')!.resources.stars = 2;
     const target = players.get('b')!;
@@ -265,14 +266,10 @@ describe('RoundResolver JSON-driven actions', () => {
       ['b', { actionId: 'wave', targetId: 'c' }],
       ['c', { actionId: 'charge' }],
     ));
-    expect(result.summary.join('\n')).not.toContain('合并 2 段技能等级');
+    expect(result.summary.join('\n')).not.toContain('合并 2 段效果等级');
   });
 
-  it.each([
-    [3, 0.5],
-    [4, 1.5],
-    [5, 1.5],
-  ])('uses %i Stardust hits to beat skill level four but receives at most 1.5 damage', (stars, expectedDamage) => {
+  it.each([3, 4, 5])('keeps %i-hit Stardust effect success independent from losing per-hit damage', (stars) => {
     const players = roster(['a', 0], ['b', 1]);
     const attacker = players.get('a')!;
     const target = players.get('b')!;
@@ -285,9 +282,24 @@ describe('RoundResolver JSON-driven actions', () => {
       ['a', { actionId: 'stardust', power: stars, targetIds: Array(stars).fill('b') }],
       ['b', { actionId: 'wave', targetId: 'a' }],
     ));
-    expect(target.currentHp).toBe(expectedDamage >= 0.5 ? 1 : 2);
+    expect(target.currentHp).toBe(2);
     expect(target.alive).toBe(true);
-    expect(result.summary.join('\n')).toContain(`有效伤害 ${expectedDamage}`);
+    expect(result.summary.join('\n')).toContain('附带效果成功');
+    expect(result.summary.join('\n')).toContain('伤害 1.5 未高于');
+  });
+
+  it('resolves every retained multi-hit segment against updated armor', () => {
+    const players = roster(['a', 0], ['b', 1]);
+    players.get('a')!.resources.stars = 3;
+    const target = players.get('b')!;
+    target.currentHp = target.maxHp = 2;
+    target.buffs = new Set(['armor']); target.buffStacks = { armor: 2 };
+    const result = resolveRound(players, actions(
+      ['a', { actionId: 'stardust', power: 3, targetIds: ['b', 'b', 'b'] }],
+      ['b', { actionId: 'wave', targetId: 'a' }],
+    ));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffStacks?.armor).toBe(0.5);
   });
 
   it('takes only the highest effective damage from repeated sources in one round', () => {
@@ -334,7 +346,7 @@ describe('RoundResolver JSON-driven actions', () => {
     players.get('b')!.currentHp = 2;
     players.get('b')!.maxHp = 2;
     const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
-    expect(result.summary.join('\n')).toContain('技能 0.5 / 伤害 0.5');
+    expect(result.summary.join('\n')).toContain('效果 0.5 / 伤害 0.5');
     expect(result.summary.join('\n')).toContain('Glmg 进入濒死状态');
   });
 
@@ -858,6 +870,17 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.buffs?.has('mud_barrier')).toBe(false);
   });
 
+  it('consumes an eligible barrier before Star Body or other numeric defenses', () => {
+    const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
+    target.characterId = 'mudrock'; target.currentHp = target.maxHp = 2;
+    target.buffs = new Set(['mud_barrier', 'star_body', 'armor']);
+    target.buffStacks = { mud_barrier: 1, star_body: 2, armor: 2 };
+    resolveRound(players, actions(['a', { actionId: 'wave', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.buffs?.has('mud_barrier')).toBe(false);
+    expect(target.buffStacks?.star_body).toBe(2);
+    expect(target.buffStacks?.armor).toBe(2);
+  });
+
   it('lets ordinary block reduce true damage', () => {
     const players = roster(['a', 0], ['b', 0]); const attacker = players.get('a')!; const target = players.get('b')!;
     attacker.characterId = 'ku'; attacker.resources.charge = 2;
@@ -929,11 +952,11 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(players.get('d')!.alive).toBe(true);
     expect(players.get('c')!.currentHp).toBe(2);
     expect(players.get('d')!.currentHp).toBe(2);
-    expect(players.get('c')!.buffs?.has('fear') ?? false).toBe(false);
+    expect(players.get('c')!.buffs?.has('fear')).toBe(true);
     expect(players.get('d')!.buffs?.has('fear')).toBe(true);
   });
 
-  it('applies Star Body after skill clash rather than before it', () => {
+  it('applies Star Body after damage opposition rather than before it', () => {
     const players = roster(['a', 0], ['b', 0]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.currentHp = target.maxHp = 2;
     target.characterId = 'star_god'; target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 1 };
@@ -1075,7 +1098,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(Array.from(boardObjects.values()).map((object) => [object.gridIndex, object.stacks])).toEqual([[0, 1], [1, 1], [3, 1]]);
   });
 
-  it('makes a level-3 damage source remove two Inner Guard devices after a skill clash', () => {
+  it('makes an original level-3 source remove two Inner Guard devices when at least 1 damage remains', () => {
     const players = roster(['a', 2], ['b', 1]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3;
     resolveRound(players, actions(
@@ -1084,6 +1107,19 @@ describe('RoundResolver JSON-driven actions', () => {
     ));
     expect(target.currentHp).toBe(1);
     expect(target.buffs?.has('unbroken')).toBe(true);
+  });
+
+  it('makes an original level-3 source remove only one Inner Guard device when 0.5 damage remains', () => {
+    const players = roster(['a', 2], ['b', 0]); const target = players.get('b')!;
+    players.get('a')!.resources.charge = 1;
+    target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3;
+    target.buffs = new Set(['star_body']); target.buffStacks = { star_body: 0.5 };
+    resolveRound(players, actions(
+      ['a', { actionId: 'atomic_breath', targetId: 'b' }],
+      ['b', { actionId: 'defend' }],
+    ));
+    expect(target.currentHp).toBe(2);
+    expect(target.buffs?.has('unbroken')).toBe(false);
   });
 
   it('lets fragile Inner Guard trigger the one-device lock instead of dying', () => {
@@ -1105,7 +1141,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(Array.from(boardObjects.values()).map((object) => object.gridIndex)).toEqual([0, 1, 3]);
   });
 
-  it('makes Dissipation skip skill clashes and attribute its Dominion source to the target cell', () => {
+  it('makes Dissipation skip effect and damage opposition and attribute its Dominion source to the target cell', () => {
     const players = roster(['a', 0], ['b', 2]); const target = players.get('b')!;
     players.get('a')!.resources.charge = 1; players.get('a')!.characterId = 'inner_guard'; players.get('a')!.gridIndex = 0;
     target.characterId = 'inner_guard'; target.currentHp = target.maxHp = 3; target.gridIndex = 2; target.resources.charge = 1;
@@ -1137,8 +1173,8 @@ describe('RoundResolver JSON-driven actions', () => {
     target.characterId = 'quilon'; target.currentHp = target.maxHp = 2; target.gridIndex = 2;
     const targetDominion = dominion('a', 2); const boardObjects = new Map([[targetDominion.objectId, targetDominion]]);
     const result = resolveRound(players, actions(['a', { actionId: 'collapsing_fear' }], ['b', { actionId: 'charge' }]), boardObjects);
-    expect(result.summary.filter((line) => line.includes('坍缩恐惧（技能') && line.includes('对 B'))).toHaveLength(1);
-    expect(result.summary.some((line) => line.includes('技能 4 / 伤害 4'))).toBe(true);
+    expect(result.summary.filter((line) => line.includes('坍缩恐惧（效果') && line.includes('对 B'))).toHaveLength(1);
+    expect(result.summary.some((line) => line.includes('效果 4 / 伤害 4'))).toBe(true);
     expect(target.alive).toBe(true);
     expect(target.currentHp).toBe(2);
     expect(target.buffs?.has('wuyou_used')).toBe(true);
@@ -1465,6 +1501,15 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(buildResolutionSteps(actions(['a', { actionId: 'slash', targetId: 'b' }]), players)[0].speedPriority).toBe(0);
   });
 
+  it('applies Soul Reap to damage level without reducing effect level', () => {
+    const players = roster(['a', 1], ['b', 0]); const actor = players.get('a')!; const target = players.get('b')!;
+    actor.buffs = new Set(['soul_reap_debuff']); actor.resources.energy = 1;
+    target.currentHp = target.maxHp = 2;
+    const result = resolveRound(players, actions(['a', { actionId: 'slash', targetId: 'b' }], ['b', { actionId: 'charge' }]));
+    expect(target.currentHp).toBe(1);
+    expect(result.summary.join('\n')).toContain('效果 1.5 / 伤害 1');
+  });
+
   it('starts Deify control next round and ends it after the configured cumulative action cost', () => {
     const players = roster(['a', 3], ['b', 3]); const chimei = players.get('a')!; const target = players.get('b')!;
     chimei.characterId = 'chimei'; chimei.currentHp = chimei.maxHp = 2; chimei.resources.soul = 2;
@@ -1498,14 +1543,30 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(warrior.buffStacks?.armor).toBe(2);
   });
 
-  it('adds Warrior strength to attack skill but not damage', () => {
+  it('resolves effect and damage advantages independently in both directions', () => {
     const players = roster(['a', 0], ['b', 1]); const warrior = players.get('a')!; const target = players.get('b')!;
     warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
     warrior.buffs = new Set(['strength']); warrior.buffStacks = { strength: 3 };
     target.currentHp = target.maxHp = 2;
     const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'slash', targetId: 'a' }]));
-    expect(target.currentHp).toBe(1);
-    expect(result.summary.join('\n')).toContain('技能 2 / 伤害 0.5');
+    expect(target.currentHp).toBe(2);
+    expect(warrior.currentHp).toBe(0);
+    expect(result.summary.join('\n')).toContain('效果 2，附带效果成功');
+    expect(result.summary.join('\n')).toContain('效果 1.5，附带效果失败');
+    expect(result.summary.join('\n')).toContain('伤害差 1');
+  });
+
+  it('applies an attached effect when effect 2 wins even though damage 0.5 loses to damage 1.5', () => {
+    const players = roster(['a', 0], ['b', 1]); const attacker = players.get('a')!; const target = players.get('b')!;
+    attacker.characterId = 'warrior'; attacker.currentHp = attacker.maxHp = 2; attacker.resources.charge = 1;
+    attacker.buffs = new Set(['strength', 'soul_reap_debuff']); attacker.buffStacks = { strength: 2, soul_reap_debuff: 1 };
+    target.currentHp = target.maxHp = 2; target.resources.energy = 1;
+    target.buffs = new Set(['swayed']); target.buffStacks = { swayed: 1 };
+    const result = resolveRound(players, actions(['a', { actionId: 'nebula_shock', targetId: 'b' }], ['b', { actionId: 'slash', targetId: 'a' }]));
+    expect(target.buffs?.has('shock')).toBe(true);
+    expect(result.performance.a.damageStatesDealt).toBe(0);
+    expect(result.summary.join('\n')).toContain('效果 2，附带效果成功');
+    expect(result.summary.join('\n')).toContain('伤害 0.5 未高于 B 的斩伤害 1.5，不产生伤害');
   });
 
   it('does not turn Warrior strength into damage without an opposing attack', () => {
@@ -1517,10 +1578,10 @@ describe('RoundResolver JSON-driven actions', () => {
     const result = resolveRound(players, actions(['a', { actionId: 'fist', targetId: 'b' }], ['b', { actionId: 'charge' }]));
     expect(target.currentHp).toBe(2);
     expect(target.buffs?.has('armor')).toBe(false);
-    expect(result.summary.join('\n')).toContain('技能 2 / 伤害 0.5');
+    expect(result.summary.join('\n')).toContain('效果 2 / 伤害 0.5');
   });
 
-  it('uses Shred final skill level as every hit damage level', () => {
+  it('uses Shred final effect level as every hit damage level', () => {
     const players = roster(['a', 1], ['b', 0]); const warrior = players.get('a')!; const target = players.get('b')!;
     warrior.characterId = 'warrior'; warrior.currentHp = warrior.maxHp = 2; warrior.resources.energy = 1;
     warrior.buffs = new Set(['strength', 'shred_count']); warrior.buffStacks = { strength: 3, shred_count: 3 };
@@ -1530,7 +1591,7 @@ describe('RoundResolver JSON-driven actions', () => {
     expect(target.currentHp).toBe(1);
     expect(target.buffs?.has('defend_broken')).toBe(true);
     expect(summary).toContain('第 1/4 段');
-    expect(summary).toContain('技能 2.5 / 伤害 2.5');
+    expect(summary).toContain('效果 2.5 / 伤害 2.5');
     expect(summary).not.toContain('挡抵消了');
   });
 

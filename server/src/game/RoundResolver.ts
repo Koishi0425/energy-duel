@@ -369,10 +369,10 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       if (!absorbClaims.has(actor.id)) { gainResource(actor, 'charge', 1); summary.push(`${actor.nickname} 获得 1 蓄力。`); }
       else summary.push(`${actor.nickname} 使用蓄力，但产生的蓄力被吸走。`);
     } else if (['steal', 'double_steal'].includes(effect) && !hasChop) {
-      if (hasPassive(actor, 'practice_makes_perfect') && buffStacks(actor, 'ao_mastery') >= 4) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+      if (hasPassive(actor, 'practice_makes_perfect') && buffStacks(actor, 'ao_mastery') >= 4) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     } else if (effect === 'absorb_charge' && !hasCut) {
       const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId);
-      if (buffStacks(actor, 'ao_mastery') >= 4 && targetId) resolveAttackTargets(actor, submitted, definition, [targetId], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+      if (buffStacks(actor, 'ao_mastery') >= 4 && targetId) resolveAttackTargets(actor, submitted, definition, [targetId], submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     } else if (effect === 'heal') {
       const fire = Array.from(boardObjects.values()).find((object) => object.definitionId === 'nilu_fire' && object.gridIndex === submitted.targetGridIndex);
       if (fire) {
@@ -388,8 +388,9 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     else if (effect === 'three_bodies') { summonLotusSeat(actor, submitted.targetGridIndex, players, summary); }
     else if (effect === 'soul_reap') {
       const target = players.get(directTargets(actor, submitted, players)[0]); const amount = target?.buffs?.has('resentment_mark') ? 2 : 1;
-      gainResource(actor, 'soul', amount); if (target) applyDebuff(actor, target, 'soul_reap_debuff', 1, 3);
-      summary.push(`${actor.nickname} 使用夺魂，获得 ${amount} 魂${target ? `，${target.nickname} 受到夺魂影响` : ''}。`);
+      const effectWon = attackEffectWins(actor, target, submitted, submittedEffectLevel(actor, submitted), players, actions);
+      if (effectWon) { gainResource(actor, 'soul', amount); if (target) applyDebuff(actor, target, 'soul_reap_debuff', 1, 3); }
+      summary.push(effectWon ? `${actor.nickname} 使用夺魂，获得 ${amount} 魂${target ? `，${target.nickname} 受到夺魂影响` : ''}。` : `${actor.nickname} 的夺魂未取得效果优势。`);
     }
     else if (effect === 'soul_capture') {
       const selected = Array.from(actions.entries()).some(([id, candidate]) => id !== actor.id && requireAction(candidate.actionId).category === 'attack' && potentialTargets(players.get(id)!, candidate, players).includes(actor.id));
@@ -404,7 +405,7 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     }
     else if (effect === 'deify') {
       const target = players.get(actionTargets(submitted)[0]); const threshold = submitted.power ?? 0;
-      if (target && !target.buffs?.has('converted') && actionLevelAgainst(target, actions.get(target.id), actor.id, players) < threshold) {
+      if (target && !target.buffs?.has('converted') && actionEffectLevelAgainst(target, actions.get(target.id), actor.id, players) < threshold) {
         setBuff(target, 'converted', threshold); setBuff(target, 'conversion_threshold', threshold); target.buffSourcePlayerIds ??= {};
         target.buffSourcePlayerIds.converted = actor.id; target.buffSourcePlayerIds.conversion_threshold = actor.id;
         summary.push(`${actor.nickname} 的度神决成功，${target.nickname} 将从下一回合起受其操控。`);
@@ -446,9 +447,10 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     }
     else if (effect === 'molten_fist') {
       const targetId = directTargets(actor, submitted, players)[0];
-      resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
       const target = players.get(targetId);
-      if (target?.alive && target.buffs?.has('vulnerability')) {
+      const effectWon = attackEffectWins(actor, target, submitted, submittedEffectLevel(actor, submitted), players, actions);
+      resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+      if (effectWon && target?.alive && target.buffs?.has('vulnerability')) {
         setBuff(target, 'vulnerability', buffStacks(target, 'vulnerability') * 2);
         summary.push(`${target.nickname} 的易伤延长至 ${formatLevel(buffStacks(target, 'vulnerability'))} 层。`);
       }
@@ -464,8 +466,8 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
     else if (effect === 'harmony_with_light') { const uses = buffStacks(actor, 'harmony_uses') + 1; setBuff(actor, 'harmony_uses', uses); setBuff(actor, 'star_body', buffStacks(actor, 'star_body') + (actor.buffs?.has('transcendence') || actor.buffs?.has('transcendence_permanent') ? 1 : 0.5)); summary.push(`${actor.nickname} 的和光同尘提升至 ${formatLevel(uses)} 级，并积累神体。`); }
     else if (effect === 'create_star_core') { setBuff(actor, 'transcendence', 1, 4); setBuff(actor, 'transcendence_progress', 0); summary.push(`${actor.nickname} 进入超脱状态。`); }
     else if (effect === 'transcend_fuse') { removeBuff(actor, 'transcendence'); setBuff(actor, 'transcendence_permanent'); summary.push(`${actor.nickname} 将超脱融合为永久状态。`); }
-    else if (effect === 'transcend_detonate') { resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); removeBuff(actor, 'transcendence'); removeBuff(actor, 'transcendence_permanent'); removeBuff(actor, 'transcendence_progress'); }
-    else if (effect === 'nebula_shock') { const targetId = directTargets(actor, submitted, players)[0]; resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); const target = players.get(targetId); if (target?.alive) applyDebuff(actor, target, 'shock', 1, 2); }
+    else if (effect === 'transcend_detonate') { resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); removeBuff(actor, 'transcendence'); removeBuff(actor, 'transcendence_permanent'); removeBuff(actor, 'transcendence_progress'); }
+    else if (effect === 'nebula_shock') { const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId); const effectWon = attackEffectWins(actor, target, submitted, submittedEffectLevel(actor, submitted), players, actions); resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); if (effectWon && target?.alive) applyDebuff(actor, target, 'shock', 1, 2); }
     else if (effect === 'rule_the_world') {
       const covered = playersOnCells(actor, cellsAround(submitted.targetGridIndex ?? actor.gridIndex ?? 0, players.size * 2, 2), players);
       const dominionCells = new Set(Array.from(boardObjects.values()).filter((object) => object.definitionId === 'dominion' && object.ownerPlayerId === actor.id).map((object) => object.gridIndex));
@@ -473,19 +475,19 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       for (const targetId of covered) {
         const target = players.get(targetId); if (!target) continue;
         const attackLevel = dominionCells.has(target.gridIndex ?? -1) ? 4 : 3;
-        if (attackLevel - actionLevelAgainst(target, actions.get(targetId), actor.id, players) < 0.5) continue;
+        if (!attackEffectWins(actor, target, submitted, attackLevel, players, actions)) continue;
         if (applyDebuff(actor, target, 'fear', 1, 2)) affected.push(target.nickname);
       }
       summary.push(affected.length ? `${actor.nickname} 的君临天下命中 ${affected.join('、')}，施加恐惧但不造成伤害。` : `${actor.nickname} 的君临天下没有命中任何玩家。`);
     }
-    else if (effect === 'censure') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); if (targetId && !processed.has(targetId) && targetAction && requireAction(targetAction.actionId).category === 'resource') { canceledActors.add(targetId); canceledReasons.set(targetId, '被杖责截断资源收益'); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
-    else if (effect === 'see_through') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); const success = Boolean(targetId && !processed.has(targetId) && targetAction && ['attack', 'special'].includes(requireAction(targetAction.actionId).category)); const level = success ? 0.5 + buffStacks(actor, 'tempered') : 0.5; if (success) { canceledActors.add(targetId); canceledReasons.set(targetId, '被看破取消'); blockers.delete(targetId); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
-    else if (effect === 'shatter') { const targetId = directTargets(actor, submitted, players)[0]; const targetAction = actions.get(targetId); const success = Boolean(targetAction && requireAction(targetAction.actionId).category === 'defense'); const mastery = buffStacks(actor, 'tempered'); const level = 1 + mastery + (success ? mastery * 0.5 : 0); if (success) { const target = players.get(targetId); if (target) applyDebuff(actor, target, 'defense_forbidden', 1, 2); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
+    else if (effect === 'censure') { const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId); const targetAction = actions.get(targetId); const effectWon = attackEffectWins(actor, target, submitted, submittedEffectLevel(actor, submitted), players, actions); if (effectWon && targetId && !processed.has(targetId) && targetAction && requireAction(targetAction.actionId).category === 'resource') { canceledActors.add(targetId); canceledReasons.set(targetId, '被杖责截断资源收益'); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
+    else if (effect === 'see_through') { const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId); const targetAction = actions.get(targetId); const matches = Boolean(targetId && !processed.has(targetId) && targetAction && ['attack', 'special'].includes(requireAction(targetAction.actionId).category)); const level = matches ? 0.5 + buffStacks(actor, 'tempered') : 0.5; const success = matches && attackEffectWins(actor, target, submitted, level, players, actions); if (success) { canceledActors.add(targetId); canceledReasons.set(targetId, '被看破取消'); blockers.delete(targetId); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
+    else if (effect === 'shatter') { const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId); const targetAction = actions.get(targetId); const matches = Boolean(targetAction && requireAction(targetAction.actionId).category === 'defense'); const mastery = buffStacks(actor, 'tempered'); const level = 1 + mastery + (matches ? mastery * 0.5 : 0); const success = matches && attackEffectWins(actor, target, submitted, level, players, actions); if (success && target) { applyDebuff(actor, target, 'defense_forbidden', 1, 2); rewardTempered(actor, summary); } resolveAttackTargets(actor, submitted, definition, targetId ? [targetId] : [], level, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); }
     else if (effect === 'collapsing_fear') resolveCollapsingFear(actor, submitted, definition, players, boardObjects, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
-    else if (['attack_order', 'defense_order', 'tactical_order'].includes(effect)) { const command = effect === 'attack_order' ? 'A' : effect === 'defense_order' ? 'D' : 'T'; actor.commandBuffer = `${actor.commandBuffer ?? ''}${command}`.slice(-6); if (effect === 'attack_order') resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); summary.push(`${actor.nickname} 的指令缓冲为 ${actor.commandBuffer}。`); }
+    else if (['attack_order', 'defense_order', 'tactical_order'].includes(effect)) { const command = effect === 'attack_order' ? 'A' : effect === 'defense_order' ? 'D' : 'T'; actor.commandBuffer = `${actor.commandBuffer ?? ''}${command}`.slice(-6); if (effect === 'attack_order') resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); summary.push(`${actor.nickname} 的指令缓冲为 ${actor.commandBuffer}。`); }
     else if (effect === 'napoleon_strategy') resolveNapoleonStrategy(actor, submitted, definition, players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
     else if (effect === 'shadow_blade') { resolveSpatialAttack(actor, submitted, definition, cellsAround(actor.gridIndex ?? 0, players.size * 2, 1), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); setBuff(actor, 'shadow_blade_cooldown', 4); }
-    else if (effect === 'ten_volt' || effect === 'hundred_thousand_volt') { const targets = firstPlayersInBothDirections(actor, players); resolveAttackTargets(actor, submitted, definition, targets, submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); if (effect === 'ten_volt') removeBuff(actor, 'quick_attack_ready'); }
+    else if (effect === 'ten_volt' || effect === 'hundred_thousand_volt') { const targets = firstPlayersInBothDirections(actor, players); resolveAttackTargets(actor, submitted, definition, targets, submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); if (effect === 'ten_volt') removeBuff(actor, 'quick_attack_ready'); }
     else if (effect === 'dream_path') {
       const start = actor.gridIndex ?? 0; const endpoint = submitted.targetGridIndices?.[0] ?? start;
       const cells = directedPathCells(start, endpoint, players.size * 2, submitted.pathDirection ?? 1);
@@ -493,13 +495,13 @@ export function resolveRound(players: Map<string, CombatPlayer>, actions: Readon
       layDreamPath(actor, cells, summary);
     }
     else if (effect === 'rockfall_hammer') { resolveSpatialAttack(actor, submitted, definition, cellsAround(actor.gridIndex ?? 0, players.size * 2, 2), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); setBuff(actor, 'hammer_ready', Math.max(0, buffStacks(actor, 'hammer_ready') - 1)); }
-    else if (effect === 'haunting_shadows') { for (const player of players.values()) if (player.id !== actor.id) applyDebuff(actor, player, 'darkness', 1, 2); setBuff(actor, 'nightmare_dash_ready', 1, 2); if (actionTargets(submitted).length) { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); } summary.push(`${actor.nickname} 令其他玩家陷入黑暗。`); }
-    else if (effect === 'nightmare_dash') { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); }
+    else if (effect === 'haunting_shadows') { for (const player of players.values()) if (player.id !== actor.id && attackEffectWins(actor, player, submitted, submittedEffectLevel(actor, submitted), players, actions)) applyDebuff(actor, player, 'darkness', 1, 2); setBuff(actor, 'nightmare_dash_ready', 1, 2); if (actionTargets(submitted).length) { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); } summary.push(`${actor.nickname} 令效果对抗失败的其他玩家陷入黑暗。`); }
+    else if (effect === 'nightmare_dash') { resolveAttackTargets(actor, submitted, definition, actionTargets(submitted), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance); finishNightmareDash(actor, players.get(actionTargets(submitted)[0]), players); }
     else if (effect === 'silent_fear') {
       const targetId = actionTargets(submitted)[0]; const target = players.get(targetId); const targetAction = actions.get(targetId);
-      if (target && actionLevelAgainst(target, targetAction, actor.id, players) <= submittedActionLevel(actor, submitted)) { const applied = applyDebuff(actor, target, 'fear', 1, 2); if (applied && !processed.has(targetId) && targetAction?.actionId !== 'charge') { canceledActors.add(targetId); canceledReasons.set(targetId, '因无言恐惧失效'); blockers.delete(targetId); setBuff(target, 'fear_action_canceled'); } }
+      if (target && attackEffectWins(actor, target, submitted, submittedEffectLevel(actor, submitted), players, actions)) { const applied = applyDebuff(actor, target, 'fear', 1, 2); if (applied && !processed.has(targetId) && targetAction?.actionId !== 'charge') { canceledActors.add(targetId); canceledReasons.set(targetId, '因无言恐惧失效'); blockers.delete(targetId); setBuff(target, 'fear_action_canceled'); } }
       summary.push(target ? `${actor.nickname} 的无言恐惧笼罩 ${target.nickname}，但不造成伤害。` : `${actor.nickname} 的无言恐惧没有有效目标。`);
-    } else if (isDirectAttack(effect)) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedActionLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
+    } else if (isDirectAttack(effect)) resolveAttackTargets(actor, submitted, definition, directTargets(actor, submitted, players), submittedEffectLevel(actor, submitted), players, actions, blockers, immune, fragile, eliminated, attackAttempts, canceledAttackTargets, darkShelterAbsorbs, summary, performance);
 
     if (preclaimedResources.has(actor.id) && hasPassive(actor, 'practice_makes_perfect')) setBuff(actor, 'ao_mastery', Math.min(4, buffStacks(actor, 'ao_mastery') + 1));
     if (actor.characterId === 'quilon' && definition.category === 'attack' && !['fire_purification', 'five_precepts'].includes(effect)) {
@@ -562,21 +564,22 @@ function resolveGlobalCounter(effectIds: readonly EffectHandlerId[], targetName:
 }
 
 function resolveNapoleonStrategy(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
-  const sequence = definition.napoleonSequence!; const direct = directTargets(actor, submitted, players); const levelBefore = submittedActionLevel(actor, submitted);
+  const sequence = definition.napoleonSequence!; const direct = directTargets(actor, submitted, players); const levelBefore = submittedEffectLevel(actor, submitted);
   const directAttack = ['AA', 'AD', 'AT', 'TA', 'AAA', 'AAT', 'TAA', 'TAD', 'TTA', 'AADD', 'TATA'].includes(sequence);
   if (directAttack) {
     const target = players.get(direct[0]); const hpBefore = target?.currentHp;
     const tactical = buffStacks(actor, 'tactical_advantage');
     const level = sequence === 'TTA' ? levelBefore + tactical * 0.5 : levelBefore;
+    const effectWon = attackEffectWins(actor, target, submitted, level, players, actions);
     resolveAttackTargets(actor, submitted, definition, direct, level, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
     if (sequence === 'AAT' && target && hpBefore !== undefined && target.currentHp < hpBefore) setBuff(actor, 'napoleon_speed', 2, 2);
-    if (['AT', 'TAD'].includes(sequence) && target?.alive) applyDebuff(actor, target, 'calibrated', 1, 2);
-    if (sequence === 'TATA' && target?.alive) { applyDebuff(actor, target, 'attack_forbidden', 1, 2); setBuff(actor, 'napoleon_speed', 2, 2); }
+    if (effectWon && ['AT', 'TAD'].includes(sequence) && target?.alive) applyDebuff(actor, target, 'calibrated', 1, 2);
+    if (effectWon && sequence === 'TATA' && target?.alive) { applyDebuff(actor, target, 'attack_forbidden', 1, 2); setBuff(actor, 'napoleon_speed', 2, 2); }
     if (['TTA', 'TTAA'].includes(sequence)) removeBuff(actor, 'tactical_advantage');
   } else if (sequence === 'ATA' || sequence === 'AAAA') {
     const radius = sequence === 'ATA' ? 1 : 2; const targets = playersOnCells(actor, cellsAround(actor.gridIndex ?? 0, players.size * 2, radius), players);
     resolveAttackTargets(actor, submitted, definition, targets, levelBefore, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
-    if (sequence === 'ATA') for (const targetId of targets) { const target = players.get(targetId); if (target?.alive) applyDebuff(actor, target, 'swayed', 1, 2); }
+    if (sequence === 'ATA') for (const targetId of targets) { const target = players.get(targetId); if (target?.alive && attackEffectWins(actor, target, submitted, levelBefore, players, actions)) applyDebuff(actor, target, 'swayed', 1, 2); }
   } else if (sequence === 'AAAAA') {
     resolveAttackTargets(actor, submitted, definition, Array.from(players.values()).filter((target) => target.id !== actor.id && target.alive).map((target) => target.id), levelBefore, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
   } else if (sequence === 'TTAA') {
@@ -614,22 +617,51 @@ function resolveNapoleonCounter(actor: CombatPlayer, submitted: SubmittedAction 
 }
 
 function adjustedAttackLevel(attacker: CombatPlayer, target: CombatPlayer, action: SubmittedAction): number {
-  let level = submittedDamageLevel(attacker, action) + (target.buffs?.has('fear') ? 1 : 0) + (target.buffs?.has('calibrated') ? 1 : 0);
+  return adjustedSubmittedDamageLevel(attacker, target, action);
+}
+
+function adjustedEffectLevel(attacker: CombatPlayer, target: CombatPlayer, baseLevel: number): number {
+  let level = baseLevel + (target.buffs?.has('fear') ? 1 : 0) + (target.buffs?.has('calibrated') ? 1 : 0);
   if (target.buffs?.has('defense_deployment')) level = Math.max(0, level - 1);
   if (attacker.buffs?.has('dark_shelter_power')) level += 0.5;
   if (hasDreamPathBonus(attacker)) level += 0.5;
   return level;
 }
 
+function adjustedSubmittedDamageLevel(attacker: CombatPlayer, target: CombatPlayer, action: SubmittedAction): number {
+  let level = submittedDamageLevel(attacker, action) + (target.buffs?.has('fear') ? 1 : 0) + (target.buffs?.has('calibrated') ? 1 : 0);
+  if (target.buffs?.has('defense_deployment')) level = Math.max(0, level - 1);
+  if (attacker.buffs?.has('dark_shelter_power')) level += 0.5;
+  if (hasDreamPathBonus(attacker)) level += 0.5;
+  if (action.actionId !== 'bully' && target.buffs?.has('vulnerability')) level += 0.5;
+  return level;
+}
+
+function attackEffectWins(attacker: CombatPlayer, target: CombatPlayer | undefined, action: SubmittedAction, rawEffectLevel: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>): boolean {
+  if (!target || target.id === attacker.id) return false;
+  const definition = requireAction(action.actionId);
+  if (definition.id === 'dissipation') return true;
+  const targetAction = actions.get(target.id);
+  const targetDefinition = targetAction ? requireAction(targetAction.actionId) : undefined;
+  if (!targetAction || targetDefinition?.category === 'defense' || !actionAppliesAgainst(target, targetAction, attacker.id, players)) return true;
+  const attackSpeed = actionEffectSpeed(attacker.id, action, attacker, 'attack', players, actions);
+  const equalDamageAttack = targetDefinition!.category === 'attack'
+    && Math.abs(submittedDamageLevel(attacker, action) - submittedDamageLevel(target, targetAction)) < 1e-6;
+  if (!equalDamageAttack && actionEffectSpeed(target.id, targetAction, target, 'attack', players, actions) < attackSpeed) return true;
+  const attackerLevel = adjustedEffectLevel(attacker, target, rawEffectLevel);
+  const targetLevel = adjustedEffectLevel(target, attacker, actionEffectLevelAgainst(target, targetAction, attacker.id, players));
+  return attackerLevel - targetLevel >= 0.5 - 1e-6;
+}
+
 function resolveSpatialAttack(attacker: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, cells: number[], players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const targets = Array.from(players.values()).filter((target) => target.id !== attacker.id && target.alive && cells.includes(target.gridIndex ?? -1)).map((target) => target.id);
-  resolveAttackTargets(attacker, submitted, definition, targets, submittedActionLevel(attacker, submitted), players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
+  resolveAttackTargets(attacker, submitted, definition, targets, submittedEffectLevel(attacker, submitted), players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
 }
 
 function resolveAttackTargets(attacker: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, targets: string[], level: number, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   if (definition.multiHit || definition.repeatAttack) {
-    const skillLevelPerHit = definition.repeatAttack ? level : multiHitSkillLevel(definition);
-    const damageLevelPerHit = definition.repeatAttack ? submittedDamageLevel(attacker, submitted) : multiHitDamageLevel(definition);
+    const effectLevelPerHit = definition.repeatAttack ? level : multiHitEffectLevel(definition);
+    const damageLevelPerHit = submittedDamageLevel(attacker, submitted);
     const allocations = new Map<string, number>();
     for (const originalTargetId of targets) {
       const targetId = definition.repeatAttack ? redirectAttackTarget(attacker, originalTargetId, players, actions, summary) : originalTargetId;
@@ -642,14 +674,23 @@ function resolveAttackTargets(attacker: CombatPlayer, submitted: SubmittedAction
       const targetAction = actions.get(targetId);
       if (target && targetAction && requireAction(targetAction.actionId).category === 'attack'
         && actionAppliesAgainst(target, targetAction, attacker.id, players)) {
-        summary.push(`${attacker.nickname} 的${definition.name}对 ${target?.nickname ?? targetId} 合并 ${hitCount} 段技能等级；合并后的技能等级为 ${formatLevel(hitCount * skillLevelPerHit)}；单段伤害等级为 ${formatLevel(damageLevelPerHit)}。`);
-        if (applyAttack(attacker, target, definition, hitCount * skillLevelPerHit, players, actions, blockers, immune, fragile, eliminated, shelter, players.size * 2, summary, performance, damageLevelPerHit) === 'none') canceled.add(targetId);
+        summary.push(`${attacker.nickname} 的${definition.name}对 ${target?.nickname ?? targetId} 合并 ${hitCount} 段效果等级；合并后的效果等级为 ${formatLevel(hitCount * effectLevelPerHit)}；单段伤害等级为 ${formatLevel(damageLevelPerHit)}。`);
+        let allHitsCanceled = true;
+        for (let hit = 1; hit <= hitCount && target.alive && !eliminated.has(targetId); hit += 1) {
+          if (hitCount > 1) summary.push(`${attacker.nickname} 的${definition.name}对 ${target.nickname} 结算第 ${hit}/${hitCount} 段。`);
+          const outcome = applyAttack(attacker, target, definition, hitCount * effectLevelPerHit, players, actions, blockers, immune, fragile, eliminated, shelter, players.size * 2, summary, performance, damageLevelPerHit);
+          if (outcome !== 'none') allHitsCanceled = false;
+        }
+        if (allHitsCanceled) canceled.add(targetId);
         continue;
       }
+      let allHitsCanceled = true;
       for (let hit = 1; hit <= hitCount && target?.alive && !eliminated.has(targetId); hit += 1) {
         if (hitCount > 1) summary.push(`${attacker.nickname} 的${definition.name}对 ${target.nickname} 结算第 ${hit}/${hitCount} 段。`);
-        if (applyAttack(attacker, target, definition, skillLevelPerHit, players, actions, blockers, immune, fragile, eliminated, shelter, players.size * 2, summary, performance, damageLevelPerHit) === 'none') canceled.add(targetId);
+        const outcome = applyAttack(attacker, target, definition, effectLevelPerHit, players, actions, blockers, immune, fragile, eliminated, shelter, players.size * 2, summary, performance, damageLevelPerHit);
+        if (outcome !== 'none') allHitsCanceled = false;
       }
+      if (allHitsCanceled) canceled.add(targetId);
     }
     return;
   }
@@ -682,12 +723,14 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
     && actionEffectSpeed(target.id, targetAction, target, 'defense', players, actions) >= attackSpeed);
   if (target.buffs?.has('unbroken') || immune.has(target.id)) { performance[target.id].successfulDefenses += 1; const immuneName = primaryEffect(targetAction) === 'soul_capture' ? '摄魄' : '超防'; summary.push(`${target.nickname} 的${target.buffs?.has('unbroken') ? '不破' : immuneName}挡住了 ${attacker.nickname}。`); return 'none'; }
   if (shelter.get(target.id) === attacker.id && defenseKeepsUp) { performance[target.id].successfulDefenses += 1; summary.push(`${target.nickname} 的黑暗庇护吸收了 ${attacker.nickname} 的${attack.name}。`); return 'none'; }
-  let attackerLevel = rawLevel + (target.buffs?.has('fear') ? 1 : 0);
-  let damageLevel = (explicitDamageLevel ?? attack.damageLevel ?? rawLevel) + (target.buffs?.has('fear') ? 1 : 0);
-  if (target.buffs?.has('calibrated')) { attackerLevel += 1; damageLevel += 1; }
-  if (target.buffs?.has('defense_deployment')) { attackerLevel = Math.max(0, attackerLevel - 1); damageLevel = Math.max(0, damageLevel - 1); }
-  if (attacker.buffs?.has('dark_shelter_power')) { attackerLevel += 0.5; damageLevel += 0.5; }
-  if (hasDreamPathBonus(attacker)) { attackerLevel += 0.5; damageLevel += 0.5; }
+  const attackerLevel = adjustedEffectLevel(attacker, target, rawLevel);
+  let damageLevel = explicitDamageLevel ?? attack.damageLevel ?? rawLevel;
+  if (explicitDamageLevel === undefined && attacker.buffs?.has('soul_reap_debuff') && attack.category === 'attack') damageLevel = Math.max(0, damageLevel - 0.5);
+  damageLevel += target.buffs?.has('fear') ? 1 : 0;
+  if (target.buffs?.has('calibrated')) damageLevel += 1;
+  if (target.buffs?.has('defense_deployment')) damageLevel = Math.max(0, damageLevel - 1);
+  if (attacker.buffs?.has('dark_shelter_power')) damageLevel += 0.5;
+  if (hasDreamPathBonus(attacker)) damageLevel += 0.5;
   if (attack.id !== 'bully' && target.buffs?.has('vulnerability')) damageLevel += 0.5;
   const sourceDamageLevel = damageLevel;
   const block = piercingDamage ? undefined : blockers.get(target.id);
@@ -697,11 +740,30 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   const speedAllowsOpposition = equalDamageAttack || Boolean(attackerAction && targetAction
     && actionEffectSpeed(target.id, targetAction, target, 'attack', players, actions)
       >= attackSpeed);
-  const opposingSkillLevel = attack.id !== 'dissipation' && targetDefinition?.category !== 'defense' && speedAllowsOpposition ? actionLevelAgainst(target, targetAction, attacker.id, players) : 0;
-  if (opposingSkillLevel > 0) {
-    const skillDifference = attackerLevel - opposingSkillLevel;
-    if (skillDifference < 0.5) { summary.push(`${attacker.nickname} 的${attack.name}（技能 ${formatLevel(attackerLevel)}）未胜过 ${target.nickname} 的${targetDefinition!.name}（技能 ${formatLevel(opposingSkillLevel)}）。`); return 'none'; }
-    damageLevel = Math.min(damageLevel, skillDifference);
+  const hasOpposingEffect = Boolean(attack.id !== 'dissipation' && targetAction && targetDefinition?.category !== 'defense'
+    && speedAllowsOpposition && actionAppliesAgainst(target, targetAction, attacker.id, players));
+  const opposingEffectLevel = hasOpposingEffect
+    ? adjustedEffectLevel(target, attacker, actionEffectLevelAgainst(target, targetAction, attacker.id, players))
+    : 0;
+  if (hasOpposingEffect) {
+    const opposingDamageLevel = adjustedSubmittedDamageLevel(target, attacker, targetAction!);
+    const effectDifference = attackerLevel - opposingEffectLevel;
+    const effectResult = effectDifference >= 0.5 - 1e-6 ? '附带效果成功' : '附带效果失败';
+    if (damageLevel <= opposingDamageLevel + 1e-6) {
+      summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}，${effectResult}）伤害 ${formatLevel(damageLevel)} 未高于 ${target.nickname} 的${targetDefinition!.name}伤害 ${formatLevel(opposingDamageLevel)}，不产生伤害。`);
+      return 'none';
+    }
+    damageLevel -= opposingDamageLevel;
+    summary.push(`${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)}，${effectResult}）以伤害差 ${formatLevel(damageLevel)} 进入防御结算。`);
+  }
+  const hpBefore = target.currentHp;
+  if (damageLevel > 0 && target.buffs?.has('mud_barrier') && targetDefinition?.category !== 'defense') {
+    removeBuff(target, 'mud_barrier');
+    target.currentHp = Math.min(target.maxHp, target.currentHp + 1);
+    performance[target.id].successfulDefenses += 1;
+    performance[target.id].recoveryStates += target.currentHp - hpBefore;
+    summary.push(`${target.nickname} 的屏障抵消攻击并使其进入${healthStateName(target)}。`);
+    return 'none';
   }
   if (!trueDamage) damageLevel = Math.max(0, damageLevel - buffStacks(target, 'star_body'));
   let targetLevel = block && targetAction && defenseKeepsUp ? submittedDefenseLevel(target, targetAction, block) : 0;
@@ -717,7 +779,6 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
       ? `${target.nickname} 的${block.name}被击碎，之后防御等级降为 0。`
       : `${target.nickname} 的${block.name}被击碎，本次生成的防御等级降为 0。`);
   }
-  const hpBefore = target.currentHp;
   let effectiveDamageLevel = Math.max(0, damageLevel - targetLevel);
   if (!trueDamage && !piercingDamage && effectiveDamageLevel > 0) {
     const armorBefore = buffStacks(target, 'armor');
@@ -728,7 +789,6 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
       summary.push(`${target.nickname} 的护甲抵消了 ${formatLevel(absorbed)} 级伤害，剩余 ${formatLevel(buffStacks(target, 'armor'))} 级护甲。`);
     }
   }
-  if (effectiveDamageLevel > 0 && target.buffs?.has('mud_barrier') && targetDefinition?.category !== 'defense') { const before = target.currentHp; removeBuff(target, 'mud_barrier'); target.currentHp = Math.min(target.maxHp, target.currentHp + 1); performance[target.id].successfulDefenses += 1; performance[target.id].recoveryStates += target.currentHp - before; summary.push(`${target.nickname} 的屏障抵消攻击并使其进入${healthStateName(target)}。`); return 'none'; }
   const damageSourceGrid = attack.id === 'dissipation' ? target.gridIndex : attacker.gridIndex;
   const outcome = damagePlayer(target, effectiveDamageLevel, 0, fragile.has(target.id), eliminated, false, sourceDamageLevel < 3, targetAction, sourceDamageLevel >= 3 && effectiveDamageLevel >= 1, damageSourceGrid);
   if (outcome === 'none') performance[target.id].successfulDefenses += 1;
@@ -742,7 +802,7 @@ function applyAttack(attacker: CombatPlayer, target: CombatPlayer | undefined, a
   }
   if (outcome === 'none' && block && hasPassive(target, 'tempered_passive')) rewardTempered(target, summary);
   if (target.currentHp < hpBefore) rewardDevour(attacker, actions.get(attacker.id), summary);
-  const comparison = `${attacker.nickname} 的${attack.name}（技能 ${formatLevel(attackerLevel)} / 伤害 ${formatLevel(damageLevel)}）对 ${target.nickname} 的${targetAction ? requireAction(targetAction.actionId).name : '无招式'}`;
+  const comparison = `${attacker.nickname} 的${attack.name}（效果 ${formatLevel(attackerLevel)} / 伤害 ${formatLevel(damageLevel)}）对 ${target.nickname} 的${targetAction ? requireAction(targetAction.actionId).name : '无招式'}`;
   if (outcome === 'none') summary.push(`${comparison}：有效伤害不足 0.5，未造成伤害。`);
   else summary.push(`${comparison}：有效伤害 ${formatLevel(effectiveDamageLevel)}，${target.nickname} 进入${healthStateName(target)}。`);
   return outcome;
@@ -793,12 +853,12 @@ function damagePlayer(player: CombatPlayer, attackLevel: number, defenseLevel: n
     strengthBefore: buffStacks(player, 'strength'),
     shredCountBefore: buffStacks(player, 'shred_count'),
   };
-  state.highestLevel = receivedLevel;
+  state.highestLevel = Math.max(state.highestLevel, receivedLevel);
   state.lethalHeavyHit ||= lethalHeavyHit;
   const finish = (outcome: DamageOutcome): DamageOutcome => { recordWarriorHealthShift(player, state.startingHp); clearArmorOnDeath(player); state.outcome = outcome; roundDamageStates.set(player, state); return outcome; };
   const mudFistRisk = player.characterId === 'mudrock' && selected?.actionId === 'fist' && difference >= 0.5;
   if (player.characterId === 'inner_guard') {
-    const requestedLoss = isFragile && difference >= 0.5 ? state.startingHp : !maxOneState && difference >= 0.5 ? 2 : difference >= 0.5 ? 1 : 0;
+    const requestedLoss = isFragile && difference >= 0.5 ? state.startingHp : lethalHeavyHit ? 2 : difference >= 0.5 ? 1 : 0;
     if (requestedLoss === 0) return finish('none');
     return finish(applyInnerGuardLoss(player, state.startingHp, requestedLoss, eliminated, sourceGridIndex, state));
   }
@@ -881,18 +941,18 @@ function actionCanDealAttackDamage(actor: CombatPlayer, action: SubmittedAction)
     && ['steal', 'double_steal', 'absorb_charge'].includes(action.actionId);
 }
 
-function actionLevelAgainst(actor: CombatPlayer, action: SubmittedAction | undefined, opponentId: string, players: Map<string, CombatPlayer>): number {
+function actionEffectLevelAgainst(actor: CombatPlayer, action: SubmittedAction | undefined, opponentId: string, players: Map<string, CombatPlayer>): number {
   if (!action) return 0;
   const definition = requireAction(action.actionId);
   if (definition.multiHit) {
     const hitCount = directTargets(actor, action, players).filter((targetId) => targetId === opponentId).length;
-    return hitCount * multiHitSkillLevel(definition);
+    return hitCount * multiHitEffectLevel(definition);
   }
   if (definition.repeatAttack && actionAppliesAgainst(actor, action, opponentId, players)) {
-    return repeatHitCount(actor, players.get(opponentId), definition) * submittedActionLevel(actor, action);
+    return repeatHitCount(actor, players.get(opponentId), definition) * submittedEffectLevel(actor, action);
   }
   if (definition.category === 'defense' || actionAppliesAgainst(actor, action, opponentId, players)) {
-    return submittedActionLevel(actor, action);
+    return submittedEffectLevel(actor, action);
   }
   return 0;
 }
@@ -1144,12 +1204,12 @@ function resolveFirePurification(actor: CombatPlayer, definition: ActionDefiniti
 
 function resolveFivePrecepts(actor: CombatPlayer, submitted: SubmittedAction, definition: ActionDefinition, players: Map<string, CombatPlayer>, actions: ReadonlyMap<string, SubmittedAction>, blockers: Map<string, ActionDefinition>, immune: Set<string>, fragile: Set<string>, eliminated: Set<string>, attempts: Set<string>, canceled: Set<string>, shelter: Map<string, string>, summary: string[], performance: Record<string, RoundPerformance>): void {
   const targetId = directTargets(actor, submitted, players)[0]; const target = players.get(targetId); const targetAction = target && actions.get(target.id);
-  const targetAttackLevel = targetAction && requireAction(targetAction.actionId).category === 'attack' ? submittedActionLevel(target, targetAction) : 0;
+  const targetAttackLevel = targetAction && requireAction(targetAction.actionId).category === 'attack' ? submittedEffectLevel(target, targetAction) : 0;
   const matchedSkill = Math.max(1.5, targetAttackLevel) + niluFires(actor).length * 0.5 + (actor.buffs?.has('bodhisattva_debate') ? 0.5 : 0);
-  const opposing = target ? actionLevelAgainst(target, targetAction, actor.id, players) : 0;
+  const opposing = target ? actionEffectLevelAgainst(target, targetAction, actor.id, players) : 0;
   if (!target || matchedSkill - opposing < 0.5) { summary.push(`${actor.nickname} 的惩五戒未能胜过目标招式，五戒不落。`); return; }
   for (const damageLevel of [0.5, 0.5, 1, 1.5, 1.5]) {
-    const hit = { ...definition, skillLevel: matchedSkill, damageLevel };
+    const hit = { ...definition, effectLevel: matchedSkill, damageLevel };
     resolveAttackTargets(actor, submitted, hit, [targetId], matchedSkill, players, actions, blockers, immune, fragile, eliminated, attempts, canceled, shelter, summary, performance);
     triggerNiluFires(actor, definition, 1, players, actions, blockers, immune, fragile, eliminated, shelter, summary, performance);
   }
@@ -1278,8 +1338,8 @@ function removeCreatedDominions(owner: CombatPlayer, objectIds: string[]): void 
 }
 function forge(player: CombatPlayer, amount: number): number { const previous = buffStacks(player, 'sovereign_blade_forged'); const next = previous + amount; setBuff(player, 'sovereign_blade_forged', next); if (previous === 0) setBuff(player, 'sovereign_blade_active'); return next; }
 
-function submittedActionLevel(player: CombatPlayer, action: SubmittedAction | undefined): number {
-  if (!action || player.buffs?.has('fear_action_canceled')) return 0; const definition = requireAction(action.actionId); let level = definition.variable && action.power !== undefined ? (definition.variable.skillLevelPerPower ?? definition.variable.levelPerPower) * action.power : definition.skillLevel ?? definition.level;
+function submittedEffectLevel(player: CombatPlayer, action: SubmittedAction | undefined): number {
+  if (!action || player.buffs?.has('fear_action_canceled')) return 0; const definition = requireAction(action.actionId); let level = definition.variable && action.power !== undefined ? (definition.variable.effectLevelPerPower ?? definition.variable.levelPerPower) * action.power : definition.effectLevel ?? definition.level;
   if (definition.defenseBreak?.mode === 'persistent' && player.buffs?.has(definition.defenseBreak.brokenBuffId!)) return 0;
   if (definition.id === 'slash' && player.buffs?.has('axe_raised')) level += 0.5;
   if (definition.id === 'slash' && hasPassive(player, 'child_of_earth')) level += buffStacks(player, 'mud_awakened');
@@ -1310,27 +1370,28 @@ function submittedDamageLevel(player: CombatPlayer, action: SubmittedAction | un
   if (!action || player.buffs?.has('fear_action_canceled')) return 0;
   const definition = requireAction(action.actionId);
   const debateBonus = player.characterId === 'quilon' && player.buffs?.has('bodhisattva_debate') && definition.category === 'attack' ? 0.5 : 0;
-  if (action.actionId === 'shred') return Math.max(0, submittedActionLevel(player, action)
-    - (player.buffs?.has('soul_reap_debuff') && definition.category === 'attack' ? 0.5 : 0));
+  const soulReapPenalty = player.buffs?.has('soul_reap_debuff') && definition.category === 'attack' ? 0.5 : 0;
+  if (action.actionId === 'shred') return Math.max(0, submittedEffectLevel(player, action)
+    - soulReapPenalty);
   if (hasPassive(player, 'tear_passive') && definition.category === 'attack') {
     const targetVulnerability = actionTargets(action).reduce((highest, targetId) => Math.max(highest, buffStacks(roundPlayers.get(player)?.get(targetId) ?? player, 'vulnerability')), 0);
     const baseDamage = action.actionId === 'bully' ? 0.5 + targetVulnerability * 0.5
       : action.actionId === 'body_slam' ? buffStacks(player, 'armor')
         : definition.damageLevel ?? (definition.variable?.damageLevelPerPower !== undefined && action.power !== undefined ? definition.variable.damageLevelPerPower * action.power : definition.level);
-    return Math.max(0, baseDamage - (player.buffs?.has('soul_reap_debuff') ? 0.5 : 0));
+    return Math.max(0, baseDamage - soulReapPenalty);
   }
-  if (definition.multiHit) return multiHitDamageLevel(definition) + debateBonus;
-  if (definition.damageLevel !== undefined) return Math.max(0, definition.damageLevel + debateBonus - (player.buffs?.has('soul_reap_debuff') && definition.category === 'attack' ? 0.5 : 0));
-  if (definition.variable?.damageLevelPerPower !== undefined && action.power !== undefined) return definition.variable.damageLevelPerPower * action.power + debateBonus;
-  return Math.max(0, submittedActionLevel(player, action) - (player.buffs?.has('soul_reap_debuff') && definition.category === 'attack' ? 0.5 : 0));
+  if (definition.multiHit) return Math.max(0, multiHitDamageLevel(definition) + debateBonus - soulReapPenalty);
+  if (definition.damageLevel !== undefined) return Math.max(0, definition.damageLevel + debateBonus - soulReapPenalty);
+  if (definition.variable?.damageLevelPerPower !== undefined && action.power !== undefined) return Math.max(0, definition.variable.damageLevelPerPower * action.power + debateBonus - soulReapPenalty);
+  return Math.max(0, submittedEffectLevel(player, action) - soulReapPenalty);
 }
 
-function multiHitSkillLevel(definition: ActionDefinition): number {
-  return definition.variable?.skillLevelPerPower ?? definition.variable?.levelPerPower ?? definition.skillLevel ?? definition.level;
+function multiHitEffectLevel(definition: ActionDefinition): number {
+  return definition.variable?.effectLevelPerPower ?? definition.variable?.levelPerPower ?? definition.effectLevel ?? definition.level;
 }
 
 function multiHitDamageLevel(definition: ActionDefinition): number {
-  return definition.damageLevel ?? definition.variable?.damageLevelPerPower ?? multiHitSkillLevel(definition);
+  return definition.damageLevel ?? definition.variable?.damageLevelPerPower ?? multiHitEffectLevel(definition);
 }
 
 function costForSubmittedAction(player: CombatPlayer, action: SubmittedAction): Record<string, number> {
@@ -1366,7 +1427,7 @@ function actionEffectSpeed(playerId: string, action: SubmittedAction, player: Co
 }
 
 function submittedDefenseLevel(player: CombatPlayer, action: SubmittedAction, definition: ActionDefinition): number {
-  if (definition.defenseLevel === undefined) return submittedActionLevel(player, action);
+  if (definition.defenseLevel === undefined) return submittedEffectLevel(player, action);
   return definition.defenseLevel + buffStacks(player, 'tactical_advantage') * 0.5;
 }
 

@@ -191,17 +191,17 @@ function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): stri
   if (action.defenseBreak?.mode === 'persistent' && player.buffs.some((buff) => buff.buffId === action.defenseBreak?.brokenBuffId)) return '0（已破碎）';
   if (player.characterId === 'warrior' && action.category === 'attack') {
     const strengthBonus = buffStacks('strength') * 0.5;
-    if (action.id === 'bully') return `技能 ${formatAmount(0.5 + strengthBonus)} + 0.5×易伤 / 伤害 0.5 + 0.5×易伤`;
-    const skill = (action.id === 'body_slam' ? buffStacks('armor') : action.skillLevel ?? action.level) + strengthBonus;
-    const damage = action.id === 'shred' ? skill : action.id === 'body_slam' ? buffStacks('armor') : action.damageLevel ?? action.level;
-    return damage !== skill ? `技能 ${formatAmount(skill)} / 伤害 ${formatAmount(damage)}` : formatAmount(skill);
+    if (action.id === 'bully') return `效果 ${formatAmount(0.5 + strengthBonus)} + 0.5×易伤 / 伤害 0.5 + 0.5×易伤`;
+    const effect = (action.id === 'body_slam' ? buffStacks('armor') : action.effectLevel ?? action.level) + strengthBonus;
+    const damage = action.id === 'shred' ? effect : action.id === 'body_slam' ? buffStacks('armor') : action.damageLevel ?? action.level;
+    return damage !== effect ? `效果 ${formatAmount(effect)} / 伤害 ${formatAmount(damage)}` : formatAmount(effect);
   }
   if (action.id === 'regain_spirit') return '0';
   if (action.variable) {
-    const skill = action.variable.skillLevelPerPower ?? action.variable.levelPerPower;
+    const effect = action.variable.effectLevelPerPower ?? action.variable.levelPerPower;
     const damage = action.damageLevel ?? action.variable.damageLevelPerPower ?? action.variable.levelPerPower;
     const damageLabel = action.damageLevel !== undefined ? String(damage) : `${damage}n`;
-    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== skill) ? `技能 ${skill}n / 伤害 ${damageLabel}` : `${skill}n`;
+    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== effect) ? `效果 ${effect}n / 伤害 ${damageLabel}` : `${effect}n`;
   }
   if (player.characterId === 'napoleon' && (action.napoleonSequence || ['attack_order', 'defense_order'].includes(action.id))) {
     const stacks = (buffId: string) => player.buffs.find((buff) => buff.buffId === buffId)?.stacks ?? 0;
@@ -214,10 +214,10 @@ function formatActionLevel(action: ActionDefinition, player: SyncedPlayer): stri
     if (action.category === 'special') return '—';
     return formatAmount(attackLevel);
   }
-  const skill = action.skillLevel ?? action.level;
-  const damage = action.damageLevel ?? skill;
-  const skillLabel = skill >= 999 ? '∞' : formatAmount(skill);
-  return action.category === 'attack' && damage !== skill ? `技能 ${skillLabel} / 伤害 ${formatAmount(damage)}` : skillLabel;
+  const effect = action.effectLevel ?? action.level;
+  const damage = action.damageLevel ?? effect;
+  const effectLabel = effect >= 999 ? '∞' : formatAmount(effect);
+  return action.category === 'attack' && damage !== effect ? `效果 ${effectLabel} / 伤害 ${formatAmount(damage)}` : effectLabel;
 }
 function formatCostRecord(cost: Record<string, number>): string { const entries = Object.entries(cost); return entries.length === 0 ? '无消耗' : entries.map(([id, amount]) => `${amount} ${resourceById.get(id)?.shortName ?? id}`).join('、'); }
 function formatTarget(action: ActionDefinition): string { if (action.target.mode === 'single_enemy') return '选择 1 人'; if (action.target.maxTargetsByPower) return '后发分配 n 次'; if (action.target.mode === 'multiple_enemies') return `选择 ${action.target.maxTargets} 次`; if (action.target.mode === 'all_enemies') return '全体敌方'; return '无需目标'; }

@@ -50,17 +50,18 @@ export const ruleSections: GuideSection[] = [
   {
     id: 'combat',
     title: '等级比较与生命状态',
-    summary: '技能等级决定对抗胜负，伤害等级决定命中后的健康结算；未特别说明时两者相等。',
+    summary: '效果等级决定附带效果，伤害等级决定伤害；两项结果独立计算，未特别说明时两个等级相等。',
     points: [
-      '技能对抗差小于 0.5 时不命中；胜出后取伤害等级与技能差的较小值，再由防御抵消。',
-      '异伤攻击只有在对攻击者有效且速度不低于来袭攻击时才能参与对抗；双方伤害等级相同时忽略速度，直接按普通技能对抗结算。',
+      '效果差达到 0.5 时，受效果等级影响的附带效果成功；效果差不足 0.5 时附带效果失败。该结果不决定伤害。',
+      '伤害等级独立减去对应技能的伤害等级；差值大于 0 才进入屏障、神体、格挡、护甲的防御结算。伤害结果不决定附带效果。',
+      '异伤技能只有在对攻击者有效且速度不低于来袭攻击时才能成为对应技能；双方伤害等级相同时忽略速度门槛。',
       '高速攻击会越过速度更低的本回合主动防御和位移，保留原伤害；此前建立的被动或持续减免仍按自身条件触发。',
       '复合技能的攻击、位移与非攻击效果默认继承技能速度；只有招式明确标注时，某一效果才使用不同速度。',
       '单纯建立 Buff 的主动技能通常不参加速度比较；被动 Buff 按回合阶段生效，触发 Buff 在条件满足时结算。',
       '同一回合受到多段或多个来源的伤害时，健康结算只取最高有效伤害等级，不累计较低伤害。',
-      '若行动标记为多段攻击，并且目标的攻击技能对使用者有效，则只合并技能等级。伤害等级不得合并。若上述条件不成立，则每一个攻击段独立判定。',
-      '最高有效伤害低于 3 时最多令生命左移一层；达到 3 才可跨状态击杀。治疗会令生命右移。',
-      '需要选目标的招式只会对其目标或实际作用范围内的攻击者提供技能等级，不能用攻击别人的招式对抗第三人的攻击。',
+      '若行动标记为多段攻击，并且目标的攻击技能对使用者有效，则只合并效果等级。伤害等级不得合并。若上述条件不成立，则每一个攻击段独立判定。',
+      '若本回合没有原伤害至少为 3 且有效伤害至少为 1 的重击，所有攻击伤害合计最多令生命左移一层。治疗会令生命右移。',
+      '需要选目标的招式只会对其目标或实际作用范围内的攻击者提供效果等级，不能用攻击别人的招式对抗第三人的攻击。',
       '可破碎防御承受不低于自身防御等级的单次伤害后破碎；当前伤害仍先扣除原防御等级，之后防御等级为 0。重新生成的临时防御仅在当次使用中保持破碎。',
       '初始角色没有濒死状态；变身角色拥有健康、濒死、死亡三种状态，并在首次进入濒死时获得 1 气。',
       '“脆弱”会令拳或斩在满足条件时直接致死，具体条件以招式与被动说明为准。',
@@ -112,7 +113,8 @@ export const ruleSections: GuideSection[] = [
 ];
 
 export const glossaryEntries: GlossaryEntry[] = [
-  { id: 'level', term: '等级', definition: '招式用于攻防比较的数值。定向招式只有在来袭者属于其目标或实际作用范围时才参与比较。' },
+  { id: 'effect-level', term: '效果等级', definition: '只决定招式附带效果是否成功。效果差达到 0.5 时成功；该结果不决定伤害。' },
+  { id: 'damage-level', term: '伤害等级', definition: '只决定伤害差与后续防御、健康结算；该结果不决定附带效果。' },
   { id: 'speed', term: '速度', definition: '决定行动在结算时间线中的先后顺序，数值越高越早执行。' },
   { id: 'left-shift', term: '左移', definition: '生命状态向危险方向移动一层，通常由有效伤害造成。' },
   { id: 'right-shift', term: '右移', definition: '生命状态向安全方向移动一层，通常由治疗或角色效果造成。' },
@@ -152,7 +154,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     gamePlan: ['第一次变身获得的星是整局资源；使用星尘会一次消耗当前全部辉星，需要先规划储量。', '君王之剑可按资源选择整数强度；征召上前能从零锻造或重新激活被锁定的剑。'],
     keyMechanics: [
       { title: '星资源', description: '首次变身时获得，之后切换回来不会重复领取。' },
-      { title: '星尘全押', description: '提交时必须投入全部辉星；每点辉星产生一个技能等级与伤害等级均为 1.5 的攻击段；全部攻击段遵循多段攻击通则。' },
+      { title: '星尘全押', description: '提交时必须投入全部辉星；每点辉星产生一个效果等级与伤害等级均为 1.5 的攻击段；全部攻击段遵循多段攻击通则。' },
       { title: '锻造状态', description: '等级、激活与锁定状态属于储君，切走后仍会保存。' },
     ],
     featuredActionIds: ['hidden_cache', 'stardust', 'sovereign_blade', 'summon_forth'],
@@ -217,7 +219,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     characterId: 'star_god', role: '成长减伤与超脱', difficulty: '专家',
     summary: '叠加神体与和光同尘，进入超脱持续恢复并成长，再以融合或引爆结束超脱。',
     gamePlan: ['先用和光同尘积累神体。', '超脱期间根据局势选择融合或引爆。'],
-    keyMechanics: [{ title: '神体与穿刺', description: '神体在技能对抗后、格挡前减免伤害；空心拳属于穿刺伤害，无视格挡与护甲。' }],
+    keyMechanics: [{ title: '神体与穿刺', description: '神体在伤害对抗后、格挡前减免伤害；空心拳属于穿刺伤害，无视格挡与护甲。' }],
     featuredActionIds: ['harmony_with_light', 'nebula_shock', 'create_star_core', 'hollow_fist', 'transcend_fuse', 'transcend_detonate'],
   },
   {
@@ -260,7 +262,7 @@ export const characterGuides: CharacterGuideDefinition[] = [
     summary: '主动左移健康状态积累力量和攻击段数，再以易伤、护甲与多段攻击建立爆发回合。',
     gamePlan: ['用放血或消耗 1 气的血墙启动撕裂成长，并根据生存压力在资源与护甲之间选择。', '先施加易伤，再用拆卸、欺凌或主宰兑现；高护甲时可用全身撞击制造压力。'],
     keyMechanics: [
-      { title: '撕裂', description: '每次自身健康状态左移都会获得力量并永久增加扯碎段数；力量通常只提高技能等级，但扯碎每段伤害会跟随最终技能等级。' },
+      { title: '撕裂', description: '每次自身健康状态左移都会获得力量并永久增加扯碎段数；力量通常只提高效果等级，但扯碎每段伤害会跟随最终效果等级。' },
       { title: '护甲', description: '格挡结算后，护甲按等级消耗并抵消剩余的非真实、非穿刺伤害；未用完的护甲保留，死亡时清零。' },
       { title: '易伤', description: '普通攻击对易伤目标固定增加 0.5 伤害；欺凌改为按易伤层数计算，易伤在每回合末减少一层。' },
     ],
@@ -298,18 +300,18 @@ export function formatGuideActionCost(action: ActionDefinition): string {
 
 export function formatGuideActionLevel(action: ActionDefinition): string {
   if (action.variable) {
-    const skill = action.variable.skillLevelPerPower ?? action.variable.levelPerPower;
+    const effect = action.variable.effectLevelPerPower ?? action.variable.levelPerPower;
     const damage = action.damageLevel ?? action.variable.damageLevelPerPower ?? action.variable.levelPerPower;
     const damageLabel = action.damageLevel !== undefined ? formatNumber(damage) : `${formatNumber(damage)}n`;
-    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== skill)
-      ? `技能 ${formatNumber(skill)}n / 伤害 ${damageLabel}`
-      : `${formatNumber(skill)}n`;
+    return action.category === 'attack' && (action.damageLevel !== undefined || damage !== effect)
+      ? `效果 ${formatNumber(effect)}n / 伤害 ${damageLabel}`
+      : `${formatNumber(effect)}n`;
   }
   if (action.id === 'sovereign_blade') return '锻造等级';
-  const skill = action.skillLevel ?? action.level;
-  const damage = action.damageLevel ?? skill;
-  const skillLabel = skill >= 999 ? '∞' : formatNumber(skill);
-  return action.category === 'attack' && damage !== skill ? `技能 ${skillLabel} / 伤害 ${formatNumber(damage)}` : skillLabel;
+  const effect = action.effectLevel ?? action.level;
+  const damage = action.damageLevel ?? effect;
+  const effectLabel = effect >= 999 ? '∞' : formatNumber(effect);
+  return action.category === 'attack' && damage !== effect ? `效果 ${effectLabel} / 伤害 ${formatNumber(damage)}` : effectLabel;
 }
 
 export function formatGuideTarget(action: ActionDefinition): string {

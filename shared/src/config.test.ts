@@ -16,11 +16,11 @@ describe('game configuration', () => {
     expect(gameConfig.actions.find((action) => action.id === 'defend')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'defend_broken' });
     expect(gameConfig.actions.find((action) => action.id === 'particle_wall')?.defenseBreak).toEqual({ mode: 'recreated' });
     expect(gameConfig.actions.find((action) => action.id === 'collect_light')?.defenseBreak).toEqual({ mode: 'persistent', brokenBuffId: 'collect_light_broken' });
-    expect(gameConfig.actions.find((action) => action.id === 'create_star_core')).toMatchObject({ category: 'special', skillLevel: 0, defenseLevel: 3 });
+    expect(gameConfig.actions.find((action) => action.id === 'create_star_core')).toMatchObject({ category: 'special', effectLevel: 0, defenseLevel: 3 });
     expect(gameConfig.actions.find((action) => action.id === 'create_star_core')?.defenseBreak).toEqual({ mode: 'recreated' });
     expect(gameConfig.buffs.find((buff) => buff.id === 'transcendence_permanent')?.grantedActionIds).toBeUndefined();
     expect(gameConfig.actions.find((action) => action.id === 'quick_attack')).toMatchObject({ movement: true });
-    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')).toMatchObject({ category: 'attack', skillLevel: 3, damageLevel: 0 });
+    expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')).toMatchObject({ category: 'attack', effectLevel: 3, damageLevel: 0 });
     expect(gameConfig.actions.find((action) => action.id === 'rule_the_world')?.damageType).toBeUndefined();
     expect(gameConfig.actions.filter((action) => action.cooldownReduction?.buffId === 'shadow_blade_cooldown').map((action) => action.id)).toEqual(['dream_path', 'dark_shelter', 'silent_fear', 'haunting_shadows', 'nightmare_dash']);
     expect(gameConfig.passives.map((passive) => passive.id)).toEqual(expect.arrayContaining(['sword_dao', 'shadow_blade_passive', 'child_of_earth']));
@@ -142,18 +142,18 @@ describe('game configuration', () => {
     const stardust = gameConfig.actions.find((action) => action.id === 'stardust');
     expect(stardust?.usesAllVariableResource).toBe(true);
     expect(stardust?.multiHit).toBe(true);
-    expect(stardust?.variable?.skillLevelPerPower).toBe(1.5);
+    expect(stardust?.variable?.effectLevelPerPower).toBe(1.5);
     expect(stardust?.damageLevel).toBe(1.5);
     expect(gameConfig.resources.find((resource) => resource.id === 'energy')?.alwaysVisible).toBe(true);
     expect(gameConfig.resources.find((resource) => resource.id === 'stars')?.characterIds).toEqual(['regent']);
     expect(gameConfig.buffs.find((buff) => buff.id === 'tactical_advantage')?.durationTurns).toBeUndefined();
   });
 
-  it('rejects invalid split skill and damage levels', () => {
+  it('rejects invalid split effect and damage levels', () => {
     for (const mutate of [
-      (config: any) => { config.actions[0].skillLevel = -0.5; },
+      (config: any) => { config.actions[0].effectLevel = -0.5; },
       (config: any) => { config.actions[0].damageLevel = Number.NaN; },
-      (config: any) => { config.actions.find((action: any) => action.variable).variable.skillLevelPerPower = -1; },
+      (config: any) => { config.actions.find((action: any) => action.variable).variable.effectLevelPerPower = -1; },
     ]) {
       const invalid = structuredClone(gameConfig) as any;
       mutate(invalid);
